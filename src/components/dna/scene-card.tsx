@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { ChevronRight, User, Palette, Play, GitBranch } from "lucide-react"
+import { ChevronRight, Palette, Play, GitBranch } from "lucide-react"
 import { cn, formatRelativeDate } from "@/lib/utils"
 import type { SceneDTO } from "@/types/api"
 import { Badge } from "@/components/ui"
@@ -11,7 +11,6 @@ import type { JobDTO } from "@/types/api"
 interface SceneCardProps {
   scene: SceneDTO
   index: number
-  charName?: string
   styleName?: string
   latestJob?: JobDTO | null
   onClick?: () => void
@@ -20,9 +19,11 @@ interface SceneCardProps {
   actions?: ReactNode
 }
 
-export function SceneCard({ scene, index, charName, styleName, latestJob, onClick, onContinue, compact, actions }: SceneCardProps) {
+export function SceneCard({ scene, index, styleName, latestJob, onClick, onContinue, compact, actions }: SceneCardProps) {
   const thumbnailUrl = latestJob?.result?.thumbnailUrl
   const title = scene.title || `Scene ${index}`
+  // `characters` is guaranteed by the current API; older responses only had characterProfileId.
+  const characters = [...(scene.characters ?? [])].sort((x, y) => x.sortOrder - y.sortOrder)
 
   return (
     <article className={cn("creation-card group", onClick && "cursor-pointer")} onClick={onClick}>
@@ -56,9 +57,20 @@ export function SceneCard({ scene, index, charName, styleName, latestJob, onClic
         {actions}
       </div>
 
-      {!compact && (charName || styleName) && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {charName && <Badge variant="violet"><User /> <span className="max-w-16 truncate">{charName}</span></Badge>}
+      {!compact && (characters.length > 0 || styleName) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {characters.map((c, i) => (
+            <span
+              key={c.id}
+              title={i === 0 ? `${c.name} (ตัวหลัก)` : c.name}
+              className="inline-flex max-w-[110px] items-center gap-1 rounded-full border border-[rgba(155,109,255,.2)] bg-[rgba(155,109,255,.1)] py-0.5 pl-0.5 pr-2 text-[10px] text-[#d1b8ff]"
+            >
+              <span className="grid size-4 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#b59aff] to-[#59419a] text-[8px] font-bold text-white">
+                {c.name.charAt(0).toUpperCase()}
+              </span>
+              <span className="truncate">{c.name}</span>
+            </span>
+          ))}
           {styleName && <Badge variant="violet"><Palette /> <span className="max-w-16 truncate">{styleName}</span></Badge>}
         </div>
       )}

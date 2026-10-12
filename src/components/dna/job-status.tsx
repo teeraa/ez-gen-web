@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle, XCircle, Ban, Loader2, Clock, ExternalLink } from "lucide-react"
+import { CheckCircle, XCircle, Ban, Loader2, Clock, ExternalLink, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { JobDTO, JobStatus } from "@/types/api"
-import { Badge } from "@/components/ui"
+import { TERMINAL_STATUSES } from "@/types/api"
+import { messageForCode } from "@/lib/api-errors"
+import { Badge, Button } from "@/components/ui"
 import { MediaPlayer } from "@/components/dna/media-player"
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; variant: "violet" | "success" | "error" | "neutral" | "warning" | "processing"; icon: React.ReactNode }> = {
@@ -30,30 +32,32 @@ export function JobStatusBadge({ status }: { status: JobStatus }) {
 
 // ── Progress Bar ──────────────────────────────────────────────────────────────
 
-// After BytePlus finishes, the backend still downloads the video and uploads it to storage
-// while the job stays "processing" — that tail is what we label as saving.
+const STEP_LABELS: Record<string, string> = {
+  queued: "รอคิว…",
+  generating: "กำลังสร้างวิดีโอ…",
+  // Provider is done but the backend is still copying the file into storage.
+  saving: "กำลังบันทึก…",
+}
+
 export function isSaving(job: JobDTO): boolean {
-  return job.status === "processing" && job.progress >= 95
+  return job.currentStep === "saving"
 }
 
 function stepLabel(job: JobDTO): string {
-  if (job.currentStep) return job.currentStep
-  if (isSaving(job)) return "กำลังบันทึก…"
-  return STATUS_CONFIG[job.status].label
-}
-
-const ERROR_MESSAGES: Record<string, string> = {
-  OUTPUT_EXPIRED: "ผลลัพธ์หมดอายุก่อนบันทึกได้ (เกิน 24 ชั่วโมง) — กรุณากด Generate เพื่อสร้างใหม่",
-  MODEL_NOT_SUPPORTED: "โมเดลไม่รองรับการตั้งค่านี้ — ลองเปลี่ยนความยาวหรืออัตราส่วนภาพ",
+  const base = (job.currentStep && STEP_LABELS[job.currentStep]) ?? STATUS_CONFIG[job.status].label
+  if (TERMINAL_STATUSES.includes(job.status)) return base
+  const eta = job.estimatedSecondsRemaining
+  if (eta === null || eta === undefined) return base
+  return eta > 0 ? `${base} (เหลือประมาณ ${eta} วินาที)` : `${base} (ใกล้เสร็จแล้ว…)`
 }
 
 export function jobErrorMessage(job: JobDTO): string | null {
-  if (!job.error) return null
-  return ERROR_MESSAGES[job.error.code] ?? job.error.message
+  return job.error ? messageForCode(job.error.code, job.error.message) : null
 }
 
 export function JobProgressBar({ job }: { job: JobDTO }) {
-  const target = job.status === "succeeded" ? 100 : job.progress
+  // 100% is reserved for "succeeded"; progress can hit 100 while the file is still saving.
+  const target = job.status === "succeeded" ? 100 : Math.min(job.progress, 99)
   // Never let the bar move backwards (progress can dip between polls); key this component by
   // jobId so a new job starts from zero. Adjusting state during render avoids an extra effect pass.
   const [shown, setShown] = useState(target)
@@ -91,10 +95,11 @@ interface JobCardProps {
   job: JobDTO
   onSelect?: () => void
   onRefresh?: () => Promise<void>
+  onRetry?: () => void
   selected?: boolean
 }
 
-export function JobCard({ job, onSelect, onRefresh, selected }: JobCardProps) {
+export function JobCard({ job, onSelect, onRefresh, onRetry, selected }: JobCardProps) {
   const isActive = ["queued", "submitted", "processing"].includes(job.status)
 
   return (
@@ -137,6 +142,9 @@ export function JobCard({ job, onSelect, onRefresh, selected }: JobCardProps) {
       {job.error && (
         <div className="mt-2 p-3 rounded-lg bg-[rgba(243,165,165,.05)] border border-[rgba(243,165,165,.2)]">
           <p className="m-0 text-xs text-[#f3a5a5]">{jobErrorMessage(job)}</p>
+          {job.error.code === "OUTPUT_EXPIRED" && onRetry && (
+            <Button size="sm" variant="secondary" icon={<RotateCcw />} onClick={onRetry} className="mt-2.5">สร้างใหม่</Button>
+          )}
         </div>
       )}
 

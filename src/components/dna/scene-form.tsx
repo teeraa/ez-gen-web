@@ -1,14 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Save, Trash2, Info } from "lucide-react"
-import { scenesApi } from "@/lib/api"
-import type { SceneDTO, CreateSceneRequest, CharacterProfileDTO, StyleProfileDTO } from "@/types/api"
-import { Button, Input, Textarea } from "@/components/ui"
+import { scenesApi, stylesApi } from "@/lib/api"
+import type { SceneDTO, CreateSceneRequest, StyleProfileDTO } from "@/types/api"
+import { Button, ErrorNotice, Input, Textarea } from "@/components/ui"
 import { TagPicker } from "@/components/dna/tag-picker"
-import { CharacterSelector, StyleSelector, InheritedSettings } from "@/components/dna/profile-selector"
-import { useEffect } from "react"
-import { charactersApi, stylesApi } from "@/lib/api"
+import { CharacterMultiSelector, StyleSelector, InheritedSettings } from "@/components/dna/profile-selector"
+import { sceneCharacterIds, useCharacterProfiles } from "@/hooks/use-character-profiles"
+import { apiErrorCode, apiErrorMessage, fieldError } from "@/lib/api-errors"
 
 interface SceneFormProps {
   initial?: SceneDTO
@@ -21,7 +21,7 @@ interface SceneFormProps {
 
 type FormData = {
   title: string
-  characterProfileId: string | null
+  characterProfileIds: string[]
   styleProfileId: string | null
   actionOverride: string
   cameraOverride: string
@@ -31,7 +31,7 @@ type FormData = {
 
 function empty(defaultCharId?: string | null, defaultStyleId?: string | null): FormData {
   return {
-    title: "", characterProfileId: defaultCharId ?? null, styleProfileId: defaultStyleId ?? null,
+    title: "", characterProfileIds: defaultCharId ? [defaultCharId] : [], styleProfileId: defaultStyleId ?? null,
     actionOverride: "", cameraOverride: "", settingOverride: "", tagIds: [],
   }
 }
@@ -39,7 +39,7 @@ function empty(defaultCharId?: string | null, defaultStyleId?: string | null): F
 function fromDTO(dto: SceneDTO): FormData {
   return {
     title: dto.title ?? "",
-    characterProfileId: dto.characterProfileId,
+    characterProfileIds: sceneCharacterIds(dto),
     styleProfileId: dto.styleProfileId,
     actionOverride: dto.description ?? "",
     cameraOverride: "",
@@ -48,25 +48,24 @@ function fromDTO(dto: SceneDTO): FormData {
   }
 }
 
+function actionPlaceholder(names: string[]): string {
+  if (names.length >= 2) return `เช่น ${names[0]} ยื่นข้าวเหนียวให้ ${names[1]} แล้วทั้งคู่หัวเราะ...`
+  if (names.length === 1) return `เช่น ${names[0]} raises the sword and charges forward...`
+  return "อธิบาย action หลักของ scene นี้ เช่น Elena raises her sword and charges forward..."
+}
+
 export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previousSceneId, onSaved, onDeleted }: SceneFormProps) {
   const [form, setForm] = useState<FormData>(initial ? fromDTO(initial) : empty(defaultCharacterId, defaultStyleId))
-  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({})
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string | undefined>>>({})
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [char, setChar] = useState<CharacterProfileDTO | null>(null)
   const [style, setStyle] = useState<StyleProfileDTO | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [charsReload, setCharsReload] = useState(0)
+  const characters = useCharacterProfiles(form.characterProfileIds)
 
   const set = <K extends keyof FormData>(k: K, v: FormData[K]) =>
     setForm(f => ({ ...f, [k]: v }))
-
-  // Load character and style details for inherited settings preview
-  useEffect(() => {
-    if (form.characterProfileId) {
-      charactersApi.get(form.characterProfileId).then(setChar).catch(() => setChar(null))
-    } else {
-      setChar(null)
-    }
-  }, [form.characterProfileId])
 
   useEffect(() => {
     if (form.styleProfileId) {
@@ -79,6 +78,7 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
   const validate = () => {
     const e: typeof errors = {}
     if (!form.actionOverride.trim() && !initial?.description) e.actionOverride = "กรุณาอธิบาย action ของ scene"
+    if (new Set(form.characterProfileIds).size !== form.characterProfileIds.length) e.characterProfileIds = "เลือกตัวละครซ้ำกัน"
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -86,10 +86,12 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
   const handleSave = async () => {
     if (!validate()) return
     setSaving(true)
+    setFormError(null)
     try {
       const payload: CreateSceneRequest = {
         title: form.title.trim() || undefined,
-        characterProfileId: form.characterProfileId ?? undefined,
+        // Always sent in full: on update the list replaces the scene's characters ([] clears them).
+        characterProfileIds: form.characterProfileIds,
         styleProfileId: form.styleProfileId ?? undefined,
         previousSceneId: previousSceneId ?? undefined,
         actionOverride: form.actionOverride.trim() || undefined,
@@ -102,7 +104,17 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
         : await scenesApi.create(payload)
       onSaved(result)
     } catch (err) {
-      alert(err instanceof Error ? err.message : "เกิดข้อผิดพลาด")
+      const code = apiErrorCode(err)
+      const charError = fieldError(err, "characterProfileIds")
+      if (code === "VALIDATION_ERROR" && charError) {
+        setErrors(prev => ({ ...prev, characterProfileIds: charError }))
+      } else if (code === "NOT_FOUND") {
+        // A selected character was deleted or isn't ours — refresh the list so the user can fix it.
+        setCharsReload(n => n + 1)
+        setErrors(prev => ({ ...prev, characterProfileIds: "มีตัวละครที่ถูกลบหรือไม่มีสิทธิ์ใช้ — กรุณาเลือกใหม่" }))
+      } else {
+        setFormError(apiErrorMessage(err))
+      }
     } finally {
       setSaving(false)
     }
@@ -127,7 +139,7 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
       {previousSceneId && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-[9px] bg-[rgba(155,109,255,.05)] border border-[rgba(155,109,255,.18)] text-xs text-violet-light">
           <Info className="w-3.5 h-3.5 flex-shrink-0" />
-          Scene นี้ต่อจาก scene ก่อนหน้า — Character และ Style จะถูกสืบทอดมาโดยอัตโนมัติ
+          Scene นี้ต่อจาก scene ก่อนหน้า — ตัวละครทุกตัวและ Style จะถูกสืบทอดมาโดยอัตโนมัติ
         </div>
       )}
 
@@ -138,8 +150,13 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
         <p className="form-group-label">Profiles ที่ใช้</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <p className="text-xs text-text-subtle mb-1.5">Character</p>
-            <CharacterSelector value={form.characterProfileId} onChange={id => set("characterProfileId", id)} />
+            <p className="text-xs text-text-subtle mb-1.5">ตัวละคร (สูงสุด 3 · ลำดับแรกคือตัวหลัก)</p>
+            <CharacterMultiSelector
+              value={form.characterProfileIds}
+              onChange={ids => { set("characterProfileIds", ids); setErrors(prev => ({ ...prev, characterProfileIds: undefined })) }}
+              reloadToken={charsReload}
+              error={errors.characterProfileIds}
+            />
           </div>
           <div>
             <p className="text-xs text-text-subtle mb-1.5">Style</p>
@@ -149,7 +166,7 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
       </div>
 
       {/* Inherited preview */}
-      {(char || style) && <InheritedSettings character={char} style={style} />}
+      <InheritedSettings characters={characters} style={style} />
 
       {/* Scene overrides */}
       <div>
@@ -160,7 +177,8 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
             value={form.actionOverride}
             onChange={e => set("actionOverride", e.target.value)}
             error={errors.actionOverride}
-            placeholder="อธิบาย action หลักของ scene นี้ เช่น Elena raises her sword and charges forward..."
+            placeholder={actionPlaceholder(characters.map(c => c.name))}
+            hint="เรียกตัวละครด้วยชื่อ เพื่อให้โมเดลจับคู่คำบรรยายกับตัวละครได้ถูกคน"
             maxLength={2000}
             counter
           />
@@ -188,6 +206,8 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
         <p className="form-group-label">Tags เพิ่มเติม</p>
         <TagPicker selectedIds={form.tagIds} onChange={ids => set("tagIds", ids)} />
       </div>
+
+      {formError && <ErrorNotice message={formError} />}
 
       {/* Actions */}
       <div className="flex items-center justify-between gap-3 mt-1 pt-4 border-t border-[var(--border)]">

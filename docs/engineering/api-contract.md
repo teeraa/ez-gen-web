@@ -1,381 +1,192 @@
-# API Contract — Agent E Deliverable
+# API Contract — ez-gen-web ↔ ez-gen-api
 
-> Date: 2026-10-12  
-> Status: **Proposed** — not verified against `ez-gen-api` backend  
-> Backend: Go Fiber (`ez-gen-api`)  
-> Provider: BytePlus ModelArk (accessed only from the Go backend)
-
-All endpoints below are proposals. They must be verified and reconciled with the
-actual `ez-gen-api` implementation before any frontend code is written against them.
+> Updated: 2026-10-12 (synced to `ez-gen-api` `main`)
+> Source of truth: `ez-gen-api/docs/engineering/video-generation-api-contract.md` and
+> `ez-gen-api/docs/engineering/violet-dna-api-contract.md`. **If this file disagrees with the
+> backend docs, the backend wins** — update this file.
+> Provider: BytePlus ModelArk (only the Go backend talks to it).
 
 ---
 
 ## Design Principles
 
-1. The frontend never calls BytePlus directly.
-2. All job identifiers are application-level UUIDs, not BytePlus task IDs.
-3. API responses are normalized — no BytePlus-specific fields reach the browser.
-4. Errors always include a machine-readable `code` and a human-readable `message`.
-5. Every mutable operation is idempotent where possible.
-6. All timestamps are ISO 8601 UTC strings.
+1. The browser never calls BytePlus or `ez-gen-api` directly — everything goes through the
+   Next.js proxy `src/app/api/proxy/[...path]/route.ts` (`/api/proxy/<path>` → `${API_URL}/open/v1/<path>`).
+2. Job IDs are application UUIDs, never BytePlus task IDs.
+3. Errors carry a machine-readable `code` and a human-readable `message`.
+4. Timestamps are ISO 8601 UTC strings.
 
----
+## Envelope
 
-## Base URL
+Every success response is wrapped; always read from `data`:
 
-| Environment | Value |
-|---|---|
-| Local backend | `http://localhost:8080` |
-| Production | `https://api.violetstudio.app` (TBD) |
-
-The Next.js server reads `API_URL` from the environment. The browser never sees this URL.
-
----
-
-## Authentication
-
-> **Note:** The authentication mechanism has not been specified by the backend team.
-> The contract below assumes JWT bearer tokens issued by the backend.
-> Replace with the actual scheme once confirmed.
-
-All authenticated endpoints require:
-```
-Authorization: Bearer <jwt-token>
-```
-
-Unauthenticated requests return:
 ```json
-{ "code": "UNAUTHORIZED", "message": "Valid authentication required" }
+{ "data": { ... }, "requestId": "..." }
 ```
-HTTP 401.
+
+Errors:
+
+```typescript
+{
+  code: string;                                  // e.g. "VALIDATION_ERROR"
+  message: string;
+  details?: Array<{ field: string; message: string }>;
+  requestId: string;
+}
+```
+
+`src/lib/api.ts` (`apiFetch`) unwraps `data` and throws an `Error` carrying `code` and `details`.
+User-facing text for known codes lives in `src/lib/api-errors.ts`.
 
 ---
 
-## Endpoints
+## Jobs
 
-### 1. Create Generation Job
+### `GET /open/v1/jobs/:jobId`
 
-```
-POST /v1/jobs
-```
-
-**Purpose:** Submit a new AI video generation request.
-
-**Request body:**
 ```typescript
 {
-  prompt: string;          // 1–2000 characters
-  mode: "text" | "image-video" | "image-image";
-  model: "violet-motion-2" | "violet-cinema" | "violet-fast" | "violet-realism";
-  aspectRatio: "16:9" | "9:16" | "1:1";
-  duration: 5 | 10;        // seconds
+  jobId: string;
+  status: "queued" | "submitted" | "processing" | "succeeded" | "failed" | "cancelled";
+  progress: number;                       // 0–100
+  currentStep: "queued" | "generating" | "saving" | "done" | "failed" | "cancelled" | null;
+  estimatedSecondsRemaining: number | null;
+  model: ModelId;
+  aspectRatio: AspectRatio;
+  duration: number;
   quality: "standard" | "high";
-  enhancePrompt: boolean;
-  referenceImageId?: string; // returned by POST /v1/uploads (required for image modes)
-}
-```
-
-**Success response — HTTP 201:**
-```typescript
-{
-  jobId: string;            // UUID — use this for all subsequent calls
-  status: "queued";
-  estimatedCredits: number;
-  createdAt: string;        // ISO 8601
-}
-```
-
-**Error responses:**
-| HTTP | code | Cause |
-|---|---|---|
-| 400 | `VALIDATION_ERROR` | Invalid field(s); `details` array names each violation |
-| 402 | `INSUFFICIENT_CREDITS` | Not enough credits |
-| 422 | `IMAGE_REQUIRED` | Mode requires a reference image |
-| 429 | `RATE_LIMITED` | Too many concurrent jobs |
-| 500 | `INTERNAL_ERROR` | Unexpected server error |
-
----
-
-### 2. Get Job Status
-
-```
-GET /v1/jobs/:jobId
-```
-
-**Purpose:** Poll job progress. Call every 2 seconds until terminal state.
-
-**Success response — HTTP 200:**
-```typescript
-{
-  jobId: string;
-  status: "queued" | "processing" | "completed" | "failed" | "cancelled";
-  progress: number;              // 0–100 (UI progress bar)
-  currentStep?: string;          // Human-readable current step label
-  model: string;
-  aspectRatio: string;
-  duration: number;
-  quality: string;
-  creditsCharged?: number;       // Set on completion
-  result?: {
-    thumbnailUrl: string;        // Signed URL, short-lived (prefer using mediaUrl)
-    mediaUrl: string;            // Signed URL for the generated video/image
+  creditsCharged: number | null;
+  result: {
+    mediaUrl: string;                     // Supabase signed URL, valid 1 hour
+    thumbnailUrl: string;                 // may be "" if the still couldn't be stored
     mediaType: "video" | "image";
-    expiresAt: string;           // ISO 8601 — client should re-fetch if expired
-  };
-  error?: {
-    code: string;
-    message: string;
-  };
+    expiresAt: string | null;             // when mediaUrl / thumbnailUrl stop working
+  } | null;
+  error: { code: string; message: string } | null;
+  sceneId: string | null;
+  compiledPrompt: string | null;
   createdAt: string;
   updatedAt: string;
-  completedAt?: string;
+  completedAt: string | null;
 }
 ```
 
-**Polling rules (frontend):**
-- Poll every 2 seconds while `status` is `queued` or `processing`.
-- Stop polling on `completed`, `failed`, or `cancelled`.
-- Back off to 5 seconds after 30 consecutive polls with no status change.
-- Display `currentStep` in the generate button label during polling.
+**Status flow:** `queued → submitted → processing → succeeded | failed | cancelled`.
+`submitted` is a working state (shown like `processing`). After the provider finishes, the job
+stays `processing` with `currentStep: "saving"` while the backend copies the file into storage,
+so this tail can take a while.
 
----
+**Polling rules (implemented in `src/hooks/use-polling.ts`):**
+- One loop per `jobId`; the next request is scheduled only after the previous one settles.
+- Interval 2.5 s (never faster than 2 s).
+- The `useEffect` cleanup clears the timer on unmount / `jobId` change.
+- Stop immediately on `succeeded`, `failed` or `cancelled`.
+- `select-output` is called at most once per job (ref-guarded) and never restarts polling.
 
-### 3. Cancel Job
+**Progress UI (implemented in `JobProgressBar`):**
+- Bar shows `max(previously shown, progress)` — it never moves backwards — with a ~1.5 s width
+  transition between polls.
+- Capped at 99 % until `status === "succeeded"`.
+- Label from `currentStep`: `queued` "รอคิว…", `generating` "กำลังสร้างวิดีโอ…", `saving` "กำลังบันทึก…".
+- Adds "เหลือประมาณ N วินาที" when `estimatedSecondsRemaining > 0`, "ใกล้เสร็จแล้ว…" when it is `0`.
 
-```
-DELETE /v1/jobs/:jobId
-```
+**Media URLs:**
+- Play `result.mediaUrl` directly: `<video src controls playsInline>` — no `crossOrigin`,
+  no `fetch()`/blob.
+- Host: `https://<ref>.supabase.co/storage/v1/object/sign/...`. The app currently has no CSP and
+  doesn't use `next/image` for thumbnails; if either is added, allow `<ref>.supabase.co` in
+  `media-src`/`img-src` or `images.remotePatterns`.
+- URLs expire after 1 hour. Never persist them (no localStorage / FE DB) — keep the `jobId` and
+  re-`GET` the job. The player re-fetches shortly before `expiresAt` and once automatically on
+  `<video onError>`.
+- A scene only stores `selectedJobId`; the scene page fetches that job to get `mediaUrl`.
 
-**Purpose:** Cancel a queued or processing job.
+### Job error codes
 
-**Success response — HTTP 200:**
-```typescript
-{ jobId: string; status: "cancelled" }
-```
-
-**Error responses:**
-| HTTP | code | Cause |
+| `error.code` / HTTP code | Meaning | UI |
 |---|---|---|
-| 404 | `JOB_NOT_FOUND` | Job does not exist or belongs to another user |
-| 409 | `JOB_NOT_CANCELLABLE` | Job already completed or failed |
+| `OUTPUT_EXPIRED` | Video couldn't be saved within 24 h of generation | "บันทึกวิดีโอไม่ทัน กรุณาสร้างใหม่" + "สร้างใหม่" button |
+| `422 MODEL_NOT_SUPPORTED` | Duration / aspect ratio / mode outside the model's limits | "ความยาวหรือสัดส่วนนี้ไม่รองรับในโมเดลปัจจุบัน" |
+| `400 VALIDATION_ERROR` | Invalid field(s); see `details[].field` | Field-level message |
 
 ---
 
-### 4. Upload Reference Image
+## Models
 
-```
-POST /v1/uploads
-Content-Type: multipart/form-data
-```
+All model IDs currently run on **Seedance 1.0 Pro** (backend `ARK_DEFAULT_MODEL`). Requests outside
+these limits return `422 MODEL_NOT_SUPPORTED`.
 
-**Purpose:** Upload a reference image before submitting a generation job.
-
-**Form fields:**
-```
-file: <binary>    (PNG, JPG, or WEBP, max 8 MB)
-```
-
-**Success response — HTTP 201:**
-```typescript
-{
-  uploadId: string;          // Pass as referenceImageId in POST /v1/jobs
-  filename: string;
-  sizeBytes: number;
-  mimeType: string;
-  expiresAt: string;         // ISO 8601 — upload is temporary
-}
-```
-
-**Error responses:**
-| HTTP | code | Cause |
-|---|---|---|
-| 400 | `INVALID_FILE_TYPE` | Only PNG/JPG/WEBP accepted |
-| 413 | `FILE_TOO_LARGE` | Exceeds 8 MB limit |
-| 415 | `UNSUPPORTED_MEDIA_TYPE` | Content-Type mismatch |
-
----
-
-### 5. List Projects
-
-```
-GET /v1/projects?page=1&limit=20&status=completed
-```
-
-**Purpose:** Fetch the user's project history.
-
-**Query parameters:**
-| Param | Type | Default | Description |
-|---|---|---|---|
-| `page` | number | 1 | Pagination page |
-| `limit` | number | 20 | Items per page (max 50) |
-| `status` | string | all | Filter: `completed`, `processing`, `draft` |
-| `q` | string | — | Full-text search on project title/prompt |
-
-**Success response — HTTP 200:**
-```typescript
-{
-  items: Array<{
-    projectId: string;
-    title: string;
-    status: "completed" | "processing" | "draft" | "failed";
-    thumbnailUrl?: string;
-    prompt: string;
-    model: string;
-    duration: number;
-    aspectRatio: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-  total: number;
-  page: number;
-  limit: number;
-}
-```
-
----
-
-### 6. Get Project
-
-```
-GET /v1/projects/:projectId
-```
-
-**Purpose:** Full project detail including media URL.
-
-**Success response — HTTP 200:**
-```typescript
-{
-  projectId: string;
-  title: string;
-  status: "completed" | "processing" | "draft" | "failed";
-  jobId: string;
-  prompt: string;
-  model: string;
-  aspectRatio: string;
-  duration: number;
-  quality: string;
-  creditsCharged?: number;
-  thumbnailUrl?: string;
-  mediaUrl?: string;         // Signed, short-lived
-  mediaType?: "video" | "image";
-  mediaExpiresAt?: string;
-  referenceImageUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-```
-
----
-
-### 7. Delete Project
-
-```
-DELETE /v1/projects/:projectId
-```
-
-**Purpose:** Remove a project from the user's history.
-
-**Success response — HTTP 204 (no body)**
-
----
-
-### 8. Get Credit Balance
-
-```
-GET /v1/credits
-```
-
-**Success response — HTTP 200:**
-```typescript
-{
-  used: number;
-  total: number;
-  remaining: number;
-  resetsAt: string;         // ISO 8601 — billing cycle reset
-  plan: "free" | "creator" | "studio-pro";
-}
-```
-
----
-
-## Error Response Shape
-
-All error responses share this envelope:
-
-```typescript
-{
-  code: string;           // Machine-readable constant (e.g., "INSUFFICIENT_CREDITS")
-  message: string;        // Human-readable, may be shown to the user
-  details?: Array<{
-    field: string;        // For VALIDATION_ERROR — the field that failed
-    message: string;
-  }>;
-  requestId: string;      // Correlation ID for debugging
-}
-```
-
-The `requestId` must be logged by the frontend for support tracing.
-
----
-
-## Job Status State Machine
-
-```
-queued ──→ processing ──→ completed
-   │              │
-   └──── cancelled ←──┘
-              │
-            failed
-```
-
-Terminal states: `completed`, `failed`, `cancelled`.
-
-The frontend must handle all five states explicitly and never assume a job will
-eventually complete.
-
----
-
-## Model Name Mapping
-
-The UI displays friendly names; the API accepts model identifiers:
-
-| UI label | API model value |
+| UI label | `model` |
 |---|---|
-| Violet Motion 2.0 · Recommended | `violet-motion-2` |
-| Violet Cinema · Cinematic | `violet-cinema` |
-| Violet Fast · Quick draft | `violet-fast` |
-| Violet Realism · Photoreal | `violet-realism` |
+| EZ-Motion 2.0 | `violet-motion-2` |
+| EZ-Cinema | `violet-cinema` |
+| EZ-Fast | `violet-fast` |
+| EZ-Realism | `violet-realism` |
+| EZ-Classic | `violet-classic` |
+
+| Limit | Value |
+|---|---|
+| Duration | 4–12 s |
+| Aspect ratio | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9` |
+| `image_image` (reference image) | not supported — hidden |
+| Audio | none — audio tags hidden |
+
+These live in `src/lib/model-capabilities.ts` and must be updated whenever `ARK_DEFAULT_MODEL`
+changes. **Requested:** `GET /open/v1/models` returning per-model ratios, min/max duration and
+audio/image support, so the UI can read limits instead of hardcoding them (the file is already
+shaped like that response).
 
 ---
 
-## Frontend API Client Contract
+## VIOLET DNA scenes
 
-The Next.js layer (`lib/api-client.ts`) exposes typed functions:
+### Characters per scene (max 3)
+
+Scene responses (`GET /dna/scenes`, `GET /dna/scenes/:id`, create/update responses) include:
 
 ```typescript
-createJob(params: CreateJobParams): Promise<CreateJobResponse>
-getJob(jobId: string): Promise<JobResponse>
-cancelJob(jobId: string): Promise<void>
-uploadImage(file: File): Promise<UploadResponse>
-listProjects(options?: ListProjectsOptions): Promise<ProjectsResponse>
-getProject(projectId: string): Promise<ProjectResponse>
-deleteProject(projectId: string): Promise<void>
-getCredits(): Promise<CreditsResponse>
+characters: Array<{ id: string; name: string; sortOrder: number }>;  // always an array, sorted; [0] = lead
+characterProfileId: string | null;   // deprecated — equals characters[0]
 ```
 
-All Zod schemas for these types live in `lib/schemas.ts` and validate
-server responses at runtime.
+Requests (`POST /open/v1/dna/scenes`, `PUT /open/v1/dna/scenes/:id`):
+
+```typescript
+characterProfileIds?: string[];      // ordered, unique, max 3
+```
+
+- `PUT` with a list **replaces** all characters; `[]` clears them; omitting the field leaves them unchanged.
+- Don't send the single `characterProfileId` in new code: the backend still accepts it during the
+  transition, but on `PUT` it replaces the whole list with that one character.
+- Errors: `400 VALIDATION_ERROR` with `details[].field === "characterProfileIds"` (more than 3,
+  duplicates, not a UUID); `404 NOT_FOUND` when a character is deleted or not the user's → the
+  form reloads the character list.
+- Multiple characters are text-only for the current model (no reference images), so traits can
+  swap between characters; the UI warns at 3 and suggests naming characters in the action text
+  ("Elena ยื่นข้าวเหนียวให้ Somchai").
+
+### `POST /open/v1/dna/scenes/:id/generate`
+
+Uses all of the scene's characters — the UI sends no characters. Send `characterProfileIds` only
+to override the set for that one job (the scene is unchanged).
+
+### `PUT /open/v1/dna/scenes/:id/select-output/:jobId`
+
+Marks a succeeded job as the scene's output. Called once per job.
+
+### `POST /open/v1/dna/scenes/:id/continue`
+
+- `useLastFrame: true` uses the last frame of the previous scene's selected output as the first
+  frame. Requires that the previous scene has a selected output whose job succeeded; otherwise the
+  backend silently generates text-only. The UI sends `useLastFrame: false` and says so when there
+  is no selected output.
+- The new scene inherits **all** characters from the previous scene, in order. The UI re-fetches
+  scenes after continuing.
 
 ---
 
-## Unresolved Questions
+## Not yet verified against the backend
 
-| Question | Impact |
-|---|---|
-| Authentication mechanism | Affects all authenticated calls |
-| BytePlus model names | API model values may differ from proposed names |
-| Upload destination | Does backend return a CDN URL or a proxy URL? |
-| Signed URL refresh strategy | How long are `mediaUrl` URLs valid? |
-| Webhook vs polling | Backend may support WebSocket/SSE in addition to polling |
-| Rate limits | Per-user concurrent job limit not yet defined |
-| CORS policy | Must confirm allowed origins for the Go backend |
+The following were in the original proposal and have not been reconciled with `ez-gen-api`:
+authentication (the web app currently uses a mock httpOnly-cookie session), uploads, project
+listing, and credit balance. Confirm them before building on them.

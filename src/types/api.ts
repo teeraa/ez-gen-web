@@ -121,10 +121,21 @@ export type UpdateStyleProfileRequest = Partial<CreateStyleProfileRequest>
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
+export const MAX_SCENE_CHARACTERS = 3
+
+export interface SceneCharacter {
+  id: string
+  name: string
+  sortOrder: number
+}
+
 export interface SceneDTO {
   id: string
   title: string
   description: string
+  // Always present, sorted by sortOrder; the first entry is the lead character.
+  characters: SceneCharacter[]
+  /** @deprecated equals characters[0]; use `characters`. */
   characterProfileId: string | null
   styleProfileId: string | null
   previousSceneId: string | null
@@ -138,7 +149,8 @@ export interface SceneDTO {
 export interface CreateSceneRequest {
   title?: string
   description?: string
-  characterProfileId?: string
+  // Ordered, unique, max 3. On PUT: a list replaces all characters, [] clears, omitted = unchanged.
+  characterProfileIds?: string[]
   styleProfileId?: string
   previousSceneId?: string
   sceneOrder?: number
@@ -170,6 +182,8 @@ export interface JobResult {
   expiresAt: string | null
 }
 
+export type JobStep = 'queued' | 'generating' | 'saving' | 'done' | 'failed' | 'cancelled'
+
 export interface JobError {
   code: string
   message: string
@@ -179,12 +193,13 @@ export interface JobDTO {
   jobId: string
   status: JobStatus
   progress: number
-  currentStep: string | null
+  currentStep: JobStep | null
   model: ModelId
   aspectRatio: AspectRatio
   duration: number
   quality: Quality
   creditsCharged: number | null
+  estimatedSecondsRemaining: number | null
   result: JobResult | null
   error: JobError | null
   sceneId: string | null
@@ -206,7 +221,8 @@ export interface CreateJobRequest {
   enhancePrompt?: boolean
   referenceImageId?: string | null
   sceneId?: string | null
-  characterProfileId?: string | null
+  // Scene generate uses all of the scene's characters; send this only to override for one job.
+  characterProfileIds?: string[]
   styleProfileId?: string | null
   tagIds?: string[]
   idempotencyKey?: string

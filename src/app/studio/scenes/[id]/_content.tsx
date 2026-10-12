@@ -4,9 +4,11 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, Play, RotateCcw, ChevronRight, CheckCircle, Settings, Film, Sparkles } from "lucide-react"
-import { scenesApi, jobsApi, charactersApi, stylesApi } from "@/lib/api"
+import { scenesApi, jobsApi, stylesApi } from "@/lib/api"
+import { apiErrorMessage } from "@/lib/api-errors"
+import { sceneCharacterIds, useCharacterProfiles } from "@/hooks/use-character-profiles"
 import type {
-  SceneDTO, JobDTO, CharacterProfileDTO, StyleProfileDTO,
+  SceneDTO, JobDTO, StyleProfileDTO,
   ModelId, AspectRatio, Quality, CreateJobRequest,
 } from "@/types/api"
 import { DEFAULT_MODEL, MODEL_OPTIONS, aspectOptions, coerceSettings, durationOptions, getModel } from "@/lib/model-capabilities"
@@ -26,7 +28,6 @@ export function SceneDetailContent() {
   const openContinue = searchParams.get("continue") === "1"
 
   const [scene, setScene] = useState<SceneDTO | null>(null)
-  const [char, setChar] = useState<CharacterProfileDTO | null>(null)
   const [style, setStyle] = useState<StyleProfileDTO | null>(null)
   const [jobs, setJobs] = useState<JobDTO[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,6 +44,8 @@ export function SceneDetailContent() {
   // Continue scene dialog
   const [continueOpen, setContinueOpen] = useState(openContinue)
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  const characters = useCharacterProfiles(scene ? sceneCharacterIds(scene) : [])
 
   const changeModel = (next: ModelId) => {
     const fixed = coerceSettings(next, duration, aspectRatio)
@@ -62,7 +65,6 @@ export function SceneDetailContent() {
           .then(j => setJobs(prev => prev.some(p => p.jobId === j.jobId) ? prev : [...prev, j]))
           .catch(() => null)
       }
-      if (s.characterProfileId) charactersApi.get(s.characterProfileId).then(setChar).catch(() => null)
       if (s.styleProfileId) stylesApi.get(s.styleProfileId).then(setStyle).catch(() => null)
     } catch (e) {
       setError(e instanceof Error ? e.message : "โหลด scene ไม่สำเร็จ")
@@ -112,17 +114,17 @@ export function SceneDetailContent() {
         prompt: scene.description || scene.title || "Generate scene",
         mode: "text",
         model, aspectRatio, duration, quality,
+        // No characterProfileIds: the backend uses all of the scene's characters.
         sceneId: scene.id,
-        characterProfileId: scene.characterProfileId ?? undefined,
         styleProfileId: scene.styleProfileId ?? undefined,
         tagIds: scene.tags.map(t => t.id),
         idempotencyKey: generateUUID(),
       }
       const job = await scenesApi.generate(scene.id, req)
       setActiveJobId(job.jobId)
-      setJobs(prev => [{ jobId: job.jobId, status: job.status, progress: 0, currentStep: null, model, aspectRatio, duration, quality, creditsCharged: null, result: null, error: null, sceneId: scene.id, characterProfileId: scene.characterProfileId, styleProfileId: scene.styleProfileId, compiledPrompt: null, createdAt: job.createdAt, updatedAt: job.createdAt, completedAt: null } as JobDTO, ...prev])
+      setJobs(prev => [{ jobId: job.jobId, status: job.status, progress: 0, currentStep: "queued", estimatedSecondsRemaining: null, model, aspectRatio, duration, quality, creditsCharged: null, result: null, error: null, sceneId: scene.id, characterProfileId: scene.characterProfileId, styleProfileId: scene.styleProfileId, compiledPrompt: null, createdAt: job.createdAt, updatedAt: job.createdAt, completedAt: null } as JobDTO, ...prev])
     } catch (err) {
-      alert(err instanceof Error ? err.message : "เกิดข้อผิดพลาด")
+      alert(apiErrorMessage(err))
     } finally {
       setSubmitting(false)
     }
@@ -138,7 +140,7 @@ export function SceneDetailContent() {
     try {
       await selectOutput(scene.id, jobId)
     } catch (err) {
-      alert(err instanceof Error ? err.message : "เลือก output ไม่สำเร็จ")
+      alert(apiErrorMessage(err, "เลือก output ไม่สำเร็จ"))
     }
   }
 
@@ -184,8 +186,8 @@ export function SceneDetailContent() {
             )}
 
             {/* Inherited settings */}
-            {(char || style) && (
-              <InheritedSettings character={char} style={style} />
+            {(characters.length > 0 || style) && (
+              <InheritedSettings characters={characters} style={style} />
             )}
 
             {/* Tags */}
@@ -221,6 +223,7 @@ export function SceneDetailContent() {
                     job={j}
                     selected={scene.selectedJobId === j.jobId}
                     onSelect={j.status === "succeeded" ? () => handleSelectOutput(j.jobId) : undefined}
+                    onRetry={handleGenerate}
                     onRefresh={() => refreshJob(j.jobId)}
                   />
                 ))}
@@ -323,9 +326,10 @@ export function SceneDetailContent() {
       <Dialog open={continueOpen} onClose={() => setContinueOpen(false)} title="ต่อ Scene" description="สร้าง scene ใหม่ที่สืบทอด Character, Style และ Tags จาก scene นี้" size="lg">
         <ContinueSceneForm
           scene={scene}
-          onJobCreated={(job) => {
+          onJobCreated={() => {
             setContinueOpen(false)
-            // Navigate to new scene (backend creates it automatically)
+            // The backend creates the new scene (with every character copied over); the
+            // storyboard re-fetches scenes on mount, so it shows the fresh data.
             router.push("/studio/scenes")
           }}
           onCancel={() => setContinueOpen(false)}

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { Play, ChevronRight, Info } from "lucide-react"
-import { scenesApi, charactersApi, stylesApi } from "@/lib/api"
-import type { SceneDTO, ContinueSceneRequest, ModelId, AspectRatio, Quality, CreateJobResponse, CharacterProfileDTO, StyleProfileDTO } from "@/types/api"
+import { scenesApi, stylesApi } from "@/lib/api"
+import { apiErrorMessage } from "@/lib/api-errors"
+import { sceneCharacterIds, useCharacterProfiles } from "@/hooks/use-character-profiles"
+import type { SceneDTO, ContinueSceneRequest, ModelId, AspectRatio, Quality, CreateJobResponse, StyleProfileDTO } from "@/types/api"
 import { DEFAULT_MODEL, MODEL_OPTIONS, aspectOptions, coerceSettings, durationOptions } from "@/lib/model-capabilities"
 import { Button, Input, Textarea, Select, SegmentControl } from "@/components/ui"
 import { InheritedSettings } from "@/components/dna/profile-selector"
@@ -35,16 +37,15 @@ export function ContinueSceneForm({ scene, onJobCreated, onCancel }: ContinueSce
   })
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({})
   const [submitting, setSubmitting] = useState(false)
-  const [char, setChar] = useState<CharacterProfileDTO | null>(null)
   const [style, setStyle] = useState<StyleProfileDTO | null>(null)
+  const characters = useCharacterProfiles(sceneCharacterIds(scene))
 
   const set = <K extends keyof FormData>(k: K, v: FormData[K]) =>
     setForm(f => ({ ...f, [k]: v }))
 
   useEffect(() => {
-    if (scene.characterProfileId) charactersApi.get(scene.characterProfileId).then(setChar).catch(() => null)
     if (scene.styleProfileId) stylesApi.get(scene.styleProfileId).then(setStyle).catch(() => null)
-  }, [scene.characterProfileId, scene.styleProfileId])
+  }, [scene.styleProfileId])
 
   // Backend silently falls back to text-only when the previous scene has no selected (succeeded) output.
   const canUseLastFrame = Boolean(scene.selectedJobId)
@@ -79,7 +80,7 @@ export function ContinueSceneForm({ scene, onJobCreated, onCancel }: ContinueSce
       const job = await scenesApi.continue(scene.id, payload)
       onJobCreated(job)
     } catch (err) {
-      alert(err instanceof Error ? err.message : "เกิดข้อผิดพลาด")
+      alert(apiErrorMessage(err))
     } finally {
       setSubmitting(false)
     }
@@ -92,7 +93,7 @@ export function ContinueSceneForm({ scene, onJobCreated, onCancel }: ContinueSce
         <ChevronRight className="w-4 h-4 text-violet-light mt-0.5 flex-shrink-0" />
         <div>
           <p className="m-0 text-xs font-medium text-violet-light">ต่อจาก: {scene.title || "Scene"}</p>
-          <p className="mt-0.5 mb-0 text-[10px] text-text-subtle">Character, Style และ Tags จะถูกสืบทอดมาอัตโนมัติ</p>
+          <p className="mt-0.5 mb-0 text-[10px] text-text-subtle">ตัวละครทุกตัว (ตามลำดับเดิม), Style และ Tags จะถูกสืบทอดมาอัตโนมัติ</p>
           {!scene.selectedJobId && (
             <p className="mt-1 mb-0 flex items-center gap-1 text-[10px] text-[var(--orange)]"><Info className="size-3" /> scene ก่อนหน้ายังไม่มี output ที่เลือกไว้ — จะสร้างแบบ text-only โดยไม่ใช้ last frame</p>
           )}
@@ -100,7 +101,7 @@ export function ContinueSceneForm({ scene, onJobCreated, onCancel }: ContinueSce
       </div>
 
       {/* Inherited */}
-      {(char || style) && <InheritedSettings character={char} style={style} />}
+      <InheritedSettings characters={characters} style={style} />
 
       {/* New scene action */}
       <div className="flex flex-col gap-3">
@@ -111,6 +112,7 @@ export function ContinueSceneForm({ scene, onJobCreated, onCancel }: ContinueSce
           onChange={e => set("actionOverride", e.target.value)}
           error={errors.actionOverride}
           placeholder="อธิบายสิ่งที่เกิดขึ้นในฉากต่อไป เช่น Elena kicks open the gate and enters the courtyard..."
+          hint="เรียกตัวละครด้วยชื่อ เพื่อให้โมเดลจับคู่คำบรรยายกับตัวละครได้ถูกคน"
           maxLength={2000}
           counter
         />
