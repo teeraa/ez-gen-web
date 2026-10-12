@@ -29,6 +29,28 @@ export function JobStatusBadge({ status }: { status: JobStatus }) {
 
 // ── Progress Bar ──────────────────────────────────────────────────────────────
 
+// After BytePlus finishes, the backend still downloads the video and uploads it to storage
+// while the job stays "processing" — that tail is what we label as saving.
+export function isSaving(job: JobDTO): boolean {
+  return job.status === "processing" && job.progress >= 95
+}
+
+function stepLabel(job: JobDTO): string {
+  if (job.currentStep) return job.currentStep
+  if (isSaving(job)) return "กำลังบันทึก…"
+  return STATUS_CONFIG[job.status].label
+}
+
+const ERROR_MESSAGES: Record<string, string> = {
+  OUTPUT_EXPIRED: "ผลลัพธ์หมดอายุก่อนบันทึกได้ (เกิน 24 ชั่วโมง) — กรุณากด Generate เพื่อสร้างใหม่",
+  MODEL_NOT_SUPPORTED: "โมเดลไม่รองรับการตั้งค่านี้ — ลองเปลี่ยนความยาวหรืออัตราส่วนภาพ",
+}
+
+export function jobErrorMessage(job: JobDTO): string | null {
+  if (!job.error) return null
+  return ERROR_MESSAGES[job.error.code] ?? job.error.message
+}
+
 export function JobProgressBar({ job }: { job: JobDTO }) {
   const isActive = ["queued", "submitted", "processing"].includes(job.status)
   if (!isActive && job.status !== "succeeded") return null
@@ -36,7 +58,7 @@ export function JobProgressBar({ job }: { job: JobDTO }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-[10px] text-text-muted">
-        <span>{job.currentStep ?? STATUS_CONFIG[job.status].label}</span>
+        <span>{stepLabel(job)}</span>
         <span>{job.status === "succeeded" ? "100%" : `${job.progress}%`}</span>
       </div>
       <div className="h-1 rounded-full bg-white/[.06] overflow-hidden">
@@ -45,7 +67,8 @@ export function JobProgressBar({ job }: { job: JobDTO }) {
             "h-full rounded-full transition-all duration-500",
             job.status === "succeeded"
               ? "bg-success w-full"
-              : "bg-gradient-to-r from-violet-dark to-violet-light"
+              : "bg-gradient-to-r from-violet-dark to-violet-light",
+            isSaving(job) && "animate-pulse"
           )}
           style={{ width: `${job.status === "succeeded" ? 100 : job.progress}%` }}
         />
@@ -105,7 +128,7 @@ export function JobCard({ job, onSelect, onRefresh, selected }: JobCardProps) {
       {/* Error */}
       {job.error && (
         <div className="mt-2 p-3 rounded-lg bg-[rgba(243,165,165,.05)] border border-[rgba(243,165,165,.2)]">
-          <p className="text-xs text-[#f3a5a5]">{job.error.message}</p>
+          <p className="m-0 text-xs text-[#f3a5a5]">{jobErrorMessage(job)}</p>
         </div>
       )}
 

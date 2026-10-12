@@ -153,24 +153,13 @@ export type UpdateSceneRequest = Partial<CreateSceneRequest>
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 export type JobStatus = 'queued' | 'submitted' | 'processing' | 'succeeded' | 'failed' | 'cancelled'
-export type JobMode = 'text' | 'image_video' | 'image_image'
-export type ModelId = 'violet-motion-2' | 'violet-cinema' | 'violet-fast' | 'violet-realism'
+// image_image (reference image) is disabled until the backend model supports it.
+export type JobMode = 'text' | 'image_video'
+export type ModelId = 'violet-motion-2' | 'violet-cinema' | 'violet-fast' | 'violet-realism' | 'violet-classic'
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9'
 export type Quality = 'standard' | 'high'
 
-export const MODEL_LABELS: Record<ModelId, string> = {
-  'violet-motion-2': 'EZ-Motion 2.0',
-  'violet-cinema': 'EZ-Cinema',
-  'violet-fast': 'EZ-Fast',
-  'violet-realism': 'EZ-Realism',
-}
-
-export const MODEL_MAX_DURATION: Record<ModelId, number> = {
-  'violet-motion-2': 15,
-  'violet-cinema': 15,
-  'violet-fast': 15,
-  'violet-realism': 30,
-}
+// Labels and limits per model live in lib/model-capabilities.ts.
 
 export const TERMINAL_STATUSES: JobStatus[] = ['succeeded', 'failed', 'cancelled']
 

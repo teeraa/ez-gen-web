@@ -13,10 +13,12 @@ interface TagPickerProps {
   disabled?: boolean
 }
 
+// "audio" is left out: the current backend model (Seedance 1.0 Pro) generates no sound.
 const CATEGORY_ORDER: TagCategory[] = [
   "visual_style", "character", "environment", "lighting_color",
-  "camera", "motion", "mood", "audio", "quality", "negative_constraint",
+  "camera", "motion", "mood", "quality", "negative_constraint",
 ]
+const SUPPORTED_CATEGORIES = new Set<TagCategory>(CATEGORY_ORDER)
 
 export function TagPicker({ selectedIds, onChange, disabled }: TagPickerProps) {
   const [tags, setTags] = useState<TagDTO[]>([])
@@ -25,7 +27,7 @@ export function TagPicker({ selectedIds, onChange, disabled }: TagPickerProps) {
   const [activeCategory, setActiveCategory] = useState<TagCategory | "all">("all")
 
   useEffect(() => {
-    tagsApi.list().then(setTags).catch(() => setTags([])).finally(() => setLoading(false))
+    tagsApi.list().then(all => setTags(all.filter(t => SUPPORTED_CATEGORIES.has(t.category)))).catch(() => setTags([])).finally(() => setLoading(false))
   }, [])
 
   const categories = useMemo<TagCategory[]>(() => {

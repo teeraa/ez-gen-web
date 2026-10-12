@@ -9,19 +9,14 @@ import type {
   SceneDTO, JobDTO, CharacterProfileDTO, StyleProfileDTO,
   ModelId, AspectRatio, Quality, CreateJobRequest,
 } from "@/types/api"
-import { MODEL_LABELS, MODEL_MAX_DURATION } from "@/types/api"
+import { DEFAULT_MODEL, MODEL_OPTIONS, aspectOptions, coerceSettings, durationOptions, getModel } from "@/lib/model-capabilities"
 import { useJobPolling } from "@/hooks/use-polling"
-import { Button, Input, Select, SegmentControl, Badge, Spinner, Dialog, Panel, BackLink, LoadingState, ErrorNotice } from "@/components/ui"
-import { JobCard, JobProgressBar, JobStatusBadge } from "@/components/dna/job-status"
+import { Button, Select, SegmentControl, Badge, Spinner, Dialog, Panel, BackLink, LoadingState, ErrorNotice } from "@/components/ui"
+import { JobCard, JobProgressBar, JobStatusBadge, isSaving } from "@/components/dna/job-status"
 import { InheritedSettings } from "@/components/dna/profile-selector"
 import { ContinueSceneForm } from "@/components/dna/continue-scene-form"
 import { generateUUID } from "@/lib/utils"
 
-const MODEL_OPTIONS = Object.entries(MODEL_LABELS).map(([v, l]) => ({ value: v, label: l }))
-const ASPECT_OPTIONS: { value: AspectRatio; label: string }[] = [
-  { value: "16:9", label: "16:9" }, { value: "9:16", label: "9:16" },
-  { value: "1:1", label: "1:1" }, { value: "4:3", label: "4:3" }, { value: "21:9", label: "21:9" },
-]
 
 export function SceneDetailContent() {
   const router = useRouter()
@@ -37,7 +32,7 @@ export function SceneDetailContent() {
   const [error, setError] = useState<string | null>(null)
 
   // Generation settings
-  const [model, setModel] = useState<ModelId>("violet-motion-2")
+  const [model, setModel] = useState<ModelId>(DEFAULT_MODEL)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9")
   const [duration, setDuration] = useState(8)
   const [quality, setQuality] = useState<Quality>("standard")
@@ -48,7 +43,12 @@ export function SceneDetailContent() {
   const [continueOpen, setContinueOpen] = useState(openContinue)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  const maxDuration = MODEL_MAX_DURATION[model]
+  const changeModel = (next: ModelId) => {
+    const fixed = coerceSettings(next, duration, aspectRatio)
+    setModel(next)
+    setDuration(fixed.duration)
+    setAspectRatio(fixed.aspectRatio)
+  }
 
   const loadScene = useCallback(async () => {
     if (!id) return
@@ -193,7 +193,7 @@ export function SceneDetailContent() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 text-xs font-semibold text-violet-light">
                   <Spinner size={14} />
-                  กำลัง Generate...
+                  {isSaving(activeJob) ? "กำลังบันทึกวิดีโอ…" : "กำลัง Generate..."}
                 </div>
                 <JobStatusBadge status={activeJob.status} />
               </div>
@@ -243,16 +243,16 @@ export function SceneDetailContent() {
 
             {settingsOpen && (
               <div className="mb-4 flex flex-col gap-3 rounded-[10px] border border-[var(--border)] bg-black/[.17] p-3">
-                <Select label="โมเดล" options={MODEL_OPTIONS} value={model} onChange={e => { setModel(e.target.value as ModelId); if (duration > MODEL_MAX_DURATION[e.target.value as ModelId]) setDuration(MODEL_MAX_DURATION[e.target.value as ModelId]) }} />
-                <Select label="อัตราส่วนภาพ" options={ASPECT_OPTIONS} value={aspectRatio} onChange={e => setAspectRatio(e.target.value as AspectRatio)} />
-                <Input label="ระยะเวลา (วินาที)" type="number" min={4} max={maxDuration} value={duration} onChange={e => setDuration(Number(e.target.value))} />
+                <Select label="โมเดล" options={MODEL_OPTIONS} value={model} onChange={e => changeModel(e.target.value as ModelId)} />
+                <Select label="อัตราส่วนภาพ" options={aspectOptions(model)} value={aspectRatio} onChange={e => setAspectRatio(e.target.value as AspectRatio)} />
+                <Select label="ระยะเวลา" options={durationOptions(model)} value={String(duration)} onChange={e => setDuration(Number(e.target.value))} />
                 <SegmentControl label="คุณภาพ" options={[{ value: "standard", label: "มาตรฐาน" }, { value: "high", label: "สูง HD" }]} value={quality} onChange={v => setQuality(v as Quality)} />
               </div>
             )}
 
             {!settingsOpen && (
               <div className="flex flex-wrap gap-1.5 mb-4">
-                <Badge variant="neutral">{MODEL_LABELS[model]}</Badge>
+                <Badge variant="neutral">{getModel(model).label}</Badge>
                 <Badge variant="neutral">{aspectRatio}</Badge>
                 <Badge variant="neutral">{duration}วิ</Badge>
                 <Badge variant="neutral">{quality === "high" ? "HD" : "SD"}</Badge>
