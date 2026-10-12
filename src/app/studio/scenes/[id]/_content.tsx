@@ -1,15 +1,16 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, Play, RotateCcw, ChevronRight, CheckCircle, Settings, Film, Sparkles } from "lucide-react"
-import { scenesApi, jobsApi, charactersApi, stylesApi } from "@/lib/api"
+import { scenesApi, charactersApi, stylesApi } from "@/lib/api"
 import type {
   SceneDTO, JobDTO, CharacterProfileDTO, StyleProfileDTO,
   ModelId, AspectRatio, Quality, CreateJobRequest,
 } from "@/types/api"
-import { MODEL_LABELS, MODEL_MAX_DURATION, TERMINAL_STATUSES } from "@/types/api"
+import { MODEL_LABELS, MODEL_MAX_DURATION } from "@/types/api"
+import { useJobPolling } from "@/hooks/use-polling"
 import { Button, Input, Select, SegmentControl, Badge, Spinner, Dialog, Panel, BackLink, LoadingState, ErrorNotice } from "@/components/ui"
 import { JobCard, JobProgressBar, JobStatusBadge } from "@/components/dna/job-status"
 import { InheritedSettings } from "@/components/dna/profile-selector"
@@ -21,35 +22,6 @@ const ASPECT_OPTIONS: { value: AspectRatio; label: string }[] = [
   { value: "16:9", label: "16:9" }, { value: "9:16", label: "9:16" },
   { value: "1:1", label: "1:1" }, { value: "4:3", label: "4:3" }, { value: "21:9", label: "21:9" },
 ]
-
-// ── Polling logic ─────────────────────────────────────────────────────────────
-function useActiveJobPolling(initialJobId: string | null, onTerminal: (job: JobDTO) => void) {
-  const [job, setJob] = useState<JobDTO | null>(null)
-  const [polling, setPolling] = useState(false)
-
-  const poll = useCallback(async (id: string) => {
-    try {
-      const j = await jobsApi.get(id)
-      setJob(j)
-      if (TERMINAL_STATUSES.includes(j.status)) {
-        setPolling(false)
-        onTerminal(j)
-      } else {
-        setTimeout(() => poll(id), 2000)
-      }
-    } catch {
-      setPolling(false)
-    }
-  }, [onTerminal])
-
-  useEffect(() => {
-    if (!initialJobId) return
-    setPolling(true)
-    poll(initialJobId)
-  }, [initialJobId, poll])
-
-  return { job, polling }
-}
 
 export function SceneDetailContent() {
   const router = useRouter()
@@ -94,24 +66,39 @@ export function SceneDetailContent() {
 
   useEffect(() => { loadScene() }, [loadScene])
 
-  const { job: activeJob, polling } = useActiveJobPolling(activeJobId, (completedJob) => {
-    setJobs(prev => {
-      const idx = prev.findIndex(j => j.jobId === completedJob.jobId)
-      if (idx === -1) return [completedJob, ...prev]
-      const next = [...prev]; next[idx] = completedJob; return next
-    })
-    if (completedJob.status === "succeeded") {
-      // Auto-select this output if scene has none
-      if (scene && !scene.selectedJobId) {
-        scenesApi.selectOutput(scene.id, completedJob.jobId)
-          .then(() => setScene(s => s ? { ...s, selectedJobId: completedJob.jobId } : s))
-          .catch(() => null)
-      }
+  // select-output must fire at most once per job: a ref (not state) so the guard holds
+  // even when two triggers land in the same render.
+  const selectingJobRef = useRef<string | null>(null)
+  const autoSelectedRef = useRef(false)
+  useEffect(() => { autoSelectedRef.current = false }, [id])
+
+  const selectOutput = useCallback(async (sceneId: string, jobId: string) => {
+    if (selectingJobRef.current) return
+    selectingJobRef.current = jobId
+    try {
+      await scenesApi.selectOutput(sceneId, jobId)
+      setScene(s => s ? { ...s, selectedJobId: jobId } : s)
+    } finally {
+      selectingJobRef.current = null
     }
+  }, [])
+
+  const { job: activeJob, isPolling: polling } = useJobPolling({
+    jobId: activeJobId,
+    onTerminal: completedJob => {
+      setJobs(prev => {
+        const idx = prev.findIndex(j => j.jobId === completedJob.jobId)
+        if (idx === -1) return [completedJob, ...prev]
+        const next = [...prev]; next[idx] = completedJob; return next
+      })
+      if (completedJob.status !== "succeeded" || !scene || scene.selectedJobId || autoSelectedRef.current) return
+      autoSelectedRef.current = true
+      selectOutput(scene.id, completedJob.jobId).catch(() => null)
+    },
   })
 
   const handleGenerate = async () => {
-    if (!scene) return
+    if (!scene || submitting || polling) return
     setSubmitting(true)
     try {
       const req: CreateJobRequest = {
@@ -135,10 +122,9 @@ export function SceneDetailContent() {
   }
 
   const handleSelectOutput = async (jobId: string) => {
-    if (!scene) return
+    if (!scene || scene.selectedJobId === jobId) return
     try {
-      await scenesApi.selectOutput(scene.id, jobId)
-      setScene(s => s ? { ...s, selectedJobId: jobId } : s)
+      await selectOutput(scene.id, jobId)
     } catch (err) {
       alert(err instanceof Error ? err.message : "เลือก output ไม่สำเร็จ")
     }
