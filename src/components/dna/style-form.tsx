@@ -114,7 +114,7 @@ export function StyleForm({ initial, onSaved, onDeleted }: StyleFormProps) {
         <div className="flex flex-wrap gap-1.5">
           {STYLE_PRESETS.map(p => (
             <button key={p.label} type="button" onClick={() => applyPreset(p.data)}
-              className="px-3 py-1 rounded-lg text-xs border border-white/[.08] text-text-muted hover:border-violet/30 hover:text-violet-light hover:bg-violet/10 transition-colors">
+              className="px-3 py-1.5 rounded-[6px] text-[11px] border border-white/10 bg-white/[.035] text-[#a29bb1] hover:border-[rgba(155,109,255,.3)] hover:text-[#e3d4ff] hover:bg-[rgba(155,109,255,.12)] transition-colors">
               {p.label}
             </button>
           ))}
@@ -129,7 +129,7 @@ export function StyleForm({ initial, onSaved, onDeleted }: StyleFormProps) {
 
       {/* Style fields */}
       <div>
-        <p className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">รายละเอียดสไตล์</p>
+        <p className="form-group-label">รายละเอียดสไตล์</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input label="สไตล์ภาพ" value={form.visualStyle ?? ""} onChange={e => set("visualStyle", e.target.value)} placeholder="เช่น cinematic, anime, 3D..." maxLength={200} />
           <Input label="จานสี" value={form.colorPalette ?? ""} onChange={e => set("colorPalette", e.target.value)} placeholder="เช่น deep violet and gold..." maxLength={200} />
@@ -142,12 +142,12 @@ export function StyleForm({ initial, onSaved, onDeleted }: StyleFormProps) {
 
       {/* Tags */}
       <div>
-        <p className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">Tags ของ Style</p>
+        <p className="form-group-label">Tags ของ Style</p>
         <TagPicker selectedIds={form.tagIds} onChange={ids => set("tagIds", ids)} />
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-between gap-3 pt-2 border-t border-white/[.06]">
+      <div className="flex items-center justify-between gap-3 mt-1 pt-4 border-t border-[var(--border)]">
         {initial && onDeleted ? (
           <Button variant="danger" size="sm" icon={<Trash2 className="w-3.5 h-3.5" />} loading={deleting} onClick={handleDelete}>ลบ</Button>
         ) : <div />}

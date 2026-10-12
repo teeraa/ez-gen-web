@@ -3,14 +3,14 @@
 import { useEffect, useState, useCallback } from "react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ChevronLeft, Play, RotateCcw, ChevronRight, CheckCircle, Settings, Film } from "lucide-react"
+import { ChevronLeft, Play, RotateCcw, ChevronRight, CheckCircle, Settings, Film, Sparkles } from "lucide-react"
 import { scenesApi, jobsApi, charactersApi, stylesApi } from "@/lib/api"
 import type {
   SceneDTO, JobDTO, CharacterProfileDTO, StyleProfileDTO,
   ModelId, AspectRatio, Quality, CreateJobRequest,
 } from "@/types/api"
 import { MODEL_LABELS, MODEL_MAX_DURATION, TERMINAL_STATUSES } from "@/types/api"
-import { Button, Select, SegmentControl, Badge, Spinner, Dialog } from "@/components/ui"
+import { Button, Input, Select, SegmentControl, Badge, Spinner, Dialog, Panel, BackLink, LoadingState, ErrorNotice } from "@/components/ui"
 import { JobCard, JobProgressBar, JobStatusBadge } from "@/components/dna/job-status"
 import { InheritedSettings } from "@/components/dna/profile-selector"
 import { ContinueSceneForm } from "@/components/dna/continue-scene-form"
@@ -144,28 +144,23 @@ export function SceneDetailContent() {
     }
   }
 
-  if (loading) return <div className="flex items-center gap-3 p-8 text-text-muted text-sm"><Spinner /> กำลังโหลด...</div>
-  if (error) return <div className="p-8 text-red-400 text-sm">{error}</div>
+  if (loading) return <LoadingState />
+  if (error) return <ErrorNotice message={error} />
   if (!scene) return null
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 mb-6 text-xs">
-        <Link href="/studio/scenes" className="text-text-subtle hover:text-text-muted transition-colors">Storyboard</Link>
-        <ChevronRight className="w-3 h-3 text-text-subtle" />
-        <span className="text-text-base font-medium">{scene.title || `Scene`}</span>
-      </div>
+    <div className="studio-wide">
+      <BackLink href="/studio/scenes">กลับ Storyboard</BackLink>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Left: scene info + jobs */}
         <div className="flex flex-col gap-6 min-w-0">
           {/* Scene header */}
-          <div className="bg-white/[.025] border border-white/[.07] rounded-2xl p-5">
+          <Panel>
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <h1 className="text-base font-semibold text-text-base">{scene.title || "Scene ไม่มีชื่อ"}</h1>
-                {scene.description && <p className="text-sm text-text-muted mt-1">{scene.description}</p>}
+                <h1 className="m-0 font-[family-name:var(--manrope)] text-xl font-bold tracking-[-.5px]">{scene.title || "Scene ไม่มีชื่อ"}</h1>
+                {scene.description && <p className="mt-1 mb-0 text-xs leading-relaxed text-text-muted">{scene.description}</p>}
               </div>
               {scene.selectedJobId && (
                 <Badge variant="success" className="flex-shrink-0">
@@ -193,13 +188,13 @@ export function SceneDetailContent() {
                 {scene.tags.map(t => <Badge key={t.id} variant="violet">{t.name}</Badge>)}
               </div>
             )}
-          </div>
+          </Panel>
 
           {/* Active job progress */}
           {polling && activeJob && (
-            <div className="bg-violet/[.05] border border-violet/15 rounded-xl p-4">
+            <div className="rounded-xl border border-[rgba(155,109,255,.18)] bg-[rgba(155,109,255,.05)] p-4">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2 text-sm font-medium text-violet-light">
+                <div className="flex items-center gap-2 text-xs font-semibold text-violet-light">
                   <Spinner size={14} />
                   กำลัง Generate...
                 </div>
@@ -212,7 +207,7 @@ export function SceneDetailContent() {
           {/* Jobs history */}
           {jobs.length > 0 && (
             <div>
-              <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">ผลลัพธ์ Generation</h2>
+              <h2 className="form-group-label">ผลลัพธ์ Generation</h2>
               <div className="flex flex-col gap-3">
                 {jobs.map(j => (
                   <JobCard
@@ -227,9 +222,9 @@ export function SceneDetailContent() {
           )}
 
           {jobs.length === 0 && !polling && (
-            <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-white/[.06] rounded-2xl text-text-subtle">
-              <Film className="w-8 h-8 mb-3 opacity-30" />
-              <p className="text-sm">ยังไม่มีผลลัพธ์ — กด Generate เพื่อเริ่ม</p>
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] py-12 text-text-muted">
+              <span className="generator-icon mb-3"><Film className="size-[18px]" /></span>
+              <p className="m-0 text-xs">ยังไม่มีผลลัพธ์ — กด Generate เพื่อเริ่ม</p>
             </div>
           )}
         </div>
@@ -237,23 +232,22 @@ export function SceneDetailContent() {
         {/* Right: actions panel */}
         <div className="flex flex-col gap-4">
           {/* Generate panel */}
-          <div className="bg-white/[.025] border border-white/[.07] rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">สร้างวิดีโอ</h2>
-              <button onClick={() => setSettingsOpen(v => !v)} className="text-xs text-text-subtle hover:text-text-muted flex items-center gap-1 transition-colors">
-                <Settings className="w-3 h-3" /> ตั้งค่า
+          <Panel>
+            <div className="generator-head !mb-4">
+              <div className="generator-title">
+                <span className="generator-icon"><Sparkles /></span>
+                <div><h2>สร้างวิดีโอ</h2><p>Generate จาก scene นี้</p></div>
+              </div>
+              <button type="button" onClick={() => setSettingsOpen(v => !v)} className="model-badge transition-colors hover:text-white" aria-expanded={settingsOpen}>
+                <Settings /> ตั้งค่า
               </button>
             </div>
 
             {settingsOpen && (
-              <div className="flex flex-col gap-3 mb-4 p-3 rounded-xl bg-white/[.02] border border-white/[.06]">
+              <div className="mb-4 flex flex-col gap-3 rounded-[10px] border border-[var(--border)] bg-black/[.17] p-3">
                 <Select label="โมเดล" options={MODEL_OPTIONS} value={model} onChange={e => { setModel(e.target.value as ModelId); if (duration > MODEL_MAX_DURATION[e.target.value as ModelId]) setDuration(MODEL_MAX_DURATION[e.target.value as ModelId]) }} />
                 <Select label="อัตราส่วนภาพ" options={ASPECT_OPTIONS} value={aspectRatio} onChange={e => setAspectRatio(e.target.value as AspectRatio)} />
-                <div>
-                  <label className="text-xs font-medium text-[#9893a8] block mb-1.5">ระยะเวลา (วินาที)</label>
-                  <input type="number" min={4} max={maxDuration} value={duration} onChange={e => setDuration(Number(e.target.value))}
-                    className="w-full bg-white/[.04] border border-white/[.1] rounded-lg px-3 py-2 text-sm text-text-base outline-none focus:border-violet/50 transition-colors" />
-                </div>
+                <Input label="ระยะเวลา (วินาที)" type="number" min={4} max={maxDuration} value={duration} onChange={e => setDuration(Number(e.target.value))} />
                 <SegmentControl label="คุณภาพ" options={[{ value: "standard", label: "มาตรฐาน" }, { value: "high", label: "สูง HD" }]} value={quality} onChange={v => setQuality(v as Quality)} />
               </div>
             )}
@@ -290,13 +284,13 @@ export function SceneDetailContent() {
                 </Button>
               )}
             </div>
-          </div>
+          </Panel>
 
           {/* Continue scene */}
           {scene.selectedJobId && (
-            <div className="bg-violet/[.05] border border-violet/15 rounded-2xl p-4">
-              <h2 className="text-xs font-semibold text-violet-light uppercase tracking-wider mb-2">ต่อ Scene นี้</h2>
-              <p className="text-xs text-text-muted mb-3 leading-relaxed">สร้าง scene ถัดไปที่สืบทอด Character, Style และ Tags — ใช้ last frame เพื่อ visual continuity</p>
+            <div className="rounded-xl border border-[rgba(155,109,255,.18)] bg-[rgba(155,109,255,.05)] p-[18px]">
+              <h2 className="form-group-label !mb-2">ต่อ Scene นี้</h2>
+              <p className="mt-0 mb-3 text-[11px] leading-relaxed text-text-muted">สร้าง scene ถัดไปที่สืบทอด Character, Style และ Tags — ใช้ last frame เพื่อ visual continuity</p>
               <Button
                 variant="primary"
                 className="w-full"
@@ -311,7 +305,7 @@ export function SceneDetailContent() {
           {/* Edit scene link */}
           <Link
             href={`/studio/scenes/new?previousSceneId=${scene.id}`}
-            className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs text-text-subtle border border-dashed border-white/[.08] hover:border-violet/20 hover:text-violet-light transition-colors"
+            className="flex items-center justify-center gap-1.5 rounded-[9px] border border-dashed border-[rgba(184,153,255,.3)] bg-[rgba(155,109,255,.035)] py-3 text-[11px] text-text-muted transition-colors hover:border-[var(--purple)] hover:bg-[rgba(155,109,255,.09)] hover:text-violet-light"
           >
             <ChevronRight className="w-3.5 h-3.5" /> สร้าง Scene ต่อไปด้วยตนเอง
           </Link>

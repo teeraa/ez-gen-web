@@ -1,76 +1,85 @@
 "use client"
 
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react"
+import { forwardRef, useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react"
+import NextLink from "next/link"
+import { Loader2, X, ChevronDown, ChevronLeft, CheckCircle, AlertCircle, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Loader2, X } from "lucide-react"
+import type { Toast } from "@/hooks/use-toast"
+
+// Values below mirror design-reference/index.html (.btn-primary, .btn-secondary,
+// .select-wrap, .prompt-box, .status, .modal …) so studio screens match the dashboard.
 
 // ── Button ────────────────────────────────────────────────────────────────────
 
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger"
+type ButtonSize = "sm" | "md" | "lg"
+
+const BUTTON_BASE = "inline-flex items-center justify-center gap-2 rounded-lg border font-semibold whitespace-nowrap transition-all duration-200 [&_svg]:size-3.5 disabled:opacity-55 disabled:cursor-not-allowed disabled:translate-y-0"
+
+const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
+  primary: "bg-[linear-gradient(120deg,#a37aff,#8050e7)] border-[rgba(222,203,255,.3)] text-white shadow-[0_5px_24px_rgba(127,75,236,.2),inset_0_1px_rgba(255,255,255,.16)] hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_8px_28px_rgba(127,75,236,.3)]",
+  secondary: "bg-white/[.055] border-white/[.14] text-[#e3ddec] font-medium hover:bg-white/10 hover:border-white/[.23]",
+  ghost: "bg-transparent border-transparent text-[#a9a2b7] font-medium hover:bg-[var(--glass-hover)] hover:text-white",
+  danger: "bg-[rgba(243,165,165,.06)] border-[rgba(243,165,165,.2)] text-[#f3a5a5] font-medium hover:bg-[rgba(243,165,165,.12)] hover:border-[rgba(243,165,165,.32)]",
+}
+
+const BUTTON_SIZES: Record<ButtonSize, string> = {
+  sm: "text-[11px] px-3 py-[7px]",
+  md: "text-xs px-[15px] py-[9px]",
+  lg: "text-xs px-[17px] py-[11px]",
+}
+
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost" | "danger"
-  size?: "sm" | "md" | "lg"
+  variant?: ButtonVariant
+  size?: ButtonSize
   loading?: boolean
   icon?: ReactNode
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "secondary", size = "md", loading, icon, children, className, disabled, ...props }, ref) => {
-    const base = "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-light/60"
-    const variants = {
-      primary: "bg-gradient-to-r from-[#a37aff] to-[#7141d9] border border-violet-light/30 text-white shadow-[0_4px_18px_rgba(113,65,217,.25)] hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0",
-      secondary: "bg-white/[.05] border border-white/[.12] text-[#c4b8d8] hover:bg-white/[.08] hover:text-white hover:border-white/[.2]",
-      ghost: "bg-transparent text-[#9893a8] hover:bg-white/[.05] hover:text-white",
-      danger: "bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300",
-    }
-    const sizes = {
-      sm: "text-xs px-3 py-1.5",
-      md: "text-sm px-4 py-2",
-      lg: "text-sm px-5 py-2.5",
-    }
-    return (
-      <button
-        ref={ref}
-        disabled={disabled ?? loading}
-        className={cn(base, variants[variant], sizes[size], className)}
-        {...props}
-      >
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : icon}
-        {children}
-      </button>
-    )
-  }
+  ({ variant = "secondary", size = "md", loading, icon, children, className, disabled, type = "button", ...props }, ref) => (
+    <button
+      ref={ref}
+      type={type}
+      disabled={disabled ?? loading}
+      className={cn(BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className)}
+      {...props}
+    >
+      {loading ? <Loader2 className="animate-spin" /> : icon}
+      {children}
+    </button>
+  )
 )
 Button.displayName = "Button"
 
-// ── LinkButton — renders a Next.js Link styled as a Button ───────────────────
-import NextLink from "next/link"
-
 interface LinkButtonProps {
   href: string
-  variant?: "primary" | "secondary" | "ghost" | "danger"
-  size?: "sm" | "md" | "lg"
+  variant?: ButtonVariant
+  size?: ButtonSize
   icon?: ReactNode
   children: ReactNode
   className?: string
 }
 
 export function LinkButton({ href, variant = "secondary", size = "md", icon, children, className }: LinkButtonProps) {
-  const base = "inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-light/60"
-  const variants = {
-    primary: "bg-gradient-to-r from-[#a37aff] to-[#7141d9] border border-violet-light/30 text-white shadow-[0_4px_18px_rgba(113,65,217,.25)] hover:brightness-110 hover:-translate-y-0.5",
-    secondary: "bg-white/[.05] border border-white/[.12] text-[#c4b8d8] hover:bg-white/[.08] hover:text-white hover:border-white/[.2]",
-    ghost: "bg-transparent text-[#9893a8] hover:bg-white/[.05] hover:text-white",
-    danger: "bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300",
-  }
-  const sizes = { sm: "text-xs px-3 py-1.5", md: "text-sm px-4 py-2", lg: "text-sm px-5 py-2.5" }
   return (
-    <NextLink href={href} className={cn(base, variants[variant], sizes[size], className)}>
+    <NextLink href={href} className={cn(BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className)}>
       {icon}{children}
     </NextLink>
   )
 }
 
-// ── Input ─────────────────────────────────────────────────────────────────────
+// ── Form fields ───────────────────────────────────────────────────────────────
+
+const LABEL = "block text-[11px] font-medium text-[#aaa3ba]"
+const FIELD_BORDER = (error?: string) =>
+  error ? "border-[rgba(243,165,165,.45)] focus:border-[rgba(243,165,165,.65)]" : "border-white/10 focus:border-[rgba(155,109,255,.5)]"
+const FIELD_ERROR = "text-[11px] text-[#f3a5a5]"
+const FIELD_HINT = "text-[11px] text-text-subtle"
+
+export function FieldLabel({ htmlFor, children }: { htmlFor?: string; children: ReactNode }) {
+  return <label htmlFor={htmlFor} className={LABEL}>{children}</label>
+}
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
@@ -82,29 +91,25 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, hint, className, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-")
     return (
-      <div className="flex flex-col gap-1.5">
-        {label && (
-          <label htmlFor={inputId} className="text-xs font-medium text-[#9893a8]">{label}</label>
-        )}
+      <div className="flex flex-col gap-[7px]">
+        {label && <FieldLabel htmlFor={inputId}>{label}</FieldLabel>}
         <input
           ref={ref}
           id={inputId}
           className={cn(
-            "w-full bg-white/[.04] border rounded-lg px-3 py-2 text-sm text-text-base placeholder-text-subtle outline-none transition-colors",
-            error ? "border-red-500/50 focus:border-red-500/70" : "border-white/[.1] focus:border-violet/50",
+            "h-9 w-full rounded-[7px] border bg-white/[.035] px-2.5 text-xs text-[#e8e3f1] outline-none transition-colors placeholder:text-[#777186]",
+            FIELD_BORDER(error),
             className
           )}
           {...props}
         />
-        {error && <p className="text-xs text-red-400">{error}</p>}
-        {hint && !error && <p className="text-xs text-text-subtle">{hint}</p>}
+        {error && <p className={FIELD_ERROR}>{error}</p>}
+        {hint && !error && <p className={FIELD_HINT}>{hint}</p>}
       </div>
     )
   }
 )
 Input.displayName = "Input"
-
-// ── Textarea ──────────────────────────────────────────────────────────────────
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string
@@ -119,12 +124,12 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-")
     const charCount = typeof value === "string" ? value.length : 0
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-[7px]">
         {label && (
-          <div className="flex justify-between items-baseline">
-            <label htmlFor={inputId} className="text-xs font-medium text-[#9893a8]">{label}</label>
+          <div className="flex items-baseline justify-between">
+            <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
             {counter && maxLength && (
-              <span className="text-xs text-text-subtle">{charCount} / {maxLength}</span>
+              <span className="text-[10px] text-[#777186]">{charCount} / {maxLength}</span>
             )}
           </div>
         )}
@@ -134,21 +139,19 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           maxLength={maxLength}
           value={value}
           className={cn(
-            "w-full bg-white/[.04] border rounded-lg px-3 py-2.5 text-sm text-text-base placeholder-text-subtle outline-none resize-y transition-colors min-h-20",
-            error ? "border-red-500/50 focus:border-red-500/70" : "border-white/[.1] focus:border-violet/50",
+            "min-h-[88px] w-full resize-y rounded-[10px] border bg-[rgba(5,5,10,.38)] px-3.5 py-3 text-xs leading-[1.8] text-text-base outline-none transition-colors placeholder:text-[#777186]",
+            FIELD_BORDER(error),
             className
           )}
           {...props}
         />
-        {error && <p className="text-xs text-red-400">{error}</p>}
-        {hint && !error && <p className="text-xs text-text-subtle">{hint}</p>}
+        {error && <p className={FIELD_ERROR}>{error}</p>}
+        {hint && !error && <p className={FIELD_HINT}>{hint}</p>}
       </div>
     )
   }
 )
 Textarea.displayName = "Textarea"
-
-// ── Select ────────────────────────────────────────────────────────────────────
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
@@ -160,35 +163,63 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, options, className, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-")
     return (
-      <div className="flex flex-col gap-1.5">
-        {label && (
-          <label htmlFor={inputId} className="text-xs font-medium text-[#9893a8]">{label}</label>
-        )}
+      <div className="flex flex-col gap-[7px]">
+        {label && <FieldLabel htmlFor={inputId}>{label}</FieldLabel>}
         <div className="relative">
           <select
             ref={ref}
             id={inputId}
             className={cn(
-              "w-full appearance-none bg-white/[.04] border rounded-lg px-3 py-2 text-sm text-text-base outline-none cursor-pointer transition-colors pr-8",
-              error ? "border-red-500/50" : "border-white/[.1] focus:border-violet/50",
+              "h-9 w-full cursor-pointer appearance-none rounded-[7px] border bg-white/[.035] pl-2.5 pr-[30px] text-xs text-[#e8e3f1] outline-none transition-colors",
+              FIELD_BORDER(error),
               className
             )}
             {...props}
           >
             {options.map(o => (
-              <option key={o.value} value={o.value} className="bg-[#12111b] text-white">
+              <option key={o.value} value={o.value} className="bg-[#15121f] text-white">
                 {o.label}
               </option>
             ))}
           </select>
-          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-subtle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m7 10 5 5 5-5"/></svg>
+          <ChevronDown className="pointer-events-none absolute right-[9px] top-1/2 size-[13px] -translate-y-1/2 text-text-muted" />
         </div>
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className={FIELD_ERROR}>{error}</p>}
       </div>
     )
   }
 )
 Select.displayName = "Select"
+
+// ── SegmentControl ────────────────────────────────────────────────────────────
+
+interface SegmentControlProps {
+  options: { value: string; label: string }[]
+  value: string
+  onChange: (value: string) => void
+  label?: string
+}
+
+export function SegmentControl({ options, value, onChange, label }: SegmentControlProps) {
+  return (
+    <div className="flex flex-col gap-[7px]">
+      {label && <span className={LABEL}>{label}</span>}
+      <div className="segment-control" role="group" aria-label={label}>
+        {options.map(o => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={cn(value === o.value && "active")}
+            aria-pressed={value === o.value}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── Badge ─────────────────────────────────────────────────────────────────────
 
@@ -200,21 +231,21 @@ interface BadgeProps {
 
 export function Badge({ children, variant = "neutral", className }: BadgeProps) {
   const variants = {
-    violet: "bg-violet/15 text-violet-light border-violet/20",
-    success: "bg-success/10 text-success border-success/20",
-    warning: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    error: "bg-red-500/10 text-red-400 border-red-500/20",
-    neutral: "bg-white/[.06] text-text-muted border-white/[.1]",
-    processing: "bg-violet/10 text-violet-light border-violet/15 animate-pulse",
+    violet: "bg-[rgba(155,109,255,.13)] text-[#d1b8ff] border-[rgba(155,109,255,.2)]",
+    success: "bg-[rgba(113,216,174,.09)] text-[var(--green)] border-[rgba(113,216,174,.18)]",
+    warning: "bg-[rgba(233,184,125,.09)] text-[var(--orange)] border-[rgba(233,184,125,.2)]",
+    error: "bg-[rgba(243,165,165,.08)] text-[#f3a5a5] border-[rgba(243,165,165,.2)]",
+    neutral: "bg-white/[.06] text-[#b3adbf] border-white/[.08]",
+    processing: "bg-[rgba(155,109,255,.12)] text-[#c4a5ff] border-[rgba(155,109,255,.15)] animate-pulse",
   }
   return (
-    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border", variants[variant], className)}>
+    <span className={cn("inline-flex items-center gap-[5px] whitespace-nowrap rounded-[5px] border px-[7px] py-[3px] text-[10px] font-medium leading-none [&_svg]:size-3", variants[variant], className)}>
       {children}
     </span>
   )
 }
 
-// ── Card ──────────────────────────────────────────────────────────────────────
+// ── Card / Panel ──────────────────────────────────────────────────────────────
 
 interface CardProps {
   children: ReactNode
@@ -228,13 +259,63 @@ export function Card({ children, className, onClick, hover = false }: CardProps)
     <div
       onClick={onClick}
       className={cn(
-        "bg-white/[.025] border border-white/[.07] rounded-xl",
-        hover && "hover:bg-white/[.04] hover:border-violet/20 transition-all duration-200 cursor-pointer",
+        "rounded-[11px] border border-[var(--border)] bg-[var(--glass)]",
+        hover && "cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-[rgba(166,128,255,.25)] hover:bg-[var(--glass-hover)]",
         onClick && "cursor-pointer",
         className
       )}
     >
       {children}
+    </div>
+  )
+}
+
+// The reference's "Creative canvas" container (.generator) — used for every studio form.
+export function Panel({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("generator", className)}>{children}</div>
+}
+
+// ── Page chrome ───────────────────────────────────────────────────────────────
+
+interface SectionHeaderProps {
+  title: string
+  description?: string
+  action?: ReactNode
+}
+
+export function SectionHeader({ title, description, action }: SectionHeaderProps) {
+  return (
+    <div className="section-heading">
+      <div className="min-w-0">
+        <h1>{title}</h1>
+        {description && <p>{description}</p>}
+      </div>
+      {action && <div className="flex-shrink-0">{action}</div>}
+    </div>
+  )
+}
+
+export function BackLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <NextLink href={href} className="back-link">
+      <ChevronLeft /> {children}
+    </NextLink>
+  )
+}
+
+export function LoadingState({ label = "กำลังโหลด..." }: { label?: string }) {
+  return (
+    <div className="flex items-center gap-3 py-12 text-xs text-text-muted">
+      <Spinner /> {label}
+    </div>
+  )
+}
+
+export function ErrorNotice({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2.5 rounded-[10px] border border-[rgba(243,165,165,.2)] bg-[rgba(243,165,165,.05)] p-3.5 text-xs text-[#f3a5a5]">
+      <AlertCircle className="mt-px size-4" />
+      <span>{message === "Backend is not reachable" ? "Backend ยังไม่ได้เชื่อมต่อ — เริ่ม ez-gen-api ก่อนใช้งาน" : message}</span>
     </div>
   )
 }
@@ -256,10 +337,10 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-      {icon && <div className="mb-4 text-text-subtle opacity-50">{icon}</div>}
-      <p className="text-sm font-medium text-text-muted mb-1">{title}</p>
-      {description && <p className="text-xs text-text-subtle max-w-xs mb-4">{description}</p>}
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] px-7 py-12 text-center">
+      {icon && <span className="generator-icon mb-4 [&_svg]:size-[18px]">{icon}</span>}
+      <p className="mb-1 text-[13px] font-semibold text-text-base">{title}</p>
+      {description && <p className="mb-5 max-w-sm text-[11px] leading-relaxed text-text-muted">{description}</p>}
       {action}
     </div>
   )
@@ -276,20 +357,33 @@ interface DialogProps {
   size?: "sm" | "md" | "lg"
 }
 
+const DIALOG_WIDTHS = { sm: 400, md: 530, lg: 720 }
+
 export function Dialog({ open, onClose, title, description, children, size = "md" }: DialogProps) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, onClose])
+
   if (!open) return null
-  const widths = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl" }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-modal="true" role="dialog">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className={cn("relative w-full bg-gradient-to-b from-[#171321] to-[#100e18] border border-violet-light/20 rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,.6)] p-6", widths[size])}>
-        <div className="flex items-start justify-between gap-4 mb-5">
+    <div
+      className="modal-backdrop open"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="modal" style={{ width: `min(${DIALOG_WIDTHS[size]}px, 100%)` }}>
+        <div className="modal-head">
           <div>
-            <h2 className="text-base font-semibold text-text-base">{title}</h2>
-            {description && <p className="text-xs text-text-muted mt-0.5">{description}</p>}
+            <h2>{title}</h2>
+            {description && <p>{description}</p>}
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-text-subtle hover:text-text-base hover:bg-white/[.06] transition-colors -mr-1 -mt-1">
-            <X className="w-4 h-4" />
+          <button type="button" onClick={onClose} className="close-modal" aria-label="ปิด">
+            <X className="size-4" />
           </button>
         </div>
         {children}
@@ -300,9 +394,6 @@ export function Dialog({ open, onClose, title, description, children, size = "md
 
 // ── Toast stack ───────────────────────────────────────────────────────────────
 
-import type { Toast } from "@/hooks/use-toast"
-import { CheckCircle, AlertCircle, Info } from "lucide-react"
-
 interface ToastStackProps {
   toasts: Toast[]
   onRemove: (id: number) => void
@@ -311,77 +402,23 @@ interface ToastStackProps {
 export function ToastStack({ toasts, onRemove }: ToastStackProps) {
   if (toasts.length === 0) return null
   return (
-    <div className="fixed bottom-5 right-5 z-[120] flex flex-col gap-2 w-[min(340px,calc(100vw-2rem))]" aria-live="polite">
+    <div className="toast-stack" aria-live="polite">
       {toasts.map(t => (
-        <div key={t.id} className="flex items-start gap-3 p-3.5 bg-[rgba(24,21,34,.96)] border border-violet-light/20 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,.4)] backdrop-blur-lg animate-[toast-in_.3s_ease_both]">
-          <span className="flex-shrink-0 mt-0.5">
-            {t.kind === "success" && <CheckCircle className="w-4 h-4 text-success" />}
-            {t.kind === "error" && <AlertCircle className="w-4 h-4 text-red-400" />}
-            {t.kind === "info" && <Info className="w-4 h-4 text-violet-light" />}
+        <div key={t.id} className="toast">
+          <span className="toast-icon">
+            {t.kind === "success" && <CheckCircle className="text-success" />}
+            {t.kind === "error" && <AlertCircle className="text-[#f3a5a5]" />}
+            {t.kind === "info" && <Info />}
           </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-text-base">{t.title}</p>
-            {t.message && <p className="text-xs text-text-muted mt-0.5">{t.message}</p>}
+          <div className="toast-copy">
+            <strong>{t.title}</strong>
+            {t.message && <p>{t.message}</p>}
           </div>
-          <button onClick={() => onRemove(t.id)} className="flex-shrink-0 text-text-subtle hover:text-text-base transition-colors">
-            <X className="w-3.5 h-3.5" />
+          <button type="button" onClick={() => onRemove(t.id)} className="toast-close" aria-label="ปิด">
+            <X className="size-3.5" />
           </button>
         </div>
       ))}
-    </div>
-  )
-}
-
-// ── SegmentControl ────────────────────────────────────────────────────────────
-
-interface SegmentControlProps {
-  options: { value: string; label: string }[]
-  value: string
-  onChange: (value: string) => void
-  label?: string
-}
-
-export function SegmentControl({ options, value, onChange, label }: SegmentControlProps) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      {label && <span className="text-xs font-medium text-text-muted">{label}</span>}
-      <div className="flex p-0.5 bg-black/20 border border-white/[.1] rounded-lg gap-0.5">
-        {options.map(o => (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => onChange(o.value)}
-            className={cn(
-              "flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-150",
-              value === o.value
-                ? "bg-violet/20 text-violet-light shadow-[inset_0_0_0_1px_rgba(155,109,255,.2)]"
-                : "text-text-muted hover:text-text-base"
-            )}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── SectionHeader ─────────────────────────────────────────────────────────────
-
-interface SectionHeaderProps {
-  title: string
-  description?: string
-  action?: ReactNode
-}
-
-export function SectionHeader({ title, description, action }: SectionHeaderProps) {
-  return (
-    <div className="flex items-start justify-between gap-4 mb-6">
-      <div>
-        <h1 className="text-lg font-semibold text-text-base">{title}</h1>
-        {description && <p className="text-sm text-text-muted mt-0.5">{description}</p>}
-      </div>
-      {action}
     </div>
   )
 }

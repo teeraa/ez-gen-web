@@ -49,7 +49,7 @@ export function TagPicker({ selectedIds, onChange, disabled }: TagPickerProps) {
   const selectedTags = tags.filter(t => selectedIds.includes(t.id))
 
   if (loading) return (
-    <div className="flex items-center gap-2 py-4 text-text-muted text-sm">
+    <div className="flex items-center gap-2 py-4 text-text-muted text-xs">
       <Spinner size={14} /> กำลังโหลด tags...
     </div>
   )
@@ -65,7 +65,7 @@ export function TagPicker({ selectedIds, onChange, disabled }: TagPickerProps) {
               type="button"
               onClick={() => toggle(t.id)}
               disabled={disabled}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-violet/20 text-violet-light border border-violet/30 hover:bg-violet/30 transition-colors group"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-[11px] font-medium bg-[rgba(155,109,255,.16)] text-[#e3d4ff] border border-[rgba(155,109,255,.25)] hover:bg-[rgba(155,109,255,.24)] transition-colors group"
             >
               {t.name}
               {t.category === "negative_constraint" && <span className="text-[10px] opacity-60">−</span>}
@@ -91,21 +91,17 @@ export function TagPicker({ selectedIds, onChange, disabled }: TagPickerProps) {
           onChange={e => setSearch(e.target.value)}
           placeholder="ค้นหา tag..."
           disabled={disabled}
-          className="w-full bg-white/[.03] border border-white/[.08] rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-base placeholder-text-subtle outline-none focus:border-violet/40 transition-colors"
+          className="h-[34px] w-full bg-white/[.025] border border-[var(--border)] rounded-lg pl-8 pr-3 text-[11px] text-text-base placeholder:text-[#797387] outline-none focus:border-[rgba(155,109,255,.5)] transition-colors"
         />
       </div>
 
       {/* Category tabs */}
-      <div className="flex gap-1 flex-wrap">
+      <div className="mode-tabs !mb-0 overflow-x-auto" role="group" aria-label="หมวดหมู่ tag">
         <button
           type="button"
           onClick={() => setActiveCategory("all")}
-          className={cn(
-            "px-3 py-1 rounded-md text-xs transition-colors",
-            activeCategory === "all"
-              ? "bg-violet/15 text-violet-light border border-violet/20"
-              : "text-text-subtle hover:text-text-muted border border-transparent"
-          )}
+          className={cn("mode-tab", activeCategory === "all" && "active")}
+          aria-pressed={activeCategory === "all"}
         >
           ทั้งหมด
         </button>
@@ -114,12 +110,8 @@ export function TagPicker({ selectedIds, onChange, disabled }: TagPickerProps) {
             key={c}
             type="button"
             onClick={() => setActiveCategory(c)}
-            className={cn(
-              "px-3 py-1 rounded-md text-xs transition-colors",
-              activeCategory === c
-                ? "bg-violet/15 text-violet-light border border-violet/20"
-                : "text-text-subtle hover:text-text-muted border border-transparent"
-            )}
+            className={cn("mode-tab", activeCategory === c && "active")}
+            aria-pressed={activeCategory === c}
           >
             {TAG_CATEGORY_LABELS[c]}
           </button>
@@ -144,12 +136,12 @@ export function TagPicker({ selectedIds, onChange, disabled }: TagPickerProps) {
                 disabled={disabled}
                 title={tag.description}
                 className={cn(
-                  "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all duration-150",
+                  "inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-medium border transition-all duration-150",
                   selected
                     ? isNeg
-                      ? "bg-red-500/15 text-red-300 border-red-500/25"
-                      : "bg-violet/20 text-violet-light border-violet/30"
-                    : "bg-white/[.03] text-text-muted border-white/[.07] hover:bg-white/[.06] hover:text-text-base hover:border-white/[.12]"
+                      ? "bg-[rgba(243,165,165,.1)] text-[#f3a5a5] border-[rgba(243,165,165,.28)]"
+                      : "bg-[rgba(155,109,255,.16)] text-[#e3d4ff] border-[rgba(155,109,255,.3)]"
+                    : "bg-white/[.035] text-[#a29bb1] border-white/10 hover:bg-[var(--glass-hover)] hover:text-white hover:border-[var(--border-strong)]"
                 )}
               >
                 {isNeg && <span className="text-[10px] opacity-70">−</span>}
@@ -161,10 +153,10 @@ export function TagPicker({ selectedIds, onChange, disabled }: TagPickerProps) {
       )}
 
       {selectedIds.length > 0 && (
-        <p className="text-xs text-text-subtle">
+        <p className="m-0 text-[11px] text-text-subtle">
           เลือก {selectedIds.length} tag{" "}
           {selectedIds.filter(id => tags.find(t => t.id === id)?.category === "negative_constraint").length > 0 && (
-            <span className="text-red-400/70">
+            <span className="text-[#f3a5a5]/80">
               (รวม {selectedIds.filter(id => tags.find(t => t.id === id)?.category === "negative_constraint").length} negative)
             </span>
           )}

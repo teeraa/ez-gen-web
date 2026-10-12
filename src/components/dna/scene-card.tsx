@@ -1,8 +1,7 @@
 "use client"
 
 import { ChevronRight, User, Palette, Play, MoreHorizontal, GitBranch } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { formatRelativeDate } from "@/lib/utils"
+import { cn, formatRelativeDate } from "@/lib/utils"
 import type { SceneDTO } from "@/types/api"
 import { Badge } from "@/components/ui"
 import { JobStatusBadge } from "@/components/dna/job-status"
@@ -20,106 +19,68 @@ interface SceneCardProps {
 }
 
 export function SceneCard({ scene, index, charName, styleName, latestJob, onClick, onContinue, compact }: SceneCardProps) {
-  const hasThumbnail = latestJob?.result?.thumbnailUrl
+  const thumbnailUrl = latestJob?.result?.thumbnailUrl
+  const title = scene.title || `Scene ${index}`
 
   return (
-    <div
-      className={cn(
-        "group relative bg-white/[.025] border border-white/[.07] rounded-xl overflow-hidden transition-all duration-200 hover:border-violet/25 hover:bg-white/[.035]",
-        onClick && "cursor-pointer"
-      )}
-      onClick={onClick}
-    >
-      {/* Thumbnail / index area */}
-      <div className={cn("relative bg-surface-2 flex items-center justify-center overflow-hidden", compact ? "h-24" : "h-36")}>
-        {hasThumbnail ? (
+    <article className={cn("creation-card group", onClick && "cursor-pointer")} onClick={onClick}>
+      <div className="creation-image">
+        {thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={latestJob!.result!.thumbnailUrl} alt={scene.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+          <img src={thumbnailUrl} alt={title} />
         ) : (
-          <div className="flex flex-col items-center gap-2 text-text-subtle">
-            <span className="text-2xl font-bold text-white/10">{String(index).padStart(2, "0")}</span>
-            <Play className="w-5 h-5 opacity-20" />
+          <div className="grid h-full place-items-center bg-[radial-gradient(ellipse_at_50%_30%,#30204b,#100d18_70%)]">
+            <span className="font-[family-name:var(--manrope)] text-3xl font-bold text-white/[.12]">{String(index).padStart(2, "0")}</span>
           </div>
         )}
-
-        {/* Scene order badge */}
-        <div className="absolute top-2 left-2 w-6 h-6 rounded-md bg-black/60 backdrop-blur-sm flex items-center justify-center text-[10px] font-bold text-white/70">
-          {index}
+        <div className="image-vignette" />
+        <div className="creation-top">
+          <span className="creation-tag">Scene {index}</span>
+          {latestJob && <JobStatusBadge status={latestJob.status} />}
         </div>
-
-        {/* Status badge */}
-        {latestJob && (
-          <div className="absolute top-2 right-2">
-            <JobStatusBadge status={latestJob.status} />
-          </div>
-        )}
-
-        {/* Chain indicator */}
         {scene.previousSceneId && (
-          <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[9px] text-violet-light">
-            <GitBranch className="w-2.5 h-2.5" />
-            ต่อเนื่อง
-          </div>
+          <span className="duration inline-flex items-center gap-1 text-violet-light">
+            <GitBranch className="size-2.5" /> ต่อเนื่อง
+          </span>
         )}
+        {onClick && <span className="play-button" aria-hidden="true"><Play /></span>}
       </div>
 
-      {/* Content */}
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-xs font-semibold text-text-base truncate">
-              {scene.title || `Scene ${index}`}
-            </h3>
-            <p className="text-[10px] text-text-subtle mt-0.5">{formatRelativeDate(scene.updatedAt)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); }}
-            className="opacity-0 group-hover:opacity-100 p-1 rounded text-text-subtle hover:text-text-base hover:bg-white/[.06] transition-all"
-          >
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </button>
+      <div className="creation-info">
+        <div className="min-w-0">
+          <h3 className="truncate">{title}</h3>
+          <p>{formatRelativeDate(scene.updatedAt)}</p>
         </div>
-
-        {/* Profile pills */}
-        {!compact && (charName || styleName) && (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {charName && (
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet/10 border border-violet/15">
-                <User className="w-2.5 h-2.5 text-violet-light" />
-                <span className="text-[9px] text-violet-light truncate max-w-16">{charName}</span>
-              </div>
-            )}
-            {styleName && (
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet/10 border border-violet/15">
-                <Palette className="w-2.5 h-2.5 text-violet-light" />
-                <span className="text-[9px] text-violet-light truncate max-w-16">{styleName}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tags */}
-        {!compact && scene.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {scene.tags.slice(0, 3).map(t => <Badge key={t.id} variant="violet" className="text-[9px]">{t.name}</Badge>)}
-            {scene.tags.length > 3 && <Badge variant="neutral" className="text-[9px]">+{scene.tags.length - 3}</Badge>}
-          </div>
-        )}
-
-        {/* Continue button */}
-        {onContinue && scene.selectedJobId && (
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onContinue(); }}
-            className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-medium text-violet-light border border-violet/20 bg-violet/[.06] hover:bg-violet/[.12] hover:border-violet/30 transition-all"
-          >
-            <ChevronRight className="w-3 h-3" />
-            ต่อ Scene นี้
-          </button>
-        )}
+        <button type="button" onClick={e => { e.stopPropagation() }} className="card-more" aria-label={`ตัวเลือกของ ${title}`}>
+          <MoreHorizontal className="size-3.5" />
+        </button>
       </div>
-    </div>
+
+      {!compact && (charName || styleName) && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {charName && <Badge variant="violet"><User /> <span className="max-w-16 truncate">{charName}</span></Badge>}
+          {styleName && <Badge variant="violet"><Palette /> <span className="max-w-16 truncate">{styleName}</span></Badge>}
+        </div>
+      )}
+
+      {!compact && scene.tags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {scene.tags.slice(0, 3).map(t => <Badge key={t.id} variant="violet">{t.name}</Badge>)}
+          {scene.tags.length > 3 && <Badge variant="neutral">+{scene.tags.length - 3}</Badge>}
+        </div>
+      )}
+
+      {onContinue && scene.selectedJobId && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onContinue() }}
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-[7px] border border-[rgba(155,109,255,.2)] bg-[rgba(155,109,255,.06)] py-[7px] text-[10px] font-medium text-[#e3d4ff] transition-all hover:border-[rgba(155,109,255,.32)] hover:bg-[rgba(155,109,255,.14)]"
+        >
+          <ChevronRight className="size-3" />
+          ต่อ Scene นี้
+        </button>
+      )}
+    </article>
   )
 }
 
@@ -148,7 +109,7 @@ export function StoryboardLane({ scenes, onSceneClick, onContinue }: StoryboardL
           )}
         </div>
       ))}
-      <div className="flex-shrink-0 w-36 h-24 border-2 border-dashed border-white/[.08] rounded-xl flex items-center justify-center text-text-subtle text-xs hover:border-violet/20 hover:text-violet-light transition-colors cursor-pointer">
+      <div className="flex h-24 w-36 flex-shrink-0 cursor-pointer items-center justify-center rounded-[11px] border border-dashed border-[rgba(184,153,255,.3)] bg-[rgba(155,109,255,.035)] text-xs text-text-muted transition-colors hover:border-[var(--purple)] hover:bg-[rgba(155,109,255,.09)] hover:text-violet-light">
         + Scene ใหม่
       </div>
     </div>

@@ -1,105 +1,118 @@
 import Link from "next/link"
-import { User, Palette, Film, ChevronRight, Sparkles, GitBranch, Zap } from "lucide-react"
+import { User, Palette, Film, Plus, ArrowRight, Sparkles, GitBranch, Play } from "lucide-react"
 
-const SECTIONS = [
+const TOOLS = [
   {
     href: "/studio/characters",
     icon: User,
-    color: "from-violet/20 to-violet-dark/10 border-violet/25",
-    iconColor: "text-violet-light",
+    tone: "purple",
     title: "Characters",
-    desc: "สร้างและจัดการตัวละคร — กำหนดรูปลักษณ์ เครื่องแต่งกาย และคุณสมบัติที่ต้องคงที่ในทุก scene",
-    cta: "จัดการ Characters",
+    desc: "กำหนดรูปลักษณ์ เครื่องแต่งกาย และคุณสมบัติที่ต้องคงที่ในทุก scene",
   },
   {
     href: "/studio/styles",
     icon: Palette,
-    color: "from-blue-500/15 to-blue-900/10 border-blue-500/20",
-    iconColor: "text-blue-300",
+    tone: "blue",
     title: "Styles",
-    desc: "กำหนด Visual Style, Color Palette, Camera Language และ Mood ที่จะสืบทอดข้าม scene",
-    cta: "จัดการ Styles",
+    desc: "Visual style, color palette, camera language และ mood ที่สืบทอดข้าม scene",
   },
   {
     href: "/studio/scenes",
     icon: Film,
-    color: "from-emerald-500/15 to-emerald-900/10 border-emerald-500/20",
-    iconColor: "text-emerald-300",
+    tone: "green",
     title: "Storyboard",
-    desc: "สร้าง scene chain ที่ใช้ Character + Style เดิม รักษาความต่อเนื่องภาพข้ามหลาย scene",
-    cta: "เปิด Storyboard",
+    desc: "Scene chain ที่ใช้ Character + Style เดิม รักษาความต่อเนื่องของภาพ",
   },
+  {
+    href: "/studio/scenes/new",
+    icon: Plus,
+    tone: "rose",
+    title: "สร้าง Scene ใหม่",
+    desc: "เริ่ม scene แรกของเรื่อง แล้วต่อยอดเป็น chain ได้ทันที",
+  },
+] as const
+
+const STEPS = [
+  { step: "01", icon: User, title: "สร้าง Character", desc: "กำหนดรูปลักษณ์ เครื่องแต่งกาย และ consistency notes ที่ backend จะ compile เข้า prompt" },
+  { step: "02", icon: Palette, title: "กำหนด Style", desc: "เลือก visual style, camera language และ mood ที่จะใช้กับทุก scene ในชุดนี้" },
+  { step: "03", icon: Film, title: "สร้าง Scene Chain", desc: "สร้าง scene แรก แล้วกด “ต่อ Scene” — Character, Style และ Tags จะสืบทอดอัตโนมัติ" },
 ]
 
 export default function StudioPage() {
   return (
-    <div className="p-6 lg:p-8 max-w-4xl">
-      {/* Header */}
-      <div className="mb-10">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet/25 to-violet-dark/10 border border-violet-light/30 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-violet-light" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-text-base tracking-tight">VIOLET DNA</h1>
-            <p className="text-xs text-text-subtle">Character & Style Consistency Studio</p>
+    <>
+      <section className="hero studio-hero" aria-labelledby="studioHeroTitle">
+        <div className="hero-art" role="img" aria-label="Cinematic celestial landscape" />
+        <div className="hero-content">
+          <div className="hero-label"><span className="live-dot" /><span className="eyebrow">VIOLET DNA</span></div>
+          <h1 id="studioHeroTitle">ตัวละครเดิม<br />ในทุก <em>ฉาก.</em></h1>
+          <p className="hero-description">
+            สร้างตัวละครและสไตล์ที่นำกลับมาใช้ใหม่ได้ รักษาความสม่ำเสมอของภาพข้ามหลาย scene ในโปรเจกต์เดียวกัน
+          </p>
+          <div className="hero-buttons">
+            <Link href="/studio/scenes/new" className="btn-primary"><Sparkles />เริ่มสร้าง Scene</Link>
+            <Link href="/studio/scenes" className="btn-secondary"><Play />เปิด Storyboard</Link>
           </div>
         </div>
-        <p className="text-sm text-text-muted max-w-xl leading-relaxed">
-          สร้างตัวละครและสไตล์ที่นำกลับมาใช้ใหม่ได้ รักษาความสม่ำเสมอภาพของตัวละครและสไตล์ข้ามหลาย scene ในโปรเจกต์เดียวกัน
-        </p>
-      </div>
+        <div className="hero-meta"><Sparkles /> Character &amp; Style Consistency Studio</div>
+      </section>
 
-      {/* Feature cards */}
-      <div className="grid gap-4 sm:grid-cols-3 mb-10">
-        {SECTIONS.map(({ href, icon: Icon, color, iconColor, title, desc, cta }) => (
-          <Link
-            key={href}
-            href={href}
-            className={`group flex flex-col p-5 rounded-2xl bg-gradient-to-br border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl ${color}`}
-          >
-            <div className={`w-10 h-10 rounded-xl bg-white/[.06] flex items-center justify-center mb-4 group-hover:scale-105 transition-transform ${iconColor}`}>
-              <Icon className="w-5 h-5" />
-            </div>
-            <h2 className="text-sm font-semibold text-text-base mb-1.5">{title}</h2>
-            <p className="text-xs text-text-muted leading-relaxed flex-1 mb-4">{desc}</p>
-            <div className={`flex items-center gap-1.5 text-xs font-medium ${iconColor}`}>
-              {cta} <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      {/* How VIOLET DNA works */}
-      <div className="rounded-2xl border border-white/[.07] bg-white/[.02] p-6">
-        <h2 className="text-sm font-semibold text-text-base mb-4 flex items-center gap-2">
-          <GitBranch className="w-4 h-4 text-violet-light" />
-          วิธีการทำงานของ VIOLET DNA
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[
-            { step: "01", icon: User, title: "สร้าง Character", desc: "กำหนดรูปลักษณ์ เครื่องแต่งกาย และ consistency notes ที่ backend จะ compile เข้า prompt" },
-            { step: "02", icon: Palette, title: "กำหนด Style", desc: "เลือก visual style, camera language, mood ที่จะใช้กับทุก scene ในชุดนี้" },
-            { step: "03", icon: Film, title: "สร้าง Scene Chain", desc: "สร้าง scene แรก แล้วกด 'ต่อ Scene' — Character, Style, Tags จะสืบทอดอัตโนมัติ" },
-          ].map(({ step, icon: Icon, title, desc }) => (
-            <div key={step} className="flex flex-col gap-2">
-              <div className="flex items-center gap-2.5">
-                <span className="text-xs font-bold text-white/15">{step}</span>
-                <Icon className="w-3.5 h-3.5 text-violet-light" />
-                <span className="text-xs font-semibold text-text-base">{title}</span>
-              </div>
-              <p className="text-xs text-text-subtle leading-relaxed pl-8">{desc}</p>
-            </div>
+      <section className="section" aria-labelledby="toolsHeading">
+        <div className="section-heading">
+          <div>
+            <h2 id="toolsHeading">เครื่องมือ DNA</h2>
+            <p>ทุกสิ่งที่ต้องใช้เพื่อเล่าเรื่องด้วยตัวละครและสไตล์เดิม</p>
+          </div>
+        </div>
+        <div className="tools-grid">
+          {TOOLS.map(({ href, icon: Icon, tone, title, desc }) => (
+            <Link key={href} href={href} className="tool-card">
+              <span className={`tool-icon ${tone}`}><Icon /></span>
+              <span className="tool-copy"><strong>{title}</strong><p>{desc}</p></span>
+              <span className="tool-arrow"><ArrowRight /></span>
+            </Link>
           ))}
         </div>
+      </section>
 
-        <div className="mt-5 pt-4 border-t border-white/[.05] flex items-start gap-2 text-xs text-text-subtle">
-          <Zap className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
-          <span>
-            <strong className="text-text-muted">หมายเหตุ:</strong> ความสม่ำเสมอของภาพช่วยด้วย structured profiles แต่ไม่รับประกัน 100% เนื่องจากข้อจำกัดของ AI model
-          </span>
+      <section className="section" aria-label="วิธีการทำงานและหมายเหตุ">
+        <div className="bottom-grid">
+          <div className="plan-panel">
+            <div className="panel-head">
+              <h3 className="flex items-center gap-2"><GitBranch className="size-4 text-violet-light" /> วิธีการทำงานของ VIOLET DNA</h3>
+              <span className="plan-label">3 ขั้นตอน</span>
+            </div>
+            <ol className="m-0 grid list-none gap-3.5 p-0">
+              {STEPS.map(({ step, icon: Icon, title, desc }) => (
+                <li key={step} className="flex items-start gap-3">
+                  <span className="tool-icon purple"><Icon /></span>
+                  <div className="min-w-0">
+                    <p className="m-0 text-xs font-semibold">
+                      <span className="mr-1.5 text-text-subtle">{step}</span>{title}
+                    </p>
+                    <p className="mt-1 mb-0 text-[11px] leading-relaxed text-text-muted">{desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="tip-panel">
+            <div className="panel-head"><h3>Studio notes</h3><span className="eyebrow tracking-[1px]">CONSISTENCY TIP</span></div>
+            <div className="tip-content">
+              <span className="tip-icon"><Sparkles /></span>
+              <div>
+                <h4>ยิ่งละเอียด ยิ่งสม่ำเสมอ</h4>
+                <p>
+                  ระบุจุดเด่นที่ระบุตัวตนได้ชัด เช่น ทรงผม แผลเป็น หรือเครื่องประดับ ใน Character Profile
+                  ความสม่ำเสมอของภาพช่วยด้วย structured profiles แต่ไม่รับประกัน 100% เนื่องจากข้อจำกัดของ AI model
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+
+      <footer className="footer"><span>© 2026 EZ-GEN STUDIO · VIOLET DNA</span><span>Character &amp; Style Consistency Studio</span></footer>
+    </>
   )
 }

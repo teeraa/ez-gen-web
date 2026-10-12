@@ -106,8 +106,8 @@ export function JobCard({ job, onSelect, selected }: JobCardProps) {
 
       {/* Error */}
       {job.error && (
-        <div className="mt-2 p-3 rounded-lg bg-red-500/[.07] border border-red-500/20">
-          <p className="text-xs text-red-400">{job.error.message}</p>
+        <div className="mt-2 p-3 rounded-lg bg-[rgba(243,165,165,.05)] border border-[rgba(243,165,165,.2)]">
+          <p className="text-xs text-[#f3a5a5]">{job.error.message}</p>
         </div>
       )}
 

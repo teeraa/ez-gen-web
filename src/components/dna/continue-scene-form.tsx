@@ -93,13 +93,13 @@ export function ContinueSceneForm({ scene, onJobCreated, onCancel }: ContinueSce
   return (
     <div className="flex flex-col gap-5">
       {/* Context header */}
-      <div className="flex items-start gap-3 p-3.5 rounded-xl bg-violet/[.06] border border-violet/15">
+      <div className="flex items-start gap-3 p-3.5 rounded-[10px] bg-[rgba(155,109,255,.05)] border border-[rgba(155,109,255,.18)]">
         <ChevronRight className="w-4 h-4 text-violet-light mt-0.5 flex-shrink-0" />
         <div>
-          <p className="text-xs font-medium text-violet-light">ต่อจาก: {scene.title || "Scene"}</p>
-          <p className="text-[10px] text-text-subtle mt-0.5">Character, Style และ Tags จะถูกสืบทอดมาอัตโนมัติ</p>
+          <p className="m-0 text-xs font-medium text-violet-light">ต่อจาก: {scene.title || "Scene"}</p>
+          <p className="mt-0.5 mb-0 text-[10px] text-text-subtle">Character, Style และ Tags จะถูกสืบทอดมาอัตโนมัติ</p>
           {!scene.selectedJobId && (
-            <p className="text-[10px] text-amber-400 mt-1 flex items-center gap-1"><Info className="w-3 h-3" /> scene ก่อนหน้ายังไม่มี selected output — ไม่สามารถใช้ last frame ได้</p>
+            <p className="mt-1 mb-0 flex items-center gap-1 text-[10px] text-[var(--orange)]"><Info className="w-3 h-3" /> scene ก่อนหน้ายังไม่มี selected output — ไม่สามารถใช้ last frame ได้</p>
           )}
         </div>
       </div>
@@ -127,34 +127,30 @@ export function ContinueSceneForm({ scene, onJobCreated, onCancel }: ContinueSce
 
       {/* Generation settings */}
       <div>
-        <p className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">การตั้งค่า Generation</p>
+        <p className="form-group-label">การตั้งค่า Generation</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Select label="โมเดล" options={MODEL_OPTIONS} value={form.model} onChange={e => { set("model", e.target.value as ModelId); if (form.duration > MODEL_MAX_DURATION[e.target.value as ModelId]) set("duration", MODEL_MAX_DURATION[e.target.value as ModelId]); }} />
           <Select label="อัตราส่วนภาพ" options={ASPECT_OPTIONS} value={form.aspectRatio} onChange={e => set("aspectRatio", e.target.value as AspectRatio)} />
-          <div>
-            <label className="text-xs font-medium text-[#9893a8] block mb-1.5">ระยะเวลา (วินาที)</label>
-            <input type="number" min={4} max={maxDuration} value={form.duration}
-              onChange={e => set("duration", Number(e.target.value))}
-              className="w-full bg-white/[.04] border border-white/[.1] rounded-lg px-3 py-2 text-sm text-text-base outline-none focus:border-violet/50 transition-colors" />
-            {errors.duration && <p className="text-xs text-red-400 mt-1">{errors.duration}</p>}
-          </div>
+          <Input label="ระยะเวลา (วินาที)" type="number" min={4} max={maxDuration} value={form.duration}
+            onChange={e => set("duration", Number(e.target.value))} error={errors.duration} />
           <SegmentControl label="คุณภาพ" options={[{ value: "standard", label: "มาตรฐาน" }, { value: "high", label: "สูง HD" }]} value={form.quality} onChange={v => set("quality", v as Quality)} />
         </div>
       </div>
 
       {/* Last frame toggle */}
       {scene.selectedJobId && (
-        <label className="flex items-center gap-3 p-3 rounded-xl border border-white/[.08] bg-white/[.02] cursor-pointer hover:border-violet/20 transition-colors">
-          <input type="checkbox" checked={form.useLastFrame} onChange={e => set("useLastFrame", e.target.checked)} className="w-4 h-4 accent-violet rounded" />
-          <div>
-            <p className="text-xs font-medium text-text-base">ใช้ last frame ของ scene ก่อนหน้า</p>
-            <p className="text-[10px] text-text-subtle mt-0.5">เพิ่มความต่อเนื่องของภาพ (visual continuity)</p>
-          </div>
+        <label className="enhance-toggle rounded-[10px] border border-[var(--border)] bg-white/[.022] p-3 whitespace-normal transition-colors hover:border-[rgba(155,109,255,.3)]">
+          <input type="checkbox" checked={form.useLastFrame} onChange={e => set("useLastFrame", e.target.checked)} className="switch-input" />
+          <span className="switch" aria-hidden="true" />
+          <span>
+            <span className="block text-xs font-medium text-text-base">ใช้ last frame ของ scene ก่อนหน้า</span>
+            <span className="mt-0.5 block text-[10px] text-text-subtle">เพิ่มความต่อเนื่องของภาพ (visual continuity)</span>
+          </span>
         </label>
       )}
 
       {/* Actions */}
-      <div className="flex gap-3 pt-2 border-t border-white/[.06]">
+      <div className="flex gap-3 mt-1 pt-4 border-t border-[var(--border)]">
         <Button variant="ghost" onClick={onCancel} className="flex-1">ยกเลิก</Button>
         <Button variant="primary" icon={<Play className="w-3.5 h-3.5" />} loading={submitting} onClick={handleSubmit} className="flex-1">
           สร้าง Scene ต่อ

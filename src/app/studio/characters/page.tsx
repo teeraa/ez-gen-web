@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Plus, User, Trash2, ChevronRight } from "lucide-react"
 import { charactersApi } from "@/lib/api"
 import type { CharacterProfileDTO } from "@/types/api"
-import { LinkButton, Card, EmptyState, Spinner, SectionHeader, Badge } from "@/components/ui"
+import { LinkButton, Card, EmptyState, Spinner, SectionHeader, Badge, LoadingState, ErrorNotice } from "@/components/ui"
 import { TagList } from "@/components/dna/tag-picker"
 import { formatRelativeDate } from "@/lib/utils"
 
@@ -23,7 +23,7 @@ export default function CharactersPage() {
   useEffect(() => { load() }, [])
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl">
+    <div className="studio-wide">
       <SectionHeader
         title="Characters"
         description="Character Profiles ที่นำกลับมาใช้ซ้ำได้ใน scene ต่างๆ"
@@ -32,23 +32,12 @@ export default function CharactersPage() {
         }
       />
 
-      {loading && (
-        <div className="flex items-center gap-3 py-12 text-text-muted text-sm">
-          <Spinner /> กำลังโหลด Characters...
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/[.06] p-4 text-sm text-red-400">
-          {error === "Backend is not reachable"
-            ? "Backend ยังไม่ได้เชื่อมต่อ — เริ่ม ez-gen-api ก่อนใช้งาน"
-            : error}
-        </div>
-      )}
+      {loading && <LoadingState label="กำลังโหลด Characters..." />}
+      {error && <ErrorNotice message={error} />}
 
       {!loading && !error && chars.length === 0 && (
         <EmptyState
-          icon={<User className="w-10 h-10" />}
+          icon={<User />}
           title="ยังไม่มี Character Profile"
           description="สร้าง Character Profile เพื่อนำ appearance, clothing และ consistency notes กลับมาใช้ข้าม scene"
           action={
@@ -58,7 +47,7 @@ export default function CharactersPage() {
       )}
 
       {!loading && chars.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-[13px] sm:grid-cols-2 xl:grid-cols-3">
           {chars.map(c => (
             <CharacterCard key={c.id} char={c} onDeleted={load} />
           ))}
@@ -87,17 +76,15 @@ function CharacterCard({ char, onDeleted }: { char: CharacterProfileDTO; onDelet
 
   return (
     <Link href={`/studio/characters/${char.id}`}>
-      <Card hover className="group p-4 flex flex-col gap-3 h-full">
+      <Card hover className="group flex h-full flex-col gap-3 px-3.5 py-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-violet/15 border border-violet/20 flex items-center justify-center flex-shrink-0">
-              <User className="w-4 h-4 text-violet-light" />
-            </div>
+            <span className="tool-icon purple"><User /></span>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-text-base truncate">{char.name}</h3>
+              <h3 className="m-0 truncate text-xs font-semibold text-text-base">{char.name}</h3>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <Badge variant="neutral" className="text-[9px]">v{char.version}</Badge>
+                <Badge variant="violet">v{char.version}</Badge>
                 <span className="text-[10px] text-text-subtle">{formatRelativeDate(char.updatedAt)}</span>
               </div>
             </div>
@@ -105,20 +92,21 @@ function CharacterCard({ char, onDeleted }: { char: CharacterProfileDTO; onDelet
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-text-subtle hover:text-red-400 hover:bg-red-500/10 transition-all"
+            aria-label={`ลบ ${char.name}`}
+            className="card-more opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:!text-[#f3a5a5] transition-all"
           >
-            {deleting ? <Spinner size={12} /> : <Trash2 className="w-3.5 h-3.5" />}
+            {deleting ? <Spinner size={12} /> : <Trash2 className="size-3.5" />}
           </button>
         </div>
 
         {/* Fields */}
         <div className="flex flex-col gap-1 flex-1 text-[11px]">
-          {char.appearance && <p className="text-text-muted line-clamp-2">{char.appearance}</p>}
+          {char.appearance && <p className="m-0 text-text-muted line-clamp-2">{char.appearance}</p>}
           {char.clothing && (
-            <p className="text-text-subtle"><span className="text-text-muted">เครื่องแต่งกาย:</span> {char.clothing}</p>
+            <p className="m-0 text-text-subtle"><span className="text-text-muted">เครื่องแต่งกาย:</span> {char.clothing}</p>
           )}
           {char.definingFeatures && (
-            <p className="text-text-subtle"><span className="text-text-muted">จุดเด่น:</span> {char.definingFeatures}</p>
+            <p className="m-0 text-text-subtle"><span className="text-text-muted">จุดเด่น:</span> {char.definingFeatures}</p>
           )}
         </div>
 
@@ -126,10 +114,10 @@ function CharacterCard({ char, onDeleted }: { char: CharacterProfileDTO; onDelet
         {char.tags.length > 0 && <TagList tags={char.tags} max={3} />}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-white/[.06]">
+        <div className="flex items-center justify-between pt-2.5 border-t border-[var(--border)]">
           <span className="text-[10px] text-text-subtle">{char.tags.length} tags</span>
           <span className="flex items-center gap-1 text-[10px] text-violet-light opacity-0 group-hover:opacity-100 transition-opacity">
-            แก้ไข <ChevronRight className="w-3 h-3" />
+            แก้ไข <ChevronRight className="size-3" />
           </span>
         </div>
       </Card>

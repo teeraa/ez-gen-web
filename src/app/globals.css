@@ -40,28 +40,34 @@
   --manrope: var(--font-prompt, 'Prompt'), sans-serif;
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 88px; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--dm-sans);
-  font-size: 13px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+/* Element defaults live in the base layer so Tailwind utilities (border, size-*, etc.)
+   can still override them — unlayered rules would beat every utility class. */
+@layer base {
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 88px; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--dm-sans);
+    font-size: 13px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  button, input, textarea, select { font: inherit; }
+  button { color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible,
+  select:focus-visible, a:focus-visible {
+    outline: 2px solid var(--purple-light);
+    outline-offset: 3px;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { border: 0; }
+  svg { width: 17px; height: 17px; flex-shrink: 0; }
+  button:disabled { cursor: not-allowed; opacity: .55; }
 }
-button, input, textarea, select { font: inherit; }
-button { color: inherit; cursor: pointer; }
-button:focus-visible, input:focus-visible, textarea:focus-visible,
-select:focus-visible, a:focus-visible {
-  outline: 2px solid var(--purple-light);
-  outline-offset: 3px;
-}
-a { color: inherit; text-decoration: none; }
-button { border: 0; }
-svg { width: 17px; height: 17px; flex-shrink: 0; }
+
 .icon { display: inline-flex; align-items: center; justify-content: center; }
 .muted { color: var(--muted); }
 .small { font-size: 11px; }
@@ -72,7 +78,6 @@ svg { width: 17px; height: 17px; flex-shrink: 0; }
   text-transform: uppercase;
   font-weight: 700;
 }
-button:disabled { cursor: not-allowed; opacity: .55; }
 
 /* Sidebar */
 .sidebar {
@@ -334,6 +339,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 /* Section headers */
 .section { margin-bottom: 36px; scroll-margin-top: 88px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 17px; }
+.section-heading h1,
 .section-heading h2 {
   margin: 0;
   font-family: var(--manrope);
@@ -633,6 +639,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .hero-meta { display: none; }
   .section { margin-bottom: 29px; }
   .section-heading { align-items: start; margin-bottom: 13px; }
+  .section-heading h1,
   .section-heading h2 { font-size: 18px; }
   .section-heading p { font-size: 11px; }
   .section-heading .text-link { font-size: 10px; }
@@ -1094,4 +1101,22 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .lp-footer { grid-template-columns:1fr; }
   .lp-hero-h1 { letter-spacing:-1.5px; }
   .lp-card-3 { display:none; }
+}
+
+/* ─── Studio (VIOLET DNA) ─────────────────────────────────────────────────────
+   Reuses the dashboard reference patterns; only adds what the reference lacks. */
+.back-link { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; color: var(--muted); font-size: 11px; transition: color .2s; }
+.back-link:hover { color: var(--purple-light); }
+.back-link svg { width: 13px; height: 13px; }
+.studio-narrow { max-width: 760px; }
+/* Thai glyphs collide at the reference's -2.2px Latin tracking. */
+.studio-hero h1 { letter-spacing: -.4px; line-height: 1.22; }
+.studio-wide { max-width: 1180px; }
+.form-group-label { color: var(--purple-light); font-size: 11px; font-weight: 650; letter-spacing: .4px; text-transform: uppercase; margin: 0 0 11px; }
+.tools-grid.cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); }
+@media (max-width: 1250px) {
+  .tools-grid.cols-3 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 560px) {
+  .tools-grid.cols-3 { grid-template-columns: 1fr; }
 }
