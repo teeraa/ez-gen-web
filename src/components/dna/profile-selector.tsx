@@ -33,13 +33,13 @@ export function CharacterSelector({ value, onChange, disabled }: CharacterSelect
         disabled={disabled}
         onClick={() => setOpen(v => !v)}
         className={cn(
-          "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-200",
+          "w-full flex items-center gap-3 p-3 rounded-[10px] border text-left transition-all duration-200",
           selected
-            ? "bg-violet/10 border-violet/30 hover:border-violet/40"
-            : "bg-white/[.03] border-white/[.08] hover:border-white/[.14] hover:bg-white/[.05]"
+            ? "bg-[rgba(155,109,255,.08)] border-[rgba(155,109,255,.35)] hover:border-[rgba(155,109,255,.5)]"
+            : "bg-white/[.022] border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--glass-hover)]"
         )}
       >
-        <span className={cn("flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center", selected ? "bg-violet/20" : "bg-white/[.05]")}>
+        <span className="upload-icon flex-shrink-0">
           {loading ? <Spinner size={14} /> : <User className="w-4 h-4 text-violet-light" />}
         </span>
         <div className="flex-1 min-w-0">
@@ -49,7 +49,7 @@ export function CharacterSelector({ value, onChange, disabled }: CharacterSelect
               <p className="text-[10px] text-text-subtle truncate">{selected.appearance || "ไม่มีข้อมูลรูปลักษณ์"}</p>
             </>
           ) : (
-            <p className="text-sm text-text-subtle">เลือก Character Profile</p>
+            <p className="text-xs text-text-muted">เลือก Character Profile</p>
           )}
         </div>
         {selected
@@ -59,7 +59,7 @@ export function CharacterSelector({ value, onChange, disabled }: CharacterSelect
       </button>
 
       {open && !disabled && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 z-20 bg-[#1b1726] border border-white/[.1] rounded-xl shadow-xl p-1.5 max-h-52 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1.5 z-20 bg-[#1b1726] border border-[var(--border-strong)] rounded-[9px] shadow-[0_10px_30px_#0008] p-[5px] max-h-52 overflow-y-auto">
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-2 text-xs text-text-muted"><Spinner size={12} /> กำลังโหลด...</div>
           ) : chars.length === 0 ? (
@@ -70,8 +70,8 @@ export function CharacterSelector({ value, onChange, disabled }: CharacterSelect
               type="button"
               onClick={() => { onChange(c.id); setOpen(false); }}
               className={cn(
-                "w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-colors",
-                value === c.id ? "bg-violet/15 text-violet-light" : "hover:bg-white/[.05] text-text-base"
+                "w-full flex items-start gap-2.5 px-2.5 py-2 rounded-[6px] text-left transition-colors",
+                value === c.id ? "bg-[rgba(155,109,255,.16)] text-[#e3d4ff]" : "hover:bg-[var(--glass-hover)] text-[#c8c1d5] hover:text-white"
               )}
             >
               <User className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-violet-light" />
@@ -113,13 +113,13 @@ export function StyleSelector({ value, onChange, disabled }: StyleSelectorProps)
         disabled={disabled}
         onClick={() => setOpen(v => !v)}
         className={cn(
-          "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-200",
+          "w-full flex items-center gap-3 p-3 rounded-[10px] border text-left transition-all duration-200",
           selected
-            ? "bg-violet/10 border-violet/30 hover:border-violet/40"
-            : "bg-white/[.03] border-white/[.08] hover:border-white/[.14] hover:bg-white/[.05]"
+            ? "bg-[rgba(155,109,255,.08)] border-[rgba(155,109,255,.35)] hover:border-[rgba(155,109,255,.5)]"
+            : "bg-white/[.022] border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--glass-hover)]"
         )}
       >
-        <span className={cn("flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center", selected ? "bg-violet/20" : "bg-white/[.05]")}>
+        <span className="upload-icon flex-shrink-0">
           {loading ? <Spinner size={14} /> : <Palette className="w-4 h-4 text-violet-light" />}
         </span>
         <div className="flex-1 min-w-0">
@@ -129,7 +129,7 @@ export function StyleSelector({ value, onChange, disabled }: StyleSelectorProps)
               <p className="text-[10px] text-text-subtle truncate">{selected.visualStyle || "ไม่มีข้อมูลสไตล์"}</p>
             </>
           ) : (
-            <p className="text-sm text-text-subtle">เลือก Style Profile</p>
+            <p className="text-xs text-text-muted">เลือก Style Profile</p>
           )}
         </div>
         {selected
@@ -139,7 +139,7 @@ export function StyleSelector({ value, onChange, disabled }: StyleSelectorProps)
       </button>
 
       {open && !disabled && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 z-20 bg-[#1b1726] border border-white/[.1] rounded-xl shadow-xl p-1.5 max-h-52 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1.5 z-20 bg-[#1b1726] border border-[var(--border-strong)] rounded-[9px] shadow-[0_10px_30px_#0008] p-[5px] max-h-52 overflow-y-auto">
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-2 text-xs text-text-muted"><Spinner size={12} /> กำลังโหลด...</div>
           ) : styles.length === 0 ? (
@@ -150,8 +150,8 @@ export function StyleSelector({ value, onChange, disabled }: StyleSelectorProps)
               type="button"
               onClick={() => { onChange(s.id); setOpen(false); }}
               className={cn(
-                "w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-colors",
-                value === s.id ? "bg-violet/15 text-violet-light" : "hover:bg-white/[.05] text-text-base"
+                "w-full flex items-start gap-2.5 px-2.5 py-2 rounded-[6px] text-left transition-colors",
+                value === s.id ? "bg-[rgba(155,109,255,.16)] text-[#e3d4ff]" : "hover:bg-[var(--glass-hover)] text-[#c8c1d5] hover:text-white"
               )}
             >
               <Palette className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-violet-light" />
@@ -177,8 +177,8 @@ interface InheritedSettingsProps {
 export function InheritedSettings({ character, style }: InheritedSettingsProps) {
   if (!character && !style) return null
   return (
-    <div className="rounded-xl border border-violet/15 bg-violet/[.04] p-4">
-      <p className="text-[10px] font-semibold text-violet-light uppercase tracking-wider mb-3">สืบทอดจาก Profiles</p>
+    <div className="rounded-[10px] border border-[rgba(155,109,255,.18)] bg-[rgba(155,109,255,.05)] p-[15px]">
+      <p className="form-group-label">สืบทอดจาก Profiles</p>
       <div className="grid gap-3 sm:grid-cols-2">
         {character && (
           <div className="flex items-start gap-2.5">

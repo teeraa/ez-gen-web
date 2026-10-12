@@ -105,7 +105,7 @@ export function CharacterForm({ initial, onSaved, onDeleted }: CharacterFormProp
     <div className="flex flex-col gap-5">
       {initial && (
         <div className="flex items-center gap-2 text-xs text-text-subtle">
-          <span className="px-2 py-0.5 rounded bg-white/[.05] border border-white/[.08]">v{initial.version}</span>
+          <span className="plan-label">v{initial.version}</span>
           <span>อัพเดทล่าสุด: {new Date(initial.updatedAt).toLocaleDateString("th-TH")}</span>
         </div>
       )}
@@ -118,7 +118,7 @@ export function CharacterForm({ initial, onSaved, onDeleted }: CharacterFormProp
 
       {/* Appearance */}
       <div>
-        <p className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">รูปลักษณ์</p>
+        <p className="form-group-label">รูปลักษณ์</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Textarea label="รูปลักษณ์ทั่วไป" value={form.appearance} onChange={e => set("appearance", e.target.value)} placeholder="เช่น หญิงสูง ใบหน้าคมชัด ตาสีเทาเงิน..." maxLength={500} />
           <Textarea label="ทรงผม" value={form.hairstyle} onChange={e => set("hairstyle", e.target.value)} placeholder="เช่น ผมสั้นสีบลอนด์แพลทตินัม..." maxLength={200} />
@@ -135,12 +135,12 @@ export function CharacterForm({ initial, onSaved, onDeleted }: CharacterFormProp
 
       {/* Tags */}
       <div>
-        <p className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">Tags ของ Character</p>
+        <p className="form-group-label">Tags ของ Character</p>
         <TagPicker selectedIds={form.tagIds} onChange={ids => set("tagIds", ids)} />
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-between gap-3 pt-2 border-t border-white/[.06]">
+      <div className="flex items-center justify-between gap-3 mt-1 pt-4 border-t border-[var(--border)]">
         {initial && onDeleted ? (
           <Button variant="danger" size="sm" icon={<Trash2 className="w-3.5 h-3.5" />} loading={deleting} onClick={handleDelete}>
             ลบ

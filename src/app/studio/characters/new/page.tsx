@@ -1,8 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { ChevronLeft } from "lucide-react"
+import { BackLink, Panel, SectionHeader } from "@/components/ui"
 import type { CharacterProfileDTO } from "@/types/api"
 import { CharacterForm } from "@/components/dna/character-form"
 
@@ -14,17 +13,15 @@ export default function NewCharacterPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-2xl">
-      <Link href="/studio/characters" className="inline-flex items-center gap-1.5 text-xs text-text-subtle hover:text-text-muted mb-6 transition-colors">
-        <ChevronLeft className="w-3.5 h-3.5" /> กลับ Characters
-      </Link>
-      <div className="mb-6">
-        <h1 className="text-lg font-semibold text-text-base">สร้าง Character Profile</h1>
-        <p className="text-sm text-text-muted mt-1">กำหนดรูปลักษณ์และคุณสมบัติที่จะสืบทอดข้าม scene</p>
-      </div>
-      <div className="bg-white/[.02] border border-white/[.07] rounded-2xl p-6">
+    <div className="studio-narrow">
+      <BackLink href="/studio/characters">กลับ Characters</BackLink>
+      <SectionHeader
+        title="สร้าง Character Profile"
+        description="กำหนดรูปลักษณ์และคุณสมบัติที่จะสืบทอดข้าม scene"
+      />
+      <Panel>
         <CharacterForm onSaved={handleSaved} />
-      </div>
+      </Panel>
     </div>
   )
 }

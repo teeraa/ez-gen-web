@@ -125,7 +125,7 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
   return (
     <div className="flex flex-col gap-5">
       {previousSceneId && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet/[.05] border border-violet/15 text-xs text-violet-light">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-[9px] bg-[rgba(155,109,255,.05)] border border-[rgba(155,109,255,.18)] text-xs text-violet-light">
           <Info className="w-3.5 h-3.5 flex-shrink-0" />
           Scene นี้ต่อจาก scene ก่อนหน้า — Character และ Style จะถูกสืบทอดมาโดยอัตโนมัติ
         </div>
@@ -135,7 +135,7 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
 
       {/* Profile selection */}
       <div>
-        <p className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">Profiles ที่ใช้</p>
+        <p className="form-group-label">Profiles ที่ใช้</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <p className="text-xs text-text-subtle mb-1.5">Character</p>
@@ -153,7 +153,7 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
 
       {/* Scene overrides */}
       <div>
-        <p className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">Scene Overrides</p>
+        <p className="form-group-label">Scene Overrides</p>
         <div className="flex flex-col gap-3">
           <Textarea
             label="Action ของ Scene *"
@@ -185,12 +185,12 @@ export function SceneForm({ initial, defaultCharacterId, defaultStyleId, previou
 
       {/* Tags */}
       <div>
-        <p className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">Tags เพิ่มเติม</p>
+        <p className="form-group-label">Tags เพิ่มเติม</p>
         <TagPicker selectedIds={form.tagIds} onChange={ids => set("tagIds", ids)} />
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-between gap-3 pt-2 border-t border-white/[.06]">
+      <div className="flex items-center justify-between gap-3 mt-1 pt-4 border-t border-[var(--border)]">
         {initial && onDeleted ? (
           <Button variant="danger" size="sm" icon={<Trash2 className="w-3.5 h-3.5" />} loading={deleting} onClick={handleDelete}>ลบ</Button>
         ) : <div />}
