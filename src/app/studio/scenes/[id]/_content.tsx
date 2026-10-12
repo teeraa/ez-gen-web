@@ -15,6 +15,7 @@ import { Button, Select, SegmentControl, Badge, Spinner, Dialog, Panel, BackLink
 import { JobCard, JobProgressBar, JobStatusBadge, isSaving } from "@/components/dna/job-status"
 import { InheritedSettings } from "@/components/dna/profile-selector"
 import { ContinueSceneForm } from "@/components/dna/continue-scene-form"
+import { SceneActions } from "@/components/dna/scene-actions"
 import { generateUUID } from "@/lib/utils"
 
 
@@ -146,7 +147,7 @@ export function SceneDetailContent() {
   if (!scene) return null
 
   return (
-    <div className="studio-wide">
+    <div>
       <BackLink href="/studio/scenes">กลับ Storyboard</BackLink>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -159,11 +160,19 @@ export function SceneDetailContent() {
                 <h1 className="m-0 font-[family-name:var(--manrope)] text-xl font-bold tracking-[-.5px]">{scene.title || "Scene ไม่มีชื่อ"}</h1>
                 {scene.description && <p className="mt-1 mb-0 text-xs leading-relaxed text-text-muted">{scene.description}</p>}
               </div>
-              {scene.selectedJobId && (
-                <Badge variant="success" className="flex-shrink-0">
-                  <CheckCircle className="w-3 h-3" /> มี output
-                </Badge>
-              )}
+              <div className="flex flex-shrink-0 items-center gap-2">
+                {scene.selectedJobId && (
+                  <Badge variant="success">
+                    <CheckCircle className="w-3 h-3" /> มี output
+                  </Badge>
+                )}
+                <SceneActions
+                  scene={scene}
+                  showOpen={false}
+                  onUpdated={() => { loadScene() }}
+                  onDeleted={() => router.push("/studio/scenes")}
+                />
+              </div>
             </div>
 
             {/* Chain info */}
@@ -197,7 +206,7 @@ export function SceneDetailContent() {
                 </div>
                 <JobStatusBadge status={activeJob.status} />
               </div>
-              <JobProgressBar job={activeJob} />
+              <JobProgressBar key={activeJob.jobId} job={activeJob} />
             </div>
           )}
 

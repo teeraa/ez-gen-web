@@ -1,6 +1,7 @@
 "use client"
 
-import { ChevronRight, User, Palette, Play, MoreHorizontal, GitBranch } from "lucide-react"
+import type { ReactNode } from "react"
+import { ChevronRight, User, Palette, Play, GitBranch } from "lucide-react"
 import { cn, formatRelativeDate } from "@/lib/utils"
 import type { SceneDTO } from "@/types/api"
 import { Badge } from "@/components/ui"
@@ -16,9 +17,10 @@ interface SceneCardProps {
   onClick?: () => void
   onContinue?: () => void
   compact?: boolean
+  actions?: ReactNode
 }
 
-export function SceneCard({ scene, index, charName, styleName, latestJob, onClick, onContinue, compact }: SceneCardProps) {
+export function SceneCard({ scene, index, charName, styleName, latestJob, onClick, onContinue, compact, actions }: SceneCardProps) {
   const thumbnailUrl = latestJob?.result?.thumbnailUrl
   const title = scene.title || `Scene ${index}`
 
@@ -51,9 +53,7 @@ export function SceneCard({ scene, index, charName, styleName, latestJob, onClic
           <h3 className="truncate">{title}</h3>
           <p>{formatRelativeDate(scene.updatedAt)}</p>
         </div>
-        <button type="button" onClick={e => { e.stopPropagation() }} className="card-more" aria-label={`ตัวเลือกของ ${title}`}>
-          <MoreHorizontal className="size-3.5" />
-        </button>
+        {actions}
       </div>
 
       {!compact && (charName || styleName) && (

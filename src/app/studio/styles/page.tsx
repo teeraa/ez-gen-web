@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Plus, Palette, Trash2, ChevronRight } from "lucide-react"
+import { Plus, Palette, ChevronRight } from "lucide-react"
 import { stylesApi } from "@/lib/api"
 import type { StyleProfileDTO } from "@/types/api"
-import { LinkButton, Card, EmptyState, Spinner, SectionHeader, LoadingState, ErrorNotice } from "@/components/ui"
+import { LinkButton, Card, EmptyState, SectionHeader, LoadingState, ErrorNotice } from "@/components/ui"
 import { TagList } from "@/components/dna/tag-picker"
+import { ProfileActions } from "@/components/dna/profile-actions"
 import { formatRelativeDate } from "@/lib/utils"
 
 export default function StylesPage() {
@@ -23,7 +24,7 @@ export default function StylesPage() {
   useEffect(() => { load() }, [])
 
   return (
-    <div className="studio-wide">
+    <div>
       <SectionHeader
         title="Styles"
         description="Visual Style Profiles ที่นำกลับมาใช้ซ้ำได้"
@@ -45,7 +46,7 @@ export default function StylesPage() {
       )}
 
       {!loading && styles.length > 0 && (
-        <div className="grid gap-[13px] sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-[13px] sm:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-4">
           {styles.map(s => <StyleCard key={s.id} style={s} onDeleted={load} />)}
         </div>
       )}
@@ -54,30 +55,19 @@ export default function StylesPage() {
 }
 
 function StyleCard({ style, onDeleted }: { style: StyleProfileDTO; onDeleted: () => void }) {
-  const [deleting, setDeleting] = useState(false)
-
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation()
-    if (!confirm(`ลบ "${style.name}"?`)) return
-    setDeleting(true)
-    try { await stylesApi.delete(style.id); onDeleted() }
-    catch (err) { alert(err instanceof Error ? err.message : "ลบไม่สำเร็จ"); setDeleting(false) }
-  }
-
   return (
-    <Link href={`/studio/styles/${style.id}`}>
-      <Card hover className="group flex h-full flex-col gap-3 px-3.5 py-4">
+    <Card hover className="group relative flex h-full flex-col gap-3 px-3.5 py-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="tool-icon blue"><Palette /></span>
             <div className="min-w-0">
-              <h3 className="m-0 truncate text-xs font-semibold text-text-base">{style.name}</h3>
+              <h3 className="m-0 truncate text-xs font-semibold text-text-base">
+                <Link href={`/studio/styles/${style.id}`} className="after:absolute after:inset-0 after:content-['']">{style.name}</Link>
+              </h3>
               <p className="m-0 mt-0.5 text-[10px] text-text-subtle">{formatRelativeDate(style.updatedAt)}</p>
             </div>
           </div>
-          <button onClick={handleDelete} disabled={deleting} aria-label={`ลบ ${style.name}`} className="card-more opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:!text-[#f3a5a5] transition-all">
-            {deleting ? <Spinner size={12} /> : <Trash2 className="size-3.5" />}
-          </button>
+          <ProfileActions name={style.name} editHref={`/studio/styles/${style.id}`} onDelete={() => stylesApi.delete(style.id)} onDeleted={onDeleted} />
         </div>
 
         <div className="flex flex-col gap-1 flex-1 text-[11px]">
@@ -93,7 +83,6 @@ function StyleCard({ style, onDeleted }: { style: StyleProfileDTO; onDeleted: ()
           <span className="text-[10px] text-text-subtle">{style.tags.length} tags</span>
           <span className="flex items-center gap-1 text-[10px] text-[#92b9ff] opacity-0 group-hover:opacity-100 transition-opacity">แก้ไข <ChevronRight className="size-3" /></span>
         </div>
-      </Card>
-    </Link>
+    </Card>
   )
 }

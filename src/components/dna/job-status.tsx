@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { CheckCircle, XCircle, Ban, Loader2, Clock, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { JobDTO, JobStatus } from "@/types/api"
@@ -52,6 +53,12 @@ export function jobErrorMessage(job: JobDTO): string | null {
 }
 
 export function JobProgressBar({ job }: { job: JobDTO }) {
+  const target = job.status === "succeeded" ? 100 : job.progress
+  // Never let the bar move backwards (progress can dip between polls); key this component by
+  // jobId so a new job starts from zero. Adjusting state during render avoids an extra effect pass.
+  const [shown, setShown] = useState(target)
+  if (target > shown) setShown(target)
+
   const isActive = ["queued", "submitted", "processing"].includes(job.status)
   if (!isActive && job.status !== "succeeded") return null
 
@@ -59,18 +66,19 @@ export function JobProgressBar({ job }: { job: JobDTO }) {
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-[10px] text-text-muted">
         <span>{stepLabel(job)}</span>
-        <span>{job.status === "succeeded" ? "100%" : `${job.progress}%`}</span>
+        <span>{Math.round(shown)}%</span>
       </div>
       <div className="h-1 rounded-full bg-white/[.06] overflow-hidden">
         <div
           className={cn(
-            "h-full rounded-full transition-all duration-500",
+            "h-full rounded-full",
             job.status === "succeeded"
-              ? "bg-success w-full"
+              ? "bg-success"
               : "bg-gradient-to-r from-violet-dark to-violet-light",
             isSaving(job) && "animate-pulse"
           )}
-          style={{ width: `${job.status === "succeeded" ? 100 : job.progress}%` }}
+          // Linear glide fills the gap between polls (~2.5s) instead of jumping on each response.
+          style={{ width: `${shown}%`, transition: "width 1.5s linear" }}
         />
       </div>
     </div>
@@ -117,7 +125,7 @@ export function JobCard({ job, onSelect, onRefresh, selected }: JobCardProps) {
       </div>
 
       {/* Progress */}
-      {isActive && <div className="mb-3"><JobProgressBar job={job} /></div>}
+      {isActive && <div className="mb-3"><JobProgressBar key={job.jobId} job={job} /></div>}
 
       {job.status === "succeeded" && job.result && (
         <div className="mb-3">

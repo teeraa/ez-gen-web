@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Plus, User, Trash2, ChevronRight } from "lucide-react"
+import { Plus, User, ChevronRight } from "lucide-react"
 import { charactersApi } from "@/lib/api"
 import type { CharacterProfileDTO } from "@/types/api"
-import { LinkButton, Card, EmptyState, Spinner, SectionHeader, Badge, LoadingState, ErrorNotice } from "@/components/ui"
+import { LinkButton, Card, EmptyState, SectionHeader, Badge, LoadingState, ErrorNotice } from "@/components/ui"
 import { TagList } from "@/components/dna/tag-picker"
+import { ProfileActions } from "@/components/dna/profile-actions"
 import { formatRelativeDate } from "@/lib/utils"
 
 export default function CharactersPage() {
@@ -23,7 +24,7 @@ export default function CharactersPage() {
   useEffect(() => { load() }, [])
 
   return (
-    <div className="studio-wide">
+    <div>
       <SectionHeader
         title="Characters"
         description="Character Profiles ที่นำกลับมาใช้ซ้ำได้ใน scene ต่างๆ"
@@ -47,7 +48,7 @@ export default function CharactersPage() {
       )}
 
       {!loading && chars.length > 0 && (
-        <div className="grid gap-[13px] sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-[13px] sm:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-4">
           {chars.map(c => (
             <CharacterCard key={c.id} char={c} onDeleted={load} />
           ))}
@@ -58,45 +59,23 @@ export default function CharactersPage() {
 }
 
 function CharacterCard({ char, onDeleted }: { char: CharacterProfileDTO; onDeleted: () => void }) {
-  const [deleting, setDeleting] = useState(false)
-
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!confirm(`ลบ "${char.name}"?`)) return
-    setDeleting(true)
-    try {
-      await charactersApi.delete(char.id)
-      onDeleted()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "ลบไม่สำเร็จ")
-      setDeleting(false)
-    }
-  }
-
   return (
-    <Link href={`/studio/characters/${char.id}`}>
-      <Card hover className="group flex h-full flex-col gap-3 px-3.5 py-4">
+    <Card hover className="group relative flex h-full flex-col gap-3 px-3.5 py-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="tool-icon purple"><User /></span>
             <div className="min-w-0">
-              <h3 className="m-0 truncate text-xs font-semibold text-text-base">{char.name}</h3>
+              <h3 className="m-0 truncate text-xs font-semibold text-text-base">
+                <Link href={`/studio/characters/${char.id}`} className="after:absolute after:inset-0 after:content-['']">{char.name}</Link>
+              </h3>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <Badge variant="violet">v{char.version}</Badge>
                 <span className="text-[10px] text-text-subtle">{formatRelativeDate(char.updatedAt)}</span>
               </div>
             </div>
           </div>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            aria-label={`ลบ ${char.name}`}
-            className="card-more opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:!text-[#f3a5a5] transition-all"
-          >
-            {deleting ? <Spinner size={12} /> : <Trash2 className="size-3.5" />}
-          </button>
+          <ProfileActions name={char.name} editHref={`/studio/characters/${char.id}`} onDelete={() => charactersApi.delete(char.id)} onDeleted={onDeleted} />
         </div>
 
         {/* Fields */}
@@ -120,7 +99,6 @@ function CharacterCard({ char, onDeleted }: { char: CharacterProfileDTO; onDelet
             แก้ไข <ChevronRight className="size-3" />
           </span>
         </div>
-      </Card>
-    </Link>
+    </Card>
   )
 }

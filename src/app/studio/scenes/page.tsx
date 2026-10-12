@@ -8,6 +8,7 @@ import { scenesApi } from "@/lib/api"
 import type { SceneDTO } from "@/types/api"
 import { LinkButton, EmptyState, SectionHeader, LoadingState, ErrorNotice } from "@/components/ui"
 import { SceneCard } from "@/components/dna/scene-card"
+import { SceneActions } from "@/components/dna/scene-actions"
 
 export default function ScenesPage() {
   const router = useRouter()
@@ -76,6 +77,7 @@ export default function ScenesPage() {
                           index={i + 1}
                           onClick={() => router.push(`/studio/scenes/${scene.id}`)}
                           onContinue={() => router.push(`/studio/scenes/${scene.id}?continue=1`)}
+                          actions={<SceneActions scene={scene} onUpdated={load} onDeleted={load} />}
                         />
                       </div>
                       {i < chain.length - 1 && <ChevronRight className="mt-[60px] size-4 flex-shrink-0 text-text-subtle" />}

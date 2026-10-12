@@ -41,7 +41,7 @@ function fromDTO(dto: SceneDTO): FormData {
     title: dto.title ?? "",
     characterProfileId: dto.characterProfileId,
     styleProfileId: dto.styleProfileId,
-    actionOverride: "",
+    actionOverride: dto.description ?? "",
     cameraOverride: "",
     settingOverride: "",
     tagIds: dto.tags.map(t => t.id),

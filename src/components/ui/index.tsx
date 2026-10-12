@@ -1,8 +1,8 @@
 "use client"
 
-import { forwardRef, useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react"
+import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react"
 import NextLink from "next/link"
-import { Loader2, X, ChevronDown, ChevronLeft, CheckCircle, AlertCircle, Info } from "lucide-react"
+import { Loader2, X, ChevronDown, ChevronLeft, CheckCircle, AlertCircle, Info, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Toast } from "@/hooks/use-toast"
 
@@ -374,7 +374,9 @@ export function Dialog({ open, onClose, title, description, children, size = "md
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      // React events bubble through the component tree, so a dialog opened from a clickable
+      // card would otherwise trigger that card's onClick (e.g. navigate away mid-edit).
+      onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) onClose() }}
     >
       <div className="modal" style={{ width: `min(${DIALOG_WIDTHS[size]}px, 100%)` }}>
         <div className="modal-head">
@@ -420,5 +422,87 @@ export function ToastStack({ toasts, onRemove }: ToastStackProps) {
         </div>
       ))}
     </div>
+  )
+}
+
+// ── ActionMenu (reference .project-menu) ──────────────────────────────────────
+
+export interface ActionMenuItem {
+  label: string
+  icon?: ReactNode
+  onSelect: () => void
+  danger?: boolean
+}
+
+export function ActionMenu({ items, label = "ตัวเลือก" }: { items: ActionMenuItem[]; label?: string }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointer = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false) }
+    document.addEventListener("pointerdown", onPointer)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("pointerdown", onPointer)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [open])
+
+  return (
+    // Cards are often links/clickable; keep menu clicks from reaching them.
+    <div ref={wrapRef} className="project-menu-wrap" onClick={e => { e.preventDefault(); e.stopPropagation() }}>
+      <button
+        type="button"
+        className="card-more"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(v => !v)}
+      >
+        <MoreHorizontal className="size-3.5" />
+      </button>
+      {open && (
+        <div className="project-menu" role="menu">
+          {items.map(item => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              className={cn(item.danger && "delete-action")}
+              onClick={() => { setOpen(false); item.onSelect() }}
+            >
+              {item.icon}{item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── ConfirmDialog ─────────────────────────────────────────────────────────────
+
+interface ConfirmDialogProps {
+  open: boolean
+  title: string
+  description?: string
+  confirmLabel?: string
+  loading?: boolean
+  onConfirm: () => void
+  onClose: () => void
+}
+
+export function ConfirmDialog({ open, title, description, confirmLabel = "ลบ", loading, onConfirm, onClose }: ConfirmDialogProps) {
+  return (
+    <Dialog open={open} onClose={onClose} title={title} description={description} size="sm">
+      <div className="flex justify-end gap-2.5">
+        <Button variant="ghost" onClick={onClose} disabled={loading}>ยกเลิก</Button>
+        <Button variant="danger" loading={loading} onClick={onConfirm}>{confirmLabel}</Button>
+      </div>
+    </Dialog>
   )
 }
