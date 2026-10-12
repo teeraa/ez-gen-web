@@ -1120,3 +1120,17 @@
 @media (max-width: 560px) {
   .tools-grid.cols-3 { grid-template-columns: 1fr; }
 }
+
+/* ─── Auth (mock sign-in / sign-up) ───────────────────────────────────────── */
+.auth-shell { min-height: 100svh; display: grid; place-items: center; padding: 32px 16px; position: relative; isolation: isolate; overflow: hidden; }
+.auth-shell::before { content: ""; position: absolute; z-index: -1; width: 520px; height: 360px; top: -140px; left: 50%; transform: translateX(-50%); background: rgba(132,76,255,.2); filter: blur(110px); pointer-events: none; }
+.auth-card { width: min(420px,100%); }
+.auth-card .modal { width: 100%; max-height: none; overflow: visible; padding: 28px; }
+.auth-brand { display: flex; justify-content: center; margin: 0 0 22px; }
+.auth-brand .brand { margin: 0; }
+.auth-switch { margin: 18px 0 0; text-align: center; color: var(--muted); font-size: 11px; }
+.auth-switch a { color: var(--purple-light); font-weight: 600; }
+.auth-switch a:hover { color: white; }
+.demo-account { display: flex; align-items: center; gap: 11px; padding: 11px 12px; margin-bottom: 18px; border: 1px dashed rgba(184,153,255,.3); border-radius: 9px; background: rgba(155,109,255,.045); }
+.demo-account code { font-family: inherit; color: #e3d4ff; }
+@media (max-width: 560px) { .auth-card .modal { padding: 20px; } }

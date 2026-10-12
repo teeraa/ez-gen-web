@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 // ─── Icon sprite (inline, zero runtime deps) ──────────────────────────────────
 function IconSprite() {
@@ -74,8 +75,8 @@ function Navbar() {
       </div>
 
       <div className="lp-nav-actions">
-        <button className="lp-btn-ghost">เข้าสู่ระบบ</button>
-        <button className="lp-btn-cta" onClick={() => scrollTo("pricing")}>เริ่มต้นฟรี</button>
+        <Link href="/signin" className="lp-btn-ghost">เข้าสู่ระบบ</Link>
+        <Link href="/signup" className="lp-btn-cta">เริ่มต้นฟรี</Link>
       </div>
 
       <button className="icon-button lp-nav-hamburger" onClick={() => setMobileOpen(v => !v)} aria-label="เมนู">
@@ -92,8 +93,8 @@ function Navbar() {
             <button key={id} className="lp-nav-link" style={{ textAlign: "left", fontSize: 15, padding: "12px 8px" }} onClick={() => scrollTo(id)}>{label}</button>
           ))}
           <div style={{ borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 16, marginTop: 8, display: "flex", flexDirection: "column", gap: 10 }}>
-            <button className="lp-btn-ghost" style={{ width: "100%", padding: "12px" }}>เข้าสู่ระบบ</button>
-            <button className="lp-btn-cta" style={{ width: "100%", padding: "12px" }}>เริ่มต้นฟรี</button>
+            <Link href="/signin" className="lp-btn-ghost" style={{ display: "block", textAlign: "center", padding: "12px" }}>เข้าสู่ระบบ</Link>
+            <Link href="/signup" className="lp-btn-cta" style={{ display: "block", textAlign: "center", padding: "12px" }}>เริ่มต้นฟรี</Link>
           </div>
         </div>
       )}
@@ -143,10 +144,10 @@ function HeroSection() {
         </p>
 
         <div className="lp-hero-actions">
-          <button className="lp-hero-primary" onClick={() => scrollTo("pricing")}>
+          <Link href="/studio" className="lp-hero-primary">
             <Icon id="i-sparkles" size={16} />
             เริ่มสร้างสรรค์ฟรี
-          </button>
+          </Link>
           <button className="lp-hero-secondary" onClick={() => scrollTo("showcase")}>
             <Icon id="i-play" size={16} />
             ดูตัวอย่างผลงาน
@@ -343,9 +344,9 @@ function PricingSection() {
                   <li key={f}><Icon id="i-check" size={14} />{f}</li>
                 ))}
               </ul>
-              <button className={`lp-price-btn ${plan.featured ? "lp-price-btn-solid" : "lp-price-btn-outline"}`}>
+              <Link href="/signup" className={`lp-price-btn ${plan.featured ? "lp-price-btn-solid" : "lp-price-btn-outline"}`} style={{ display: "block", textAlign: "center" }}>
                 {plan.cta}
-              </button>
+              </Link>
             </div>
           ))}
         </div>
@@ -362,10 +363,10 @@ function CtaSection() {
       <h2 className="lp-cta-h">พร้อมเปลี่ยนจินตนาการ<br />ให้เป็นการเคลื่อนไหวหรือยัง?</h2>
       <p className="lp-cta-sub">เข้าร่วมกับผู้สร้างสรรค์กว่า 10,000 คนที่ใช้ EZ-Gen Studio สร้างวิดีโอ AI ระดับภาพยนตร์ทุกวัน</p>
       <div className="lp-cta-actions">
-        <button className="lp-hero-primary" onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>
+        <Link href="/signup" className="lp-hero-primary">
           <Icon id="i-sparkles" size={16} />
           เริ่มสร้างสรรค์ฟรี 7 วัน
-        </button>
+        </Link>
         <button className="lp-hero-secondary" onClick={() => document.getElementById("how")?.scrollIntoView({ behavior: "smooth" })}>
           <Icon id="i-arrow" size={16} />
           ดูวิธีใช้งาน

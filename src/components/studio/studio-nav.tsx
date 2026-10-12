@@ -3,8 +3,10 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Sparkles, User, Palette, Film, Home, ChevronLeft, ChevronRight, ChevronDown, Menu, Plus } from "lucide-react"
+import { Sparkles, User, Palette, Film, Home, ChevronLeft, ChevronRight, ChevronDown, Menu, Plus, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { signOutAction } from "@/app/(auth)/actions"
+import type { MockUser } from "@/lib/auth/mock-accounts"
 
 const NAV_ITEMS = [
   { href: "/studio",            icon: Home,    label: "ภาพรวม",     exact: true },
@@ -28,7 +30,11 @@ function breadcrumbFor(path: string): { section: string; page?: string } {
   return { section: section.label, page: section.href === "/studio/scenes" ? "รายละเอียด" : "แก้ไข" }
 }
 
-export function StudioNav() {
+function initials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("") || "?"
+}
+
+export function StudioNav({ user }: { user: MockUser }) {
   const path = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -96,11 +102,21 @@ export function StudioNav() {
               Character + Style เดิมในทุก scene — ความต่อเนื่องของภาพข้ามทั้ง storyboard
             </p>
           </div>
+          <Link href="/" className="nav-item mb-2.5">
+            <ChevronLeft strokeWidth={1.6} />
+            กลับหน้าหลัก
+          </Link>
           <div className="account">
-            <Link href="/" className="nav-item">
-              <ChevronLeft strokeWidth={1.6} />
-              กลับหน้าหลัก
-            </Link>
+            <div className="avatar">{initials(user.name)}</div>
+            <div className="account-copy">
+              <strong className="truncate">{user.name}</strong>
+              <span>{user.plan}</span>
+            </div>
+            <form action={signOutAction}>
+              <button type="submit" aria-label="ออกจากระบบ" title="ออกจากระบบ" className="rounded-md p-[5px] text-text-muted transition-colors hover:bg-[var(--glass-hover)] hover:text-white">
+                <LogOut className="size-4" />
+              </button>
+            </form>
           </div>
         </div>
       </aside>
@@ -141,6 +157,7 @@ export function StudioNav() {
             <Plus className="size-3.5" />
             สร้าง Scene
           </Link>
+          <div className="avatar top-avatar" title={user.email} aria-label={`บัญชี ${user.name}`}>{initials(user.name)}</div>
         </div>
       </header>
     </>
