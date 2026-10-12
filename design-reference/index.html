@@ -1,0 +1,1546 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#08080d">
+<meta name="description" content="Violet Studio — Turn imagination into motion with your cinematic AI creative workspace.">
+<title>Violet Studio — AI Creative Workspace</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;650;700;750;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.468.0/lucide.min.css">
+
+<style>
+:root {
+  --bg: #08080d;
+  --surface: #0e0d16;
+  --surface-2: #12111b;
+  --glass: rgba(255,255,255,.035);
+  --glass-hover: rgba(255,255,255,.065);
+  --border: rgba(255,255,255,.085);
+  --border-strong: rgba(255,255,255,.13);
+  --purple: #9b6dff;
+  --purple-light: #c4a5ff;
+  --purple-dark: #7141d9;
+  --text: #f5f3fa;
+  --muted: #9893a8;
+  --subtle: #696477;
+  --green: #71d8ae;
+  --orange: #e9b87d;
+  --sidebar: 238px;
+  --radius: 14px;
+  --ease: cubic-bezier(.2,.8,.2,1);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 88px; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+button, input, textarea, select { font: inherit; }
+button { color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible,
+select:focus-visible, a:focus-visible {
+  outline: 2px solid var(--purple-light);
+  outline-offset: 3px;
+}
+a { color: inherit; text-decoration: none; }
+button { border: 0; }
+svg { width: 17px; height: 17px; flex-shrink: 0; }
+.icon { display: inline-flex; align-items: center; justify-content: center; }
+.muted { color: var(--muted); }
+.small { font-size: 11px; }
+.eyebrow {
+  color: var(--purple-light);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+button:disabled { cursor: not-allowed; opacity: .55; }
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar);
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 50;
+  background: rgba(10,9,15,.96);
+  border-right: 1px solid var(--border);
+  padding: 25px 15px 16px;
+  display: flex;
+  flex-direction: column;
+  transition: transform .3s var(--ease);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 7px;
+  margin-bottom: 27px;
+}
+.brand-symbol {
+  width: 33px;
+  height: 33px;
+  border: 1px solid rgba(184,145,255,.4);
+  background: linear-gradient(145deg,rgba(155,109,255,.24),rgba(155,109,255,.03));
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 24px rgba(125,75,240,.12), inset 0 1px rgba(255,255,255,.1);
+}
+.brand-symbol svg { width: 22px; height: 22px; color: #cbb0ff; }
+.brand-name {
+  font: 800 13px "Manrope", sans-serif;
+  letter-spacing: 1.45px;
+  white-space: nowrap;
+}
+.brand-name span { color: #bb9bff; }
+.workspace {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  margin-bottom: 26px;
+}
+.workspace-logo {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg,#483477,#201832);
+  border-radius: 8px;
+  font: 700 14px "Manrope",sans-serif;
+}
+.workspace-copy { flex: 1; min-width: 0; }
+.workspace-copy strong { display: block; font-size: 12px; font-weight: 600; }
+.workspace-copy span { display: block; font-size: 10px; color: var(--muted); }
+.workspace > svg { width: 14px; color: var(--muted); }
+.nav-label {
+  color: #777184;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.25px;
+  padding: 0 11px;
+  margin-bottom: 9px;
+  text-transform: uppercase;
+}
+.nav-list { display: grid; gap: 4px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #a6a0b5;
+  border-radius: 9px;
+  font-size: 12px;
+  text-align: left;
+  transition: .2s;
+  width: 100%;
+}
+.nav-item svg { width: 17px; height: 17px; color: #8d879e; }
+.nav-item:hover { background: var(--glass-hover); color: var(--text); }
+.nav-item.active {
+  color: #e5d8ff;
+  background: linear-gradient(100deg,rgba(137,90,235,.17),rgba(137,90,235,.055));
+  border-color: rgba(163,120,255,.16);
+}
+.nav-item.active svg { color: var(--purple-light); }
+.nav-item .nav-end { margin-left: auto; color: var(--purple-light); font-size: 10px; }
+.sidebar-divider { height: 1px; background: var(--border); margin: 23px 0 20px; }
+.recent-heading { display: flex; justify-content: space-between; align-items: center; padding: 0 9px; margin-bottom: 13px; }
+.recent-heading button { background: transparent; color: var(--muted); padding: 2px; }
+.recent-list { display: grid; gap: 13px; }
+.recent-project { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; padding: 0 5px; }
+.recent-project:hover .recent-name { color: var(--purple-light); }
+.recent-thumb { width: 38px; height: 36px; border-radius: 7px; object-fit: cover; border: 1px solid var(--border); }
+.recent-copy { min-width: 0; flex: 1; }
+.recent-name { display: block; font-size: 11px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .2s; }
+.recent-date { display: block; color: var(--subtle); font-size: 10px; }
+.sidebar-bottom { margin-top: auto; }
+.credits-mini { padding: 13px; background: rgba(155,109,255,.055); border: 1px solid rgba(155,109,255,.14); border-radius: 12px; margin-bottom: 13px; }
+.credit-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+.credit-top strong { font-size: 11px; font-weight: 600; }
+.credit-top span { color: var(--purple-light); font-size: 10px; }
+.progress-track { height: 4px; border-radius: 10px; background: rgba(255,255,255,.09); overflow: hidden; }
+.progress-fill { height: 100%; width: 49%; border-radius: inherit; background: linear-gradient(90deg,#7447d8,#b38bff); transition: width .4s; }
+.credit-foot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10px; color: var(--muted); }
+.account { display: flex; align-items: center; gap: 10px; padding: 12px 3px 0; border-top: 1px solid var(--border); }
+.avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#b59aff,#59419a); color: white; font-size: 11px; font-weight: 700; flex-shrink: 0; border: 1px solid rgba(255,255,255,.18); }
+.account-copy { min-width: 0; flex: 1; }
+.account-copy strong { display: block; font-size: 11px; font-weight: 600; }
+.account-copy span { color: var(--muted); font-size: 10px; }
+.account > button { background: transparent; color: var(--muted); padding: 5px; }
+
+/* Main shell */
+.main { margin-left: var(--sidebar); min-width: 0; }
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 37px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8,8,13,.84);
+  backdrop-filter: blur(22px);
+}
+.breadcrumb { display: flex; align-items: center; gap: 9px; white-space: nowrap; font-size: 11px; }
+.breadcrumb span:first-child { color: var(--muted); }
+.breadcrumb svg { width: 13px; height: 13px; color: var(--subtle); }
+.top-actions { display: flex; align-items: center; gap: 15px; }
+.search-wrap {
+  width: 205px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.025);
+  border-radius: 8px;
+  transition: border-color .2s;
+}
+.search-wrap:focus-within { border-color: rgba(155,109,255,.5); }
+.search-wrap > svg { color: var(--subtle); width: 15px; }
+.search-wrap input { width: 100%; min-width: 0; color: var(--text); outline: none; border: 0; background: transparent; font-size: 11px; }
+.search-wrap input::placeholder { color: #797387; }
+.shortcut { border: 1px solid var(--border); padding: 0 4px; color: var(--subtle); font-size: 10px; border-radius: 4px; white-space: nowrap; }
+.icon-button { width: 32px; height: 32px; display: grid; place-items: center; background: transparent; color: #a9a2b7; border-radius: 8px; position: relative; }
+.icon-button:hover { color: white; background: var(--glass-hover); }
+.notification-dot { position: absolute; right: 6px; top: 6px; width: 5px; height: 5px; background: var(--purple-light); border-radius: 50%; box-shadow: 0 0 7px var(--purple); }
+.upgrade-btn {
+  background: linear-gradient(110deg,#8b5de8,#7043ca);
+  border: 1px solid rgba(207,182,255,.24);
+  color: white;
+  padding: 9px 13px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(104,58,200,.17), inset 0 1px rgba(255,255,255,.16);
+  transition: .2s;
+  white-space: nowrap;
+}
+.upgrade-btn:hover { filter: brightness(1.14); transform: translateY(-1px); }
+.mobile-menu { display: none; }
+.content { max-width: 1530px; margin: 0 auto; padding: 28px 37px 45px; }
+
+/* Hero */
+.hero {
+  min-height: 285px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  border-radius: 17px;
+  border: 1px solid rgba(191,160,255,.15);
+  background: #100d1b;
+  margin-bottom: 34px;
+  isolation: isolate;
+}
+.hero-art {
+  position: absolute;
+  inset: 0 0 0 34%;
+  z-index: -2;
+  background-image: url("https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=1800&q=85");
+  background-position: center 48%;
+  background-size: cover;
+  opacity: .76;
+}
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg,#100d1b 0%,rgba(16,13,27,.98) 26%,rgba(16,13,27,.78) 48%,rgba(16,13,27,.13) 100%),
+              linear-gradient(0deg,rgba(10,8,18,.45),transparent 60%);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 390px;
+  height: 260px;
+  right: 8%;
+  top: -90px;
+  background: rgba(132,76,255,.17);
+  filter: blur(100px);
+  pointer-events: none;
+}
+.hero-content { max-width: 560px; padding: 34px 38px; }
+.hero-label { display: flex; align-items: center; gap: 9px; margin-bottom: 17px; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: #b99bff; box-shadow: 0 0 10px #a67cff; }
+.hero h1 { font: 750 clamp(34px,3.4vw,49px)/1.13 "Manrope",sans-serif; letter-spacing: -2.2px; margin: 0; max-width: 490px; }
+.hero h1 em { font-style: normal; color: #c3a4ff; }
+.hero-description { color: #aaa3bb; max-width: 390px; margin: 15px 0 24px; font-size: 13px; line-height: 1.8; }
+.hero-buttons { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: linear-gradient(120deg,#a37aff,#8050e7);
+  border: 1px solid rgba(222,203,255,.3);
+  color: white; border-radius: 8px; padding: 11px 17px;
+  font-size: 12px; font-weight: 650;
+  box-shadow: 0 5px 24px rgba(127,75,236,.2),inset 0 1px rgba(255,255,255,.16);
+  transition: .22s;
+}
+.btn-primary:hover { transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 8px 28px rgba(127,75,236,.3); }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.14);
+  color: #e3ddec; border-radius: 8px; padding: 11px 15px; font-size: 12px;
+  transition: .2s;
+}
+.btn-secondary:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.23); }
+.hero-meta { position: absolute; right: 20px; bottom: 18px; color: rgba(255,255,255,.63); font-size: 10px; display: flex; align-items: center; gap: 7px; }
+.hero-meta svg { width: 13px; height: 13px; }
+
+/* Section headers */
+.section { margin-bottom: 36px; scroll-margin-top: 88px; }
+.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 17px; }
+.section-heading h2 { margin: 0; font: 700 20px/1.4 "Manrope",sans-serif; letter-spacing: -.6px; }
+.section-heading p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.text-link { display: inline-flex; align-items: center; gap: 6px; color: #c4a5ff; font-size: 11px; white-space: nowrap; background: transparent; padding: 6px 0; }
+.text-link:hover { color: white; }
+.text-link svg { width: 14px; height: 14px; }
+
+/* Generator */
+.generator {
+  padding: 21px;
+  background: linear-gradient(140deg,rgba(24,20,36,.96),rgba(15,14,22,.98) 58%);
+  border: 1px solid rgba(177,143,255,.18);
+  border-radius: 15px;
+  box-shadow: 0 15px 55px rgba(0,0,0,.15),inset 0 1px rgba(255,255,255,.025);
+  position: relative;
+}
+.generator::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  top: 0; left: 8%; right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg,transparent,rgba(186,150,255,.3),transparent);
+}
+.generator-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 19px; }
+.generator-title { display: flex; align-items: center; gap: 11px; }
+.generator-icon { display: grid; place-items: center; width: 37px; height: 37px; background: rgba(155,109,255,.12); color: #c5a8ff; border: 1px solid rgba(155,109,255,.2); border-radius: 10px; }
+.generator-title h2 { font: 700 16px "Manrope",sans-serif; margin: 0; letter-spacing: -.3px; }
+.generator-title p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+.model-badge { display: flex; align-items: center; gap: 6px; color: #c7c0d7; font-size: 10px; border: 1px solid var(--border); padding: 6px 9px; border-radius: 7px; background: rgba(255,255,255,.025); }
+.model-badge svg { width: 13px; height: 13px; color: var(--purple-light); }
+.mode-tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 9px; background: rgba(0,0,0,.17); width: fit-content; max-width: 100%; margin-bottom: 13px; }
+.mode-tab { display: inline-flex; align-items: center; justify-content: center; gap: 7px; background: transparent; color: #9993a9; padding: 8px 12px; border-radius: 6px; font-size: 11px; white-space: nowrap; transition: .2s; }
+.mode-tab svg { width: 14px; height: 14px; }
+.mode-tab:hover { color: white; }
+.mode-tab.active { color: #e3d4ff; background: rgba(155,109,255,.16); box-shadow: inset 0 0 0 1px rgba(155,109,255,.15); }
+.prompt-box { position: relative; }
+.prompt-box textarea {
+  width: 100%; min-height: 115px; resize: vertical;
+  background: rgba(5,5,10,.38); border: 1px solid rgba(255,255,255,.09);
+  border-radius: 10px; padding: 15px 16px 36px;
+  color: var(--text); font-size: 12px; line-height: 1.8;
+  outline: none; transition: border-color .2s;
+}
+.prompt-box textarea:focus { border-color: rgba(164,125,255,.48); }
+.prompt-box textarea::placeholder { color: #777186; }
+.prompt-bottom { position: absolute; bottom: 10px; left: 13px; right: 13px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; color: #777186; font-size: 10px; }
+.prompt-bottom span { display: flex; align-items: center; gap: 6px; }
+.prompt-bottom svg { width: 12px; height: 12px; }
+.prompt-bottom .counter { margin-left: auto; }
+.reference-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.upload-zone { position: relative; display: flex; align-items: center; gap: 10px; min-height: 47px; padding: 7px 12px; border: 1px dashed rgba(184,153,255,.3); border-radius: 9px; background: rgba(155,109,255,.035); cursor: pointer; transition: .2s; flex: 1; min-width: 180px; }
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--purple); background: rgba(155,109,255,.09); }
+.upload-icon { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 7px; color: #c2a3ff; background: rgba(155,109,255,.13); }
+.upload-icon svg { width: 15px; height: 15px; }
+.upload-copy { min-width: 0; flex: 1; }
+.upload-copy strong { display: block; font-size: 11px; font-weight: 550; }
+.upload-copy span { display: block; color: var(--muted); font-size: 10px; }
+#imageInput { display: none; }
+#uploadPreview { width: 42px; height: 34px; object-fit: cover; border-radius: 5px; display: none; }
+#removeImage { display: none; background: rgba(255,255,255,.07); color: white; border-radius: 5px; padding: 5px; }
+#removeImage svg { width: 13px; height: 13px; }
+.enhance-toggle { display: flex; align-items: center; gap: 9px; font-size: 11px; color: #c0b9ce; white-space: nowrap; cursor: pointer; }
+.switch { width: 30px; height: 17px; background: #383341; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; position: relative; transition: .2s; flex-shrink: 0; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; background: #aaa2b9; border-radius: 50%; transition: .2s; }
+input:checked + .switch { background: #7750c8; border-color: #9a75e9; }
+input:checked + .switch::after { left: 15px; background: white; }
+.switch-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.generator-divider { height: 1px; background: var(--border); margin: 19px 0 16px; }
+.control-grid { display: grid; grid-template-columns: 1.5fr 1fr .8fr .9fr; gap: 12px; }
+.control-field label { display: block; color: #aaa3ba; font-size: 10px; font-weight: 550; margin-bottom: 7px; }
+.select-wrap { position: relative; }
+.select-wrap select {
+  width: 100%; appearance: none; background: rgba(255,255,255,.035);
+  color: #e8e3f1; border: 1px solid rgba(255,255,255,.1);
+  border-radius: 7px; height: 36px; padding: 0 30px 0 10px;
+  font-size: 11px; cursor: pointer; outline: none;
+}
+.select-wrap select:focus { border-color: rgba(155,109,255,.5); }
+.select-wrap select option { background: #15121f; color: white; }
+.select-wrap > svg { pointer-events: none; position: absolute; right: 9px; top: 11px; width: 13px; height: 13px; color: var(--muted); }
+.segment-control { display: flex; height: 36px; padding: 3px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.025); border-radius: 7px; gap: 3px; }
+.segment-control button { flex: 1; background: transparent; color: #a29bb1; border-radius: 4px; font-size: 10px; transition: .2s; }
+.segment-control button.active { background: rgba(155,109,255,.2); color: #e1d2ff; }
+.generator-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 19px; padding-top: 16px; border-top: 1px solid var(--border); }
+.cost { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.cost-icon { display: grid; place-items: center; width: 28px; height: 28px; background: rgba(255,255,255,.04); border-radius: 7px; color: #c3a2ff; }
+.cost strong { color: #e6ddf7; font-size: 12px; }
+.cost small { display: block; font-size: 10px; color: var(--subtle); }
+.generate-btn { min-width: 177px; padding: 12px 18px; }
+.generate-btn svg { width: 16px; height: 16px; }
+.generate-btn.loading svg { animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Gallery */
+.gallery-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 15px; }
+.creation-card { min-width: 0; cursor: default; }
+.creation-image { position: relative; aspect-ratio: 16 / 10; border-radius: 11px; overflow: hidden; background: #171320; border: 1px solid var(--border); transition: border-color .25s,box-shadow .25s; }
+.creation-card:hover .creation-image { border-color: rgba(174,135,255,.42); box-shadow: 0 8px 28px rgba(0,0,0,.23),0 0 20px rgba(127,78,232,.08); }
+.creation-image img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .55s var(--ease),filter .3s; }
+.creation-card:hover .creation-image img { transform: scale(1.055); filter: brightness(.8); }
+.image-vignette { position: absolute; inset: 0; background: linear-gradient(0deg,rgba(4,3,8,.6),transparent 45%); pointer-events: none; }
+.play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-42%) scale(.85); width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; color: white; background: rgba(20,15,31,.66); border: 1px solid rgba(255,255,255,.5); backdrop-filter: blur(10px); opacity: 0; transition: .25s; }
+.play-button svg { width: 16px; height: 16px; margin-left: 2px; }
+.creation-card:hover .play-button { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+.duration { position: absolute; left: 9px; bottom: 9px; color: white; background: rgba(6,5,10,.68); padding: 3px 6px; border-radius: 4px; font-size: 10px; backdrop-filter: blur(6px); }
+.creation-top { position: absolute; inset: 9px 9px auto; display: flex; justify-content: space-between; align-items: start; }
+.creation-tag { font-size: 9px; color: #eee7fb; padding: 4px 7px; border-radius: 5px; background: rgba(9,8,15,.58); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.1); }
+.favorite-btn { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 7px; color: white; background: rgba(9,8,15,.54); backdrop-filter: blur(8px); transition: .2s; }
+.favorite-btn svg { width: 14px; height: 14px; }
+.favorite-btn:hover { background: rgba(155,109,255,.55); }
+.favorite-btn.active { color: #e3a4ff; background: rgba(104,61,143,.62); }
+.favorite-btn.active svg { fill: currentColor; }
+.creation-info { display: flex; align-items: start; justify-content: space-between; gap: 8px; padding: 10px 2px 0; }
+.creation-info h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: -.1px; }
+.creation-info p { color: var(--muted); font-size: 10px; margin: 4px 0 0; }
+.card-more { background: transparent; color: var(--muted); padding: 3px; border-radius: 5px; }
+.card-more:hover { color: white; background: var(--glass-hover); }
+.empty-state { grid-column: 1 / -1; border: 1px dashed var(--border-strong); padding: 28px; border-radius: 12px; color: var(--muted); text-align: center; }
+
+/* Projects */
+.project-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 13px; }
+.project-row { display: flex; align-items: center; gap: 11px; min-width: 0; padding: 12px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,.022); transition: .2s; }
+.project-row:hover { background: var(--glass-hover); border-color: var(--border-strong); }
+.project-thumb { width: 59px; height: 56px; object-fit: cover; border-radius: 7px; flex-shrink: 0; background: #171320; }
+.project-detail { min-width: 0; flex: 1; }
+.project-detail h3 { margin: 0; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-detail p { margin: 3px 0 6px; color: var(--muted); font-size: 10px; }
+.status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 4px; font-size: 9px; white-space: nowrap; }
+.status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.status.completed { color: var(--green); background: rgba(113,216,174,.09); }
+.status.processing { color: #c4a5ff; background: rgba(155,109,255,.12); }
+.status.draft { color: #b3adbf; background: rgba(255,255,255,.06); }
+.project-menu-wrap { position: relative; align-self: flex-start; }
+.project-menu { position: absolute; top: 30px; right: 0; z-index: 10; width: 135px; background: #1b1726; border: 1px solid var(--border-strong); border-radius: 8px; padding: 5px; box-shadow: 0 10px 30px #0008; display: none; }
+.project-menu.open { display: block; }
+.project-menu button { width: 100%; text-align: left; background: transparent; color: #c8c1d5; padding: 7px; font-size: 10px; border-radius: 5px; }
+.project-menu button:hover { background: var(--glass-hover); color: white; }
+.project-menu button.delete-action { color: #f3a5a5; }
+
+/* Tools */
+.tools-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 13px; }
+.tool-card { position: relative; display: flex; align-items: start; gap: 12px; text-align: left; min-width: 0; padding: 17px 14px; background: var(--glass); border: 1px solid var(--border); border-radius: 11px; transition: .22s; overflow: hidden; }
+.tool-card:hover { background: var(--glass-hover); border-color: rgba(166,128,255,.25); transform: translateY(-2px); }
+.tool-icon { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 9px; flex-shrink: 0; }
+.tool-icon svg { width: 17px; height: 17px; }
+.tool-icon.purple { background: rgba(155,109,255,.14); color: #c2a3ff; }
+.tool-icon.blue { background: rgba(93,158,255,.11); color: #92b9ff; }
+.tool-icon.rose { background: rgba(243,137,174,.1); color: #f1a4c2; }
+.tool-icon.green { background: rgba(113,216,174,.1); color: #8ce4bf; }
+.tool-copy { min-width: 0; flex: 1; }
+.tool-copy strong { display: block; font-size: 11px; font-weight: 600; }
+.tool-copy p { color: var(--muted); font-size: 10px; line-height: 1.65; margin: 5px 0 0; }
+.tool-arrow { position: absolute; top: 16px; right: 12px; color: var(--subtle); }
+.tool-arrow svg { width: 13px; height: 13px; }
+
+/* Bottom plan panel */
+.bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.plan-panel,.tip-panel { padding: 20px; border: 1px solid var(--border); background: var(--glass); border-radius: 12px; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
+.panel-head h3 { margin: 0; font: 650 13px "Manrope",sans-serif; }
+.plan-label { color: #d1b8ff; font-size: 10px; background: rgba(155,109,255,.13); border: 1px solid rgba(155,109,255,.2); border-radius: 5px; padding: 4px 7px; }
+.plan-numbers { display: flex; align-items: baseline; gap: 6px; margin-bottom: 12px; }
+.plan-numbers strong { font: 750 25px "Manrope",sans-serif; letter-spacing: -.8px; }
+.plan-numbers span { color: var(--muted); font-size: 11px; }
+.plan-track { height: 5px; background: rgba(255,255,255,.08); border-radius: 10px; overflow: hidden; margin-bottom: 9px; }
+.plan-track div { width: 49%; height: 100%; background: linear-gradient(90deg,#7141d9,#b68aff); border-radius: inherit; }
+.plan-foot { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; }
+.plan-foot button { color: var(--purple-light); background: transparent; font-size: 10px; }
+.tip-content { display: flex; align-items: start; gap: 12px; }
+.tip-icon { width: 36px; height: 36px; border-radius: 9px; background: rgba(155,109,255,.12); color: #c7a9ff; display: grid; place-items: center; flex-shrink: 0; }
+.tip-content h4 { margin: 0 0 5px; font-size: 12px; font-weight: 600; }
+.tip-content p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
+.footer { display: flex; justify-content: space-between; gap: 15px; border-top: 1px solid var(--border); padding-top: 19px; margin-top: 35px; color: #706a7e; font-size: 10px; }
+
+/* Toasts */
+.toast-stack { position: fixed; right: 22px; bottom: 22px; z-index: 120; display: grid; gap: 9px; width: min(340px,calc(100vw - 32px)); pointer-events: none; }
+.toast { display: flex; align-items: start; gap: 10px; padding: 13px; background: rgba(24,21,34,.96); border: 1px solid rgba(176,144,255,.24); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.4); backdrop-filter: blur(18px); animation: toast-in .3s var(--ease); pointer-events: auto; }
+.toast-icon { width: 26px; height: 26px; display: grid; place-items: center; color: var(--purple-light); background: rgba(155,109,255,.14); border-radius: 7px; flex-shrink: 0; }
+.toast-icon svg { width: 14px; height: 14px; }
+.toast-copy { flex: 1; min-width: 0; }
+.toast-copy strong { display: block; font-size: 11px; margin-bottom: 2px; }
+.toast-copy p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.toast-close { background: transparent; color: var(--muted); padding: 1px; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Modals */
+.modal-backdrop { display: none; position: fixed; inset: 0; z-index: 100; padding: 20px; background: rgba(3,3,8,.79); backdrop-filter: blur(12px); align-items: center; justify-content: center; }
+.modal-backdrop.open { display: flex; animation: fade-in .2s; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.modal { width: min(530px,100%); max-height: 90vh; overflow: auto; background: linear-gradient(145deg,#171321,#100e18); border: 1px solid rgba(189,158,255,.23); border-radius: 15px; box-shadow: 0 25px 90px #0009; padding: 23px; }
+.modal-head { display: flex; align-items: start; justify-content: space-between; gap: 15px; margin-bottom: 18px; }
+.modal-head h2 { font: 700 19px "Manrope",sans-serif; margin: 0; letter-spacing: -.5px; }
+.modal-head p { margin: 5px 0 0; font-size: 11px; color: var(--muted); }
+.close-modal { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: rgba(255,255,255,.06); color: #c7c0d4; flex-shrink: 0; }
+.close-modal:hover { background: rgba(255,255,255,.12); }
+.preview-frame { position: relative; border-radius: 9px; overflow: hidden; background: #08080d; }
+.preview-frame img { display: block; width: 100%; max-height: 52vh; object-fit: contain; }
+.preview-placeholder { min-height: 230px; display: grid; place-items: center; padding: 30px; background: radial-gradient(ellipse at 50% 30%,#30204b,#100d18 70%); }
+.preview-placeholder .orb { width: 88px; height: 88px; border: 1px solid #a57cff66; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 0 50px #8854ee25,inset 0 0 30px #8854ee16; }
+.preview-placeholder .orb svg { width: 35px; height: 35px; color: #c5a7ff; }
+.preview-placeholder p { text-align: center; color: #b5a8ce; font-size: 12px; }
+.preview-caption { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 13px; }
+.preview-caption strong { display: block; font-size: 12px; }
+.preview-caption span { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
+.pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.price-card { padding: 17px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.02); }
+.price-card.featured { border-color: rgba(172,130,255,.45); background: rgba(155,109,255,.075); }
+.price-card h3 { font-size: 12px; margin: 0 0 8px; }
+.price { font: 750 27px "Manrope",sans-serif; letter-spacing: -1px; }
+.price span { font: 400 10px "DM Sans",sans-serif; color: var(--muted); letter-spacing: 0; }
+.price-card ul { list-style: none; margin: 13px 0 17px; padding: 0; display: grid; gap: 9px; color: #c0b8ce; font-size: 10px; }
+.price-card li { display: flex; align-items: center; gap: 7px; }
+.price-card li svg { color: var(--green); width: 13px; height: 13px; }
+.price-card .btn-primary,.price-card .btn-secondary { width: 100%; font-size: 11px; padding: 9px; }
+.modal-note { font-size: 10px; color: var(--muted); line-height: 1.7; margin: 15px 0 0; }
+.generated-result { margin-top: 15px; padding: 13px; border-radius: 9px; background: rgba(113,216,174,.055); border: 1px solid rgba(113,216,174,.18); }
+.generated-result strong { display: flex; align-items: center; gap: 7px; color: #9ce9c6; font-size: 11px; }
+.generated-result p { margin: 6px 0 0; color: #b2b7b5; font-size: 10px; line-height: 1.7; }
+
+/* Mobile */
+@media (min-width: 1600px) {
+  .content { padding-left: 45px; padding-right: 45px; }
+}
+@media (max-width: 1250px) {
+  :root { --sidebar: 215px; }
+  .content { padding: 25px 25px 40px; }
+  .topbar { padding: 0 25px; }
+  .gallery-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+  .creation-image { aspect-ratio: 16/9; }
+  .project-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .tools-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .hero h1 { font-size: 41px; }
+}
+@media (max-width: 850px) {
+  :root { --sidebar: 238px; }
+  .sidebar { transform: translateX(-100%); box-shadow: 20px 0 50px rgba(0,0,0,.4); }
+  .sidebar.open { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .mobile-menu { display: grid; }
+  .topbar { gap: 12px; padding: 0 20px; }
+  .top-actions { gap: 8px; }
+  .breadcrumb { margin-right: auto; }
+  .search-wrap { width: min(185px,25vw); }
+  .control-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .hero-content { padding: 31px 28px; }
+  .hero-art { left: 20%; }
+  .hero::before { background: linear-gradient(90deg,#100d1b 0%,rgba(16,13,27,.95) 40%,rgba(16,13,27,.55) 100%); }
+  .bottom-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .topbar { height: 58px; padding: 0 13px; gap: 9px; }
+  .breadcrumb { gap: 5px; font-size: 10px; }
+  .breadcrumb span:first-child { display: none; }
+  .breadcrumb > svg { display: none; }
+  .search-wrap { width: 33px; height: 33px; padding: 0; justify-content: center; border: 0; background: transparent; }
+  .search-wrap input,.shortcut { display: none; }
+  .search-wrap > svg { color: #b5adca; }
+  .top-actions { gap: 4px; }
+  .top-actions .upgrade-btn { font-size: 10px; padding: 8px; }
+  .top-actions .icon-button:nth-of-type(2) { display: none; }
+  .top-avatar { display: none; }
+  .content { padding: 18px 14px 30px; }
+  .hero { min-height: 300px; margin-bottom: 27px; }
+  .hero-art { inset: 0; opacity: .48; background-position: center; }
+  .hero::before { background: linear-gradient(90deg,rgba(16,13,27,.97),rgba(16,13,27,.63)),linear-gradient(0deg,rgba(10,8,18,.35),transparent); }
+  .hero-content { padding: 26px 21px; }
+  .hero h1 { font-size: 37px; letter-spacing: -1.8px; }
+  .hero-description { font-size: 12px; max-width: 310px; }
+  .hero-meta { display: none; }
+  .section { margin-bottom: 29px; }
+  .section-heading { align-items: start; margin-bottom: 13px; }
+  .section-heading h2 { font-size: 18px; }
+  .section-heading p { font-size: 11px; }
+  .section-heading .text-link { font-size: 10px; }
+  .generator { padding: 14px; }
+  .generator-head { align-items: start; }
+  .generator-title h2 { font-size: 14px; }
+  .model-badge { font-size: 9px; }
+  .mode-tabs { width: 100%; }
+  .mode-tab { flex: 1; padding: 8px 5px; font-size: 10px; gap: 5px; }
+  .mode-tab svg { width: 12px; }
+  .prompt-box textarea { min-height: 130px; font-size: 12px; }
+  .reference-row { align-items: stretch; }
+  .upload-zone { min-width: 100%; }
+  .enhance-toggle { padding: 4px 0; }
+  .control-grid { gap: 11px; }
+  .generator-footer { align-items: stretch; }
+  .cost { align-self: center; }
+  .generate-btn { min-width: 0; padding: 11px 12px; font-size: 11px; }
+  .gallery-grid { grid-template-columns: 1fr; gap: 19px; }
+  .creation-image { aspect-ratio: 16/9; }
+  .play-button { opacity: 1; transform: translate(-50%,-50%) scale(1); width: 38px; height: 38px; }
+  .project-list { grid-template-columns: 1fr; }
+  .tools-grid { grid-template-columns: 1fr 1fr; gap: 9px; }
+  .tool-card { padding: 13px 10px; flex-direction: column; gap: 9px; }
+  .tool-copy p { font-size: 10px; }
+  .tool-arrow { top: 13px; right: 9px; }
+  .plan-panel,.tip-panel { padding: 15px; }
+  .footer { flex-direction: column; gap: 5px; }
+  .pricing-grid { grid-template-columns: 1fr; }
+  .modal { padding: 17px; }
+  .toast-stack { right: 12px; bottom: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+
+<body>
+<!-- Inline SVG icon sprite: no icon library required at runtime. -->
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+<symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-2-5.8L4 11l6-2.2L12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m19 14 1.1 3.1L23 18l-2.9 1L19 22l-1-3-3-1 3-1 1-3Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="m5 2 .8 2.2L8 5l-2.2.8L5 8l-.8-2.2L2 5l2.2-.8L5 2Z" fill="currentColor"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+<symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m16 10 5-3v10l-5-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+<symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+<symbol id="i-library" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM8 4v16M12 4v16M16 4v16" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+<symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 8.6c0 4.1-8.8 10.2-8.8 10.2S3.2 12.7 3.2 8.6A4.5 4.5 0 0 1 12 6.7a4.5 4.5 0 0 1 8.8 1.9Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 12 7-12 7V5Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m21 15-5-5L5 21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m19.4 15 .1.1 1.4 1.1-1.5 2.6-1.7-.7a8 8 0 0 1-2 .9l-.4 1.8h-3l-.4-1.8a8 8 0 0 1-2-.9l-1.7.7-1.5-2.6 1.4-1.1a8 8 0 0 1 0-2l-1.4-1.1 1.5-2.6 1.7.7a8 8 0 0 1 2-.9l.4-1.8h3l.4 1.8a8 8 0 0 1 2 .9l1.7-.7 1.5 2.6-1.4 1.1a8 8 0 0 1 0 2Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" transform="translate(-.9 -1.1) scale(.96)"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+<symbol id="i-wand" viewBox="0 0 24 24"><path d="m15 4 1-3 1 3 3 1-3 1-1 3-1-3-3-1 3-1ZM4 20 16 8M6 8l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2ZM17 15l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+<symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 3v18M17 3v18M3 8h4m-4 8h4m10-8h4m-4 8h4" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+<symbol id="i-move" viewBox="0 0 24 24"><path d="m5 9-3 3 3 3m14-6 3 3-3 3M9 5l3-3 3 3m-6 14 3 3 3-3M2 12h20M12 2v20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-zap" viewBox="0 0 24 24"><path d="m13 2-3 9H5l6 11 3-9h5L13 2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="9" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+</svg>
+
+<aside class="sidebar" id="sidebar" aria-label="Main navigation">
+  <a class="brand" href="#home" aria-label="Violet Studio home">
+    <span class="brand-symbol"><svg><use href="#i-sparkles"/></svg></span>
+    <span class="brand-name">VIOLET <span>STUDIO</span></span>
+  </a>
+
+  <button class="workspace" id="workspaceButton" type="button" aria-label="Switch workspace">
+    <span class="workspace-logo">V</span>
+    <span class="workspace-copy"><strong>Creative Studio</strong><span>Personal workspace</span></span>
+    <svg><use href="#i-down"/></svg>
+  </button>
+
+  <div class="nav-label">Workspace</div>
+  <nav class="nav-list">
+    <a class="nav-item active" href="#home" data-nav="Home"><svg><use href="#i-home"/></svg>Home</a>
+    <a class="nav-item" href="#create" data-nav="Create Video"><svg><use href="#i-video"/></svg>Create Video<span class="nav-end">NEW</span></a>
+    <a class="nav-item" href="#explore" data-nav="Explore"><svg><use href="#i-compass"/></svg>Explore</a>
+    <a class="nav-item" href="#projects" data-nav="My Library"><svg><use href="#i-library"/></svg>My Library</a>
+    <a class="nav-item" href="#projects" data-nav="Projects"><svg><use href="#i-folder"/></svg>Projects</a>
+    <a class="nav-item" href="#explore" data-nav="Favorites"><svg><use href="#i-heart"/></svg>Favorites</a>
+  </nav>
+
+  <div class="sidebar-divider"></div>
+  <div class="recent-heading">
+    <span class="nav-label" style="padding:0;margin:0">Recent projects</span>
+    <button type="button" id="addProjectButton" aria-label="Create new project"><svg><use href="#i-more"/></svg></button>
+  </div>
+  <div class="recent-list">
+    <div class="recent-project" data-open-preview data-title="Midnight in Tokyo" data-image="https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=900&q=85">
+      <img class="recent-thumb" src="https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=120&q=70" alt="">
+      <div class="recent-copy"><span class="recent-name">Midnight in Tokyo</span><span class="recent-date">Edited 12 min ago</span></div>
+    </div>
+    <div class="recent-project" data-open-preview data-title="Scent of Silence" data-image="https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=900&q=85">
+      <img class="recent-thumb" src="https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=120&q=70" alt="">
+      <div class="recent-copy"><span class="recent-name">Scent of Silence</span><span class="recent-date">Edited yesterday</span></div>
+    </div>
+    <div class="recent-project" data-open-preview data-title="Cloud Kingdom" data-image="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=900&q=85">
+      <img class="recent-thumb" src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=120&q=70" alt="">
+      <div class="recent-copy"><span class="recent-name">Cloud Kingdom</span><span class="recent-date">Edited 2 days ago</span></div>
+    </div>
+  </div>
+
+  <div class="sidebar-bottom">
+    <div class="credits-mini">
+      <div class="credit-top"><strong>Monthly credits</strong><span>49% used</span></div>
+      <div class="progress-track"><div class="progress-fill"></div></div>
+      <div class="credit-foot"><span>2,450 remaining</span><span>5,000 total</span></div>
+    </div>
+    <div class="account">
+      <div class="avatar">JD</div>
+      <div class="account-copy"><strong>Jordan Davis</strong><span>Creator plan</span></div>
+      <button type="button" id="settingsButton" aria-label="Settings"><svg><use href="#i-settings"/></svg></button>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+<header class="topbar">
+  <button class="icon-button mobile-menu" id="mobileMenu" type="button" aria-label="Open navigation"><svg><use href="#i-menu"/></svg></button>
+  <div class="breadcrumb"><span>Workspace</span><svg><use href="#i-chevron"/></svg><strong id="breadcrumbCurrent">Creative Studio</strong></div>
+  <div class="top-actions">
+    <label class="search-wrap" aria-label="Search creations and projects">
+      <svg><use href="#i-search"/></svg>
+      <input type="search" id="globalSearch" placeholder="Search anything..." autocomplete="off">
+      <span class="shortcut">⌘ K</span>
+    </label>
+    <button class="icon-button" id="notificationButton" type="button" aria-label="Notifications"><svg><use href="#i-bell"/></svg><span class="notification-dot"></span></button>
+    <button class="icon-button" id="helpButton" type="button" aria-label="What's new"><svg><use href="#i-sparkles"/></svg></button>
+    <button class="upgrade-btn" id="upgradeButton" type="button">Upgrade plan ↗</button>
+    <div class="avatar top-avatar" aria-label="Jordan Davis profile">JD</div>
+  </div>
+</header>
+
+<main class="content" id="home">
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="hero-art" role="img" aria-label="Cinematic celestial landscape"></div>
+    <div class="hero-content">
+      <div class="hero-label"><span class="live-dot"></span><span class="eyebrow">Your creative universe</span></div>
+      <h1 id="heroTitle">Turn imagination<br>into <em>motion.</em></h1>
+      <p class="hero-description">Create cinematic AI videos from text, images, and your wildest ideas. Your next masterpiece starts here.</p>
+      <div class="hero-buttons">
+        <button class="btn-primary" type="button" id="startCreating"><svg><use href="#i-sparkles"/></svg>Start creating</button>
+        <button class="btn-secondary" type="button" id="exploreGallery"><svg><use href="#i-play"/></svg>Explore gallery</button>
+      </div>
+    </div>
+    <div class="hero-meta"><svg><use href="#i-sparkles"/></svg> A new dimension of creativity</div>
+  </section>
+
+  <section class="section" id="create" aria-labelledby="createHeading">
+    <div class="section-heading">
+      <div><h2 id="createHeading">Create Something Extraordinary</h2><p>Your vision, powered by imagination.</p></div>
+      <span class="model-badge"><svg><use href="#i-zap"/></svg> AI studio <span style="color:var(--green)">●</span></span>
+    </div>
+
+    <form class="generator" id="generatorForm">
+      <div class="generator-head">
+        <div class="generator-title">
+          <span class="generator-icon"><svg><use href="#i-sparkles"/></svg></span>
+          <div><h2>Creative canvas</h2><p>Every great film starts with an idea.</p></div>
+        </div>
+        <span class="model-badge"><svg><use href="#i-cpu"/></svg> Model powered</span>
+      </div>
+
+      <div class="mode-tabs" role="group" aria-label="Creation mode">
+        <button class="mode-tab active" type="button" data-mode="text"><svg><use href="#i-wand"/></svg>Text to Video</button>
+        <button class="mode-tab" type="button" data-mode="image-video"><svg><use href="#i-image"/></svg>Image to Video</button>
+        <button class="mode-tab" type="button" data-mode="image-image"><svg><use href="#i-film"/></svg>Image to Image</button>
+      </div>
+
+      <div class="prompt-box">
+        <textarea id="promptInput" maxlength="2000" aria-label="Describe your video" placeholder="Describe the scene you want to bring to life. Include the subject, movement, lighting, and camera direction..."></textarea>
+        <div class="prompt-bottom">
+          <span><svg><use href="#i-sparkles"/></svg> Tip: Be descriptive for more cinematic results</span>
+          <span class="counter" id="promptCounter">0 / 2000</span>
+        </div>
+      </div>
+
+      <div class="reference-row">
+        <label class="upload-zone" id="uploadZone" for="imageInput">
+          <span class="upload-icon"><svg><use href="#i-upload"/></svg></span>
+          <span class="upload-copy"><strong id="uploadTitle">Add a reference image</strong><span id="uploadSubtitle">Drop an image here or browse · PNG, JPG, WEBP</span></span>
+          <img id="uploadPreview" alt="Uploaded reference preview">
+          <button type="button" id="removeImage" aria-label="Remove reference image"><svg><use href="#i-close"/></svg></button>
+          <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp">
+        </label>
+        <label class="enhance-toggle">
+          <input type="checkbox" id="enhanceToggle" class="switch-input" checked>
+          <span class="switch" aria-hidden="true"></span>
+          <span>Enhance prompt <span style="color:var(--purple-light)">✦</span></span>
+        </label>
+      </div>
+
+      <div class="generator-divider"></div>
+
+      <div class="control-grid">
+        <div class="control-field">
+          <label for="modelSelect">AI model</label>
+          <div class="select-wrap">
+            <select id="modelSelect">
+              <option value="Violet Motion 2.0">Violet Motion 2.0 · Recommended</option>
+              <option value="Violet Cinema">Violet Cinema · Cinematic</option>
+              <option value="Violet Fast">Violet Fast · Quick draft</option>
+              <option value="Violet Realism">Violet Realism · Photoreal</option>
+            </select>
+            <svg><use href="#i-down"/></svg>
+          </div>
+        </div>
+        <div class="control-field">
+          <label>Aspect ratio</label>
+          <div class="segment-control" id="ratioControl" role="group" aria-label="Aspect ratio">
+            <button class="active" type="button" data-value="16:9">16:9</button>
+            <button type="button" data-value="9:16">9:16</button>
+            <button type="button" data-value="1:1">1:1</button>
+          </div>
+        </div>
+        <div class="control-field">
+          <label>Duration</label>
+          <div class="segment-control" id="durationControl" role="group" aria-label="Video duration">
+            <button class="active" type="button" data-value="5">5s</button>
+            <button type="button" data-value="10">10s</button>
+          </div>
+        </div>
+        <div class="control-field">
+          <label for="qualitySelect">Quality</label>
+          <div class="select-wrap">
+            <select id="qualitySelect">
+              <option value="Standard">Standard</option>
+              <option value="High">High · HD</option>
+            </select>
+            <svg><use href="#i-down"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="generator-footer">
+        <div class="cost">
+          <span class="cost-icon"><svg><use href="#i-sparkles"/></svg></span>
+          <span><strong id="creditCost">25 credits</strong><small>Estimated generation cost</small></span>
+        </div>
+        <button class="btn-primary generate-btn" id="generateButton" type="submit"><svg><use href="#i-sparkles"/></svg><span>Generate Video</span></button>
+      </div>
+    </form>
+  </section>
+
+  <section class="section" id="explore" aria-labelledby="exploreHeading">
+    <div class="section-heading">
+      <div><h2 id="exploreHeading">Made with AI</h2><p>A little inspiration for your next big idea.</p></div>
+      <button class="text-link" type="button" id="viewGallery">Explore all creations <svg><use href="#i-arrow"/></svg></button>
+    </div>
+
+    <div class="gallery-grid" id="galleryGrid">
+      <article class="creation-card searchable" data-search="midnight tokyo futuristic neon city cyberpunk night cinematic">
+        <div class="creation-image">
+          <img src="https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=800&q=85" alt="Dreamlike neon-lit city at night" loading="lazy">
+          <div class="image-vignette"></div>
+          <div class="creation-top"><span class="creation-tag">Violet Cinema</span><button class="favorite-btn" type="button" aria-label="Add Midnight in Tokyo to favorites" aria-pressed="false"><svg><use href="#i-heart"/></svg></button></div>
+          <span class="duration">00:08</span>
+          <button class="play-button" type="button" aria-label="Preview Midnight in Tokyo"><svg><use href="#i-play"/></svg></button>
+        </div>
+        <div class="creation-info"><div><h3>Midnight in Tokyo</h3><p>Cinematic · 2.4k views</p></div><button class="card-more" type="button" aria-label="More options"><svg><use href="#i-more"/></svg></button></div>
+      </article>
+
+      <article class="creation-card searchable" data-search="scent of silence luxury perfume product advertisement studio lighting elegant">
+        <div class="creation-image">
+          <img src="https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=800&q=85" alt="Luxury perfume bottle in a refined editorial composition" loading="lazy">
+          <div class="image-vignette"></div>
+          <div class="creation-top"><span class="creation-tag">Violet Realism</span><button class="favorite-btn" type="button" aria-label="Add Scent of Silence to favorites" aria-pressed="false"><svg><use href="#i-heart"/></svg></button></div>
+          <span class="duration">00:05</span>
+          <button class="play-button" type="button" aria-label="Preview Scent of Silence"><svg><use href="#i-play"/></svg></button>
+        </div>
+        <div class="creation-info"><div><h3>Scent of Silence</h3><p>Product film · 1.8k views</p></div><button class="card-more" type="button" aria-label="More options"><svg><use href="#i-more"/></svg></button></div>
+      </article>
+
+      <article class="creation-card searchable" data-search="cloud kingdom floating island clouds mountain surreal fantasy dream">
+        <div class="creation-image">
+          <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=85" alt="Majestic mountain peaks surrounded by clouds" loading="lazy">
+          <div class="image-vignette"></div>
+          <div class="creation-top"><span class="creation-tag">Violet Motion 2.0</span><button class="favorite-btn" type="button" aria-label="Add Cloud Kingdom to favorites" aria-pressed="false"><svg><use href="#i-heart"/></svg></button></div>
+          <span class="duration">00:10</span>
+          <button class="play-button" type="button" aria-label="Preview Cloud Kingdom"><svg><use href="#i-play"/></svg></button>
+        </div>
+        <div class="creation-info"><div><h3>Cloud Kingdom</h3><p>Fantasy · 3.1k views</p></div><button class="card-more" type="button" aria-label="More options"><svg><use href="#i-more"/></svg></button></div>
+      </article>
+
+      <article class="creation-card searchable" data-search="after hours portrait cinematic moody fashion editorial film grain">
+        <div class="creation-image">
+          <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=85" alt="Editorial portrait in soft cinematic lighting" loading="lazy">
+          <div class="image-vignette"></div>
+          <div class="creation-top"><span class="creation-tag">Violet Realism</span><button class="favorite-btn" type="button" aria-label="Add After Hours to favorites" aria-pressed="false"><svg><use href="#i-heart"/></svg></button></div>
+          <span class="duration">00:06</span>
+          <button class="play-button" type="button" aria-label="Preview After Hours"><svg><use href="#i-play"/></svg></button>
+        </div>
+        <div class="creation-info"><div><h3>After Hours</h3><p>Portrait film · 986 views</p></div><button class="card-more" type="button" aria-label="More options"><svg><use href="#i-more"/></svg></button></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="projects" aria-labelledby="projectsHeading">
+    <div class="section-heading">
+      <div><h2 id="projectsHeading">Continue Creating</h2><p>Pick up right where inspiration left off.</p></div>
+      <button class="text-link" type="button" id="viewProjects">View all projects <svg><use href="#i-arrow"/></svg></button>
+    </div>
+    <div class="project-list" id="projectList">
+      <article class="project-row searchable" data-search="midnight in tokyo neon city completed">
+        <img class="project-thumb" src="https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=180&q=75" alt="" loading="lazy">
+        <div class="project-detail"><h3>Midnight in Tokyo</h3><p>Edited 12 min ago</p><span class="status completed">Completed</span></div>
+        <div class="project-menu-wrap"><button class="card-more menu-trigger" type="button" aria-label="Midnight in Tokyo actions" aria-expanded="false"><svg><use href="#i-more"/></svg></button><div class="project-menu"><button type="button" data-action="open">Open project</button><button type="button" data-action="duplicate">Duplicate</button><button type="button" class="delete-action" data-action="delete">Remove project</button></div></div>
+      </article>
+      <article class="project-row searchable" data-search="scent of silence perfume processing">
+        <img class="project-thumb" src="https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=180&q=75" alt="" loading="lazy">
+        <div class="project-detail"><h3>Scent of Silence</h3><p>Edited yesterday</p><span class="status processing">Processing</span></div>
+        <div class="project-menu-wrap"><button class="card-more menu-trigger" type="button" aria-label="Scent of Silence actions" aria-expanded="false"><svg><use href="#i-more"/></svg></button><div class="project-menu"><button type="button" data-action="open">Open project</button><button type="button" data-action="duplicate">Duplicate</button><button type="button" class="delete-action" data-action="delete">Remove project</button></div></div>
+      </article>
+      <article class="project-row searchable" data-search="untitled concept draft">
+        <div class="project-thumb" style="display:grid;place-items:center;background:linear-gradient(145deg,#322448,#14101e);color:#c5a6ff"><svg><use href="#i-sparkles"/></svg></div>
+        <div class="project-detail"><h3>Untitled concept</h3><p>Edited 2 days ago</p><span class="status draft">Draft</span></div>
+        <div class="project-menu-wrap"><button class="card-more menu-trigger" type="button" aria-label="Untitled concept actions" aria-expanded="false"><svg><use href="#i-more"/></svg></button><div class="project-menu"><button type="button" data-action="open">Open project</button><button type="button" data-action="duplicate">Duplicate</button><button type="button" class="delete-action" data-action="delete">Remove project</button></div></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="tools" aria-labelledby="toolsHeading">
+    <div class="section-heading"><div><h2 id="toolsHeading">Your creative toolkit</h2><p>Purpose-built tools for every part of the creative process.</p></div></div>
+    <div class="tools-grid">
+      <button class="tool-card" type="button" data-tool="AI Video Generator">
+        <span class="tool-icon purple"><svg><use href="#i-video"/></svg></span><span class="tool-copy"><strong>AI Video Generator</strong><p>Bring your ideas to life from a single prompt.</p></span><span class="tool-arrow"><svg><use href="#i-arrow"/></svg></span>
+      </button>
+      <button class="tool-card" type="button" data-tool="Image Animator">
+        <span class="tool-icon blue"><svg><use href="#i-image"/></svg></span><span class="tool-copy"><strong>Image Animator</strong><p>Give your still images a cinematic soul.</p></span><span class="tool-arrow"><svg><use href="#i-arrow"/></svg></span>
+      </button>
+      <button class="tool-card" type="button" data-tool="Motion Control">
+        <span class="tool-icon rose"><svg><use href="#i-move"/></svg></span><span class="tool-copy"><strong>Motion Control</strong><p>Shape camera movement with precision.</p></span><span class="tool-arrow"><svg><use href="#i-arrow"/></svg></span>
+      </button>
+      <button class="tool-card" type="button" data-tool="Video Enhancer">
+        <span class="tool-icon green"><svg><use href="#i-zap"/></svg></span><span class="tool-copy"><strong>Video Enhancer</strong><p>Refine detail, clarity, and final quality.</p></span><span class="tool-arrow"><svg><use href="#i-arrow"/></svg></span>
+      </button>
+    </div>
+  </section>
+
+  <section class="section" id="account" aria-label="Plan and creative tip">
+    <div class="bottom-grid">
+      <div class="plan-panel">
+        <div class="panel-head"><h3>Your subscription</h3><span class="plan-label">CREATOR PLAN</span></div>
+        <div class="plan-numbers"><strong>2,450</strong><span>/ 5,000 credits remaining</span></div>
+        <div class="plan-track"><div></div></div>
+        <div class="plan-foot"><span>Resets on the 1st of next month</span><button type="button" id="managePlan">Manage plan ↗</button></div>
+      </div>
+      <div class="tip-panel">
+        <div class="panel-head"><h3>Studio notes</h3><span class="eyebrow" style="letter-spacing:1px">CREATOR TIP 01</span></div>
+        <div class="tip-content">
+          <span class="tip-icon"><svg><use href="#i-sparkles"/></svg></span>
+          <div><h4>Think like a cinematographer.</h4><p>Describe your camera movement, lens, lighting, and atmosphere. A specific visual direction can turn an ordinary prompt into a compelling cinematic concept.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer"><span>© 2026 VIOLET STUDIO · A creative universe of your own.</span><span>Visual prototype · Generation is simulated</span></footer>
+</main>
+</div>
+
+<div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
+
+<!-- Preview modal -->
+<div class="modal-backdrop" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+  <div class="modal">
+    <div class="modal-head"><div><h2 id="previewTitle">Creation preview</h2><p>Explore the visual direction of this concept.</p></div><button class="close-modal" type="button" data-close-modal aria-label="Close preview"><svg><use href="#i-close"/></svg></button></div>
+    <div class="preview-frame" id="previewFrame"></div>
+    <div class="preview-caption"><div><strong id="previewCaptionTitle">Untitled concept</strong><span id="previewCaptionSubtitle">Concept preview · Static artwork</span></div><button class="btn-secondary" type="button" id="usePromptButton">Use as inspiration</button></div>
+    <div class="generated-result" id="generatedResult" hidden><strong><svg><use href="#i-check"/></svg> Simulation completed</strong><p id="generatedResultText"></p></div>
+    <p class="modal-note">This is a visual concept preview, not a playable generated video. Actual video rendering requires a connected generation service.</p>
+  </div>
+</div>
+
+<!-- Pricing modal -->
+<div class="modal-backdrop" id="pricingModal" role="dialog" aria-modal="true" aria-labelledby="pricingTitle">
+  <div class="modal">
+    <div class="modal-head"><div><span class="eyebrow">MAKE MORE POSSIBLE</span><h2 id="pricingTitle" style="margin-top:7px">Choose your creative pace.</h2><p>Sample plans for this interactive prototype.</p></div><button class="close-modal" type="button" data-close-modal aria-label="Close pricing"><svg><use href="#i-close"/></svg></button></div>
+    <div class="pricing-grid">
+      <div class="price-card"><h3>Creator</h3><div class="price">$19<span> / month</span></div><ul><li><svg><use href="#i-check"/></svg>5,000 monthly credits</li><li><svg><use href="#i-check"/></svg>HD video concepts</li><li><svg><use href="#i-check"/></svg>Personal creative workspace</li></ul><button class="btn-secondary" type="button" data-plan="Creator">Current plan</button></div>
+      <div class="price-card featured"><h3>Studio Pro <span style="color:#c5a7ff;font-size:9px"> · POPULAR</span></h3><div class="price">$49<span> / month</span></div><ul><li><svg><use href="#i-check"/></svg>15,000 monthly credits</li><li><svg><use href="#i-check"/></svg>Priority generation queue</li><li><svg><use href="#i-check"/></svg>Advanced creative controls</li></ul><button class="btn-primary" type="button" data-plan="Studio Pro">Explore Studio Pro</button></div>
+    </div>
+    <p class="modal-note">Illustrative pricing only. No payment processing, subscription changes, or account services are connected.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+  const state = {
+    mode: "text",
+    ratio: "16:9",
+    duration: 5,
+    image: null,
+    isGenerating: false,
+    generatedCount: 0,
+    activePreview: null,
+    search: "",
+    lastFocused: null,
+    generationTimer: null,
+    generationInterval: null
+  };
+
+  const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+
+  function toast(title, message, type = "info") {
+    const item = document.createElement("div");
+    item.className = "toast";
+    const symbol = type === "success" ? "check" : type === "error" ? "close" : "sparkles";
+    item.innerHTML = `
+      <span class="toast-icon">${icon(symbol)}</span>
+      <div class="toast-copy"><strong></strong><p></p></div>
+      <button type="button" class="toast-close" aria-label="Dismiss notification">${icon("close")}</button>`;
+    $(".toast-copy strong", item).textContent = title;
+    $(".toast-copy p", item).textContent = message;
+    $(".toast-close", item).addEventListener("click", () => item.remove());
+    $("#toastStack").appendChild(item);
+    window.setTimeout(() => item.remove(), 4500);
+  }
+
+  function closeMenus() {
+    $$(".project-menu.open").forEach(menu => menu.classList.remove("open"));
+    $$(".menu-trigger[aria-expanded='true']").forEach(btn => btn.setAttribute("aria-expanded", "false"));
+  }
+
+  function updateCredits() {
+    const duration = Number(state.duration);
+    const quality = $("#qualitySelect").value;
+    const model = $("#modelSelect").value;
+    let credits = duration === 10 ? 45 : 25;
+    if (quality === "High") credits += 20;
+    if (model === "Violet Cinema") credits += 10;
+    if (model === "Violet Realism") credits += 5;
+    if (state.mode === "image-image") credits = Math.max(10, Math.round(credits * .6));
+    if (state.mode === "image-video" && !state.image) credits = Math.max(10, credits - 5);
+    $("#creditCost").textContent = `${credits} credits`;
+    return credits;
+  }
+
+  // Navigation
+  $$(".nav-item").forEach(link => {
+    link.addEventListener("click", event => {
+      event.preventDefault();
+      $$(".nav-item").forEach(item => item.classList.remove("active"));
+      link.classList.add("active");
+      $("#breadcrumbCurrent").textContent = link.dataset.nav === "Home" ? "Creative Studio" : link.dataset.nav;
+      const destination = link.getAttribute("href");
+      if (link.dataset.nav === "Favorites") {
+        $$(".creation-card").forEach(card => {
+          card.hidden = !$(".favorite-btn", card).classList.contains("active");
+        });
+        $("#exploreHeading").textContent = "Your favorites";
+        $("#explore").scrollIntoView({ behavior: "smooth" });
+        if (!$(".creation-card:not([hidden])")) {
+          toast("Your favorites", "Tap the heart on any creation to save it here.");
+        }
+      } else {
+        $("#exploreHeading").textContent = "Made with AI";
+        if (destination === "#projects" && link.dataset.nav === "My Library") {
+          $("#projectsHeading").textContent = "My Library";
+        } else if (destination === "#projects") {
+          $("#projectsHeading").textContent = "Continue Creating";
+        }
+        $(destination)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      $("#sidebar").classList.remove("open");
+    });
+  });
+
+  $("#mobileMenu").addEventListener("click", () => {
+    $("#sidebar").classList.toggle("open");
+  });
+
+  document.addEventListener("click", event => {
+    if (window.innerWidth <= 850 &&
+        $("#sidebar").classList.contains("open") &&
+        !$("#sidebar").contains(event.target) &&
+        !$("#mobileMenu").contains(event.target)) {
+      $("#sidebar").classList.remove("open");
+    }
+    if (!event.target.closest(".project-menu-wrap")) closeMenus();
+  });
+
+  $("#workspaceButton").addEventListener("click", () => {
+    toast("Creative Studio", "You're working in your personal workspace.");
+  });
+
+  $("#settingsButton").addEventListener("click", () => {
+    toast("Workspace settings", "Account and workspace settings are illustrative in this prototype.");
+  });
+
+  $("#notificationButton").addEventListener("click", () => {
+    toast("You're all caught up", "No new notifications. Your next creative idea is waiting.");
+  });
+
+  $("#helpButton").addEventListener("click", () => {
+    toast("Welcome to Violet Studio", "Explore the gallery, experiment with prompts, and try the simulated generation workflow.");
+  });
+
+  $("#addProjectButton").addEventListener("click", () => {
+    $("#promptInput").focus();
+    $("#create").scrollIntoView({ behavior: "smooth" });
+    toast("New creative session", "Describe your idea in the creative canvas to get started.");
+  });
+
+  // Segmented controls
+  $$(".mode-tab").forEach(button => {
+    button.addEventListener("click", () => {
+      state.mode = button.dataset.mode;
+      $$(".mode-tab").forEach(tab => {
+        tab.classList.toggle("active", tab === button);
+        tab.setAttribute("aria-pressed", String(tab === button));
+      });
+
+      const textarea = $("#promptInput");
+      const placeholders = {
+        text: "Describe the scene you want to bring to life. Include the subject, movement, lighting, and camera direction...",
+        "image-video": "Describe how your reference image should come to life. What moves, how does the camera travel, and what changes in the atmosphere?",
+        "image-image": "Describe how you would like to transform your reference image. Include the visual style, color palette, and artistic direction..."
+      };
+      textarea.placeholder = placeholders[state.mode];
+      $("#uploadTitle").textContent = state.mode === "text" ? "Add a reference image (optional)" : "Add a reference image";
+      $("#uploadSubtitle").textContent = "Drop an image here or browse · PNG, JPG, WEBP";
+      if (state.mode !== "text") $("#uploadTitle").textContent = state.image ? "Reference image added" : "Upload a reference image";
+      updateCredits();
+    });
+  });
+
+  function bindSegments(id, onChange) {
+    $$(".segment-control button", $(id)).forEach(button => {
+      button.addEventListener("click", () => {
+        $$(".segment-control button", $(id)).forEach(item => {
+          item.classList.toggle("active", item === button);
+          item.setAttribute("aria-pressed", String(item === button));
+        });
+        onChange(button.dataset.value);
+      });
+    });
+  }
+
+  bindSegments("#ratioControl", value => { state.ratio = value; });
+  bindSegments("#durationControl", value => { state.duration = Number(value); updateCredits(); });
+
+  $("#modelSelect").addEventListener("change", updateCredits);
+  $("#qualitySelect").addEventListener("change", updateCredits);
+
+  // Prompt editing
+  $("#promptInput").addEventListener("input", () => {
+    $("#promptCounter").textContent = `${$("#promptInput").value.length} / 2000`;
+  });
+
+  $("#enhanceToggle").addEventListener("change", event => {
+    toast(event.target.checked ? "Prompt enhancement enabled" : "Prompt enhancement disabled",
+      event.target.checked ? "Your prompt will be refined in this UI simulation." : "Your original prompt will be preserved.");
+  });
+
+  // Reference image upload with size/type validation and drag-and-drop
+  function handleImage(file) {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast("Unsupported image", "Please choose a PNG, JPG, or WEBP image.", "error");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast("Image is too large", "Please choose an image smaller than 8 MB.", "error");
+      return;
+    }
+
+    if (state.image?.url) URL.revokeObjectURL(state.image.url);
+    const url = URL.createObjectURL(file);
+    state.image = { file, url };
+    $("#uploadPreview").src = url;
+    $("#uploadPreview").style.display = "block";
+    $("#removeImage").style.display = "grid";
+    $("#uploadTitle").textContent = file.name;
+    $("#uploadSubtitle").textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB · Reference image ready`;
+    $(".upload-icon").style.display = "none";
+    updateCredits();
+  }
+
+  $("#imageInput").addEventListener("change", event => {
+    handleImage(event.target.files?.[0]);
+  });
+
+  $("#removeImage").addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (state.image?.url) URL.revokeObjectURL(state.image.url);
+    state.image = null;
+    $("#imageInput").value = "";
+    $("#uploadPreview").removeAttribute("src");
+    $("#uploadPreview").style.display = "none";
+    $("#removeImage").style.display = "none";
+    $(".upload-icon").style.display = "grid";
+    $("#uploadTitle").textContent = state.mode === "text" ? "Add a reference image (optional)" : "Upload a reference image";
+    $("#uploadSubtitle").textContent = "Drop an image here or browse · PNG, JPG, WEBP";
+    updateCredits();
+  });
+
+  const uploadZone = $("#uploadZone");
+  ["dragenter", "dragover"].forEach(type => uploadZone.addEventListener(type, event => {
+    event.preventDefault();
+    uploadZone.classList.add("dragover");
+  }));
+  ["dragleave", "drop"].forEach(type => uploadZone.addEventListener(type, event => {
+    event.preventDefault();
+    uploadZone.classList.remove("dragover");
+  }));
+  uploadZone.addEventListener("drop", event => {
+    handleImage(event.dataTransfer.files?.[0]);
+  });
+
+  // Modal management
+  function openModal(modal) {
+    state.lastFocused = document.activeElement;
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+    $$(".close-modal", modal)[0]?.focus();
+  }
+
+  function closeModal(modal) {
+    modal.classList.remove("open");
+    if (!$(".modal-backdrop.open")) document.body.style.overflow = "";
+    state.lastFocused?.focus?.();
+  }
+
+  $$(".modal-backdrop").forEach(modal => {
+    $$("[data-close-modal]", modal).forEach(button => {
+      button.addEventListener("click", () => closeModal(modal));
+    });
+    modal.addEventListener("click", event => {
+      if (event.target === modal) closeModal(modal);
+    });
+  });
+
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      $$(".modal-backdrop.open").forEach(closeModal);
+      $("#sidebar").classList.remove("open");
+      closeMenus();
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      $("#globalSearch").focus();
+    }
+  });
+
+  // Preview modal
+  function openPreview({ title, image, subtitle = "Concept preview · Static artwork", generated = false, prompt = "" }) {
+    state.activePreview = { title, image, prompt };
+    $("#previewTitle").textContent = title;
+    $("#previewCaptionTitle").textContent = title;
+    $("#previewCaptionSubtitle").textContent = subtitle;
+    $("#generatedResult").hidden = !generated;
+    $("#generatedResultText").textContent = generated
+      ? "This result represents a completed frontend simulation. No video file was rendered or saved by an AI service."
+      : "";
+    $("#usePromptButton").style.display = prompt ? "inline-flex" : "none";
+
+    const frame = $("#previewFrame");
+    frame.replaceChildren();
+
+    if (image) {
+      const img = document.createElement("img");
+      img.src = image;
+      img.alt = title + " concept artwork";
+      img.onerror = () => {
+        frame.innerHTML = `<div class="preview-placeholder"><div><div class="orb">${icon("sparkles")}</div><p>Concept artwork preview unavailable.</p></div></div>`;
+      };
+      frame.appendChild(img);
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "preview-placeholder";
+      placeholder.innerHTML = `<div><div class="orb">${icon("sparkles")}</div><p>Creative concept generated in the UI simulation</p></div>`;
+      frame.appendChild(placeholder);
+    }
+    openModal($("#previewModal"));
+  }
+
+  $$(".creation-card").forEach(card => {
+    $(".play-button", card).addEventListener("click", () => {
+      openPreview({
+        title: $("h3", card).textContent,
+        image: $("img", $(".creation-image", card)).src,
+        subtitle: $("p", card).textContent + " · Static artwork"
+      });
+    });
+
+    $(".favorite-btn", card).addEventListener("click", event => {
+      const button = event.currentTarget;
+      const active = button.classList.toggle("active");
+      button.setAttribute("aria-pressed", String(active));
+      button.setAttribute("aria-label", `${active ? "Remove" : "Add"} ${$("h3", card).textContent} ${active ? "from" : "to"} favorites`);
+      toast(active ? "Added to favorites" : "Removed from favorites", $("h3", card).textContent, active ? "success" : "info");
+    });
+
+    $(".card-more", card).addEventListener("click", () => {
+      toast("Creation options", "Try the preview or save this concept to your favorites.");
+    });
+  });
+
+  $$("[data-open-preview]").forEach(item => {
+    item.addEventListener("click", () => openPreview({
+      title: item.dataset.title,
+      image: item.dataset.image,
+      subtitle: "Recent project · Static artwork"
+    }));
+  });
+
+  $("#usePromptButton").addEventListener("click", () => {
+    if (!state.activePreview) return;
+    const title = state.activePreview.title;
+    const prompt = state.activePreview.prompt || `Create a cinematic visual inspired by "${title}", with dramatic lighting, intentional camera movement, and a refined color palette.`;
+    $("#promptInput").value = prompt.slice(0, 2000);
+    $("#promptCounter").textContent = `${$("#promptInput").value.length} / 2000`;
+    closeModal($("#previewModal"));
+    $("#create").scrollIntoView({ behavior: "smooth" });
+    $("#promptInput").focus();
+    toast("Inspiration added", "A starting prompt has been added to your creative canvas.");
+  });
+
+  // Pricing
+  $("#upgradeButton").addEventListener("click", () => openModal($("#pricingModal")));
+  $("#managePlan").addEventListener("click", () => openModal($("#pricingModal")));
+  $$("[data-plan]").forEach(button => button.addEventListener("click", () => {
+    const plan = button.dataset.plan;
+    closeModal($("#pricingModal"));
+    toast(plan === "Creator" ? "You're on the Creator plan" : "Plan preview",
+      plan === "Creator" ? "Your sample subscription is already selected." : "This prototype does not process payments or change subscriptions.");
+  }));
+
+  // Search across visible creations and projects
+  $("#globalSearch").addEventListener("input", event => {
+    state.search = event.target.value.trim().toLowerCase();
+    $$(".searchable").forEach(item => {
+      item.hidden = !item.dataset.search.toLowerCase().includes(state.search);
+    });
+    $$(".creation-card").forEach(card => {
+      if (!state.search) card.hidden = false;
+    });
+    if (state.search) {
+      $("#exploreHeading").textContent = "Search results";
+      $("#projectsHeading").textContent = "Matching projects";
+    } else {
+      $("#exploreHeading").textContent = "Made with AI";
+      $("#projectsHeading").textContent = "Continue Creating";
+    }
+  });
+
+  // Generator simulation: progress -> mock completed result
+  $("#generatorForm").addEventListener("submit", event => {
+    event.preventDefault();
+    if (state.isGenerating) return;
+
+    const prompt = $("#promptInput").value.trim();
+    if (!prompt) {
+      toast("Your story starts with a prompt", "Describe your scene before starting a generation.", "error");
+      $("#promptInput").focus();
+      return;
+    }
+    if (state.mode !== "text" && !state.image) {
+      toast("Add a reference image", "This creation mode works best with a reference image. Upload one to continue.", "error");
+      $("#imageInput").click();
+      return;
+    }
+
+    state.isGenerating = true;
+    const button = $("#generateButton");
+    const label = $("span", button);
+    const credits = updateCredits();
+    button.disabled = true;
+    button.classList.add("loading");
+    button.innerHTML = `${icon("clock")}<span>Preparing studio...</span>`;
+
+    toast("Creative session started", `Preparing a ${state.duration}s ${state.ratio} ${state.mode === "image-image" ? "image concept" : "video concept"}. This is a UI simulation.`);
+
+    let progress = 0;
+    const steps = [
+      "Preparing studio...",
+      "Refining your prompt...",
+      "Composing the scene...",
+      "Applying cinematic details...",
+      "Finalizing preview..."
+    ];
+
+    const updateProgress = () => {
+      progress++;
+      button.innerHTML = `${icon("clock")}<span>${steps[Math.min(progress, steps.length - 1)]}</span>`;
+    };
+
+    state.generationInterval = window.setInterval(updateProgress, 650);
+
+    state.generationTimer = window.setTimeout(() => {
+      window.clearInterval(state.generationInterval);
+      state.isGenerating = false;
+      state.generatedCount++;
+
+      button.disabled = false;
+      button.classList.remove("loading");
+      button.innerHTML = `${icon("sparkles")}<span>Generate Video</span>`;
+
+      const totalCredits = Math.max(0, 2450 - credits);
+      const progressPercent = Math.min(100, ((5000 - totalCredits) / 5000) * 100);
+      $$(".progress-fill").forEach(fill => fill.style.width = `${progressPercent}%`);
+
+      const concept = {
+        title: `Untitled concept ${state.generatedCount}`,
+        image: state.image?.url || null,
+        prompt
+      };
+
+      addGeneratedProject(concept.title, concept.image, prompt);
+
+      toast("Concept simulation complete", "Your mock result is ready to preview. No actual AI video was generated.", "success");
+      openPreview({
+        ...concept,
+        subtitle: `${$("#modelSelect").value} · ${state.duration}s · ${state.ratio} · ${$("#qualitySelect").value}`,
+        generated: true
+      });
+    }, 3400);
+  });
+
+  function addGeneratedProject(title, image, prompt) {
+    const project = document.createElement("article");
+    project.className = "project-row searchable";
+    project.dataset.search = `${title} ${prompt}`.toLowerCase();
+
+    const thumb = document.createElement("div");
+    thumb.className = "project-thumb";
+    thumb.style.cssText = "display:grid;place-items:center;background:linear-gradient(145deg,#322448,#14101e);color:#c5a6ff;overflow:hidden";
+    if (image) {
+      const img = document.createElement("img");
+      img.src = image;
+      img.alt = "";
+      img.style.cssText = "width:100%;height:100%;object-fit:cover";
+      thumb.appendChild(img);
+    } else {
+      thumb.innerHTML = icon("sparkles");
+    }
+
+    const detail = document.createElement("div");
+    detail.className = "project-detail";
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    const sub = document.createElement("p");
+    sub.textContent = "Just now";
+    const status = document.createElement("span");
+    status.className = "status completed";
+    status.textContent = "Completed";
+    detail.append(heading, sub, status);
+
+    const actions = document.createElement("div");
+    actions.className = "project-menu-wrap";
+    actions.innerHTML = `<button class="card-more menu-trigger" type="button" aria-label="Project actions" aria-expanded="false">${icon("more")}</button><div class="project-menu"><button type="button" data-action="open">Open project</button><button type="button" data-action="duplicate">Duplicate</button><button type="button" class="delete-action" data-action="delete">Remove project</button></div>`;
+
+    project.append(thumb, detail, actions);
+    $("#projectList").prepend(project);
+    $("#projects").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // Delegated project actions
+  $("#projectList").addEventListener("click", event => {
+    const trigger = event.target.closest(".menu-trigger");
+    if (trigger) {
+      event.stopPropagation();
+      const menu = $(".project-menu", trigger.parentElement);
+      const shouldOpen = !menu.classList.contains("open");
+      closeMenus();
+      menu.classList.toggle("open", shouldOpen);
+      trigger.setAttribute("aria-expanded", String(shouldOpen));
+      return;
+    }
+
+    const action = event.target.closest("[data-action]");
+    if (!action) return;
+    const project = action.closest(".project-row");
+    const title = $("h3", project).textContent;
+
+    if (action.dataset.action === "open") {
+      const img = $("img", project);
+      openPreview({
+        title,
+        image: img?.src || null,
+        subtitle: "Project workspace · Static concept"
+      });
+    } else if (action.dataset.action === "duplicate") {
+      const clone = project.cloneNode(true);
+      $("h3", clone).textContent = `${title} (Copy)`;
+      $("p", clone).textContent = "Just now";
+      clone.dataset.search = `${clone.dataset.search} copy`;
+      $("#projectList").prepend(clone);
+      toast("Project duplicated", `${title} (Copy)`, "success");
+    } else if (action.dataset.action === "delete") {
+      project.remove();
+      toast("Project removed", `${title} was removed from this demo workspace.`);
+    }
+    closeMenus();
+  });
+
+  // Quick navigation and tool cards
+  $("#startCreating").addEventListener("click", () => {
+    $("#create").scrollIntoView({ behavior: "smooth" });
+    window.setTimeout(() => $("#promptInput").focus(), 350);
+  });
+
+  $("#exploreGallery").addEventListener("click", () => {
+    $("#explore").scrollIntoView({ behavior: "smooth" });
+  });
+
+  $("#viewGallery").addEventListener("click", () => {
+    $("#explore").scrollIntoView({ behavior: "smooth" });
+    toast("Gallery", "Browse the featured concepts and use the heart to save favorites.");
+  });
+
+  $("#viewProjects").addEventListener("click", () => {
+    toast("Your projects", `${$$("#projectList .project-row").length} projects in this sample workspace.`);
+  });
+
+  $$("[data-tool]").forEach(button => {
+    button.addEventListener("click", () => {
+      const tool = button.dataset.tool;
+      $("#create").scrollIntoView({ behavior: "smooth" });
+
+      if (tool === "Image Animator") {
+        $("[data-mode='image-video']").click();
+      } else if (tool === "AI Video Generator") {
+        $("[data-mode='text']").click();
+      } else if (tool === "Video Enhancer") {
+        $("#qualitySelect").value = "High";
+        updateCredits();
+      }
+
+      toast(tool, tool === "Motion Control"
+        ? "Motion control is a UI concept. Describe camera movement in your prompt to explore the workflow."
+        : `${tool} selected. Configure your creative canvas to explore this simulated workflow.`);
+    });
+  });
+
+  // Initial state
+  updateCredits();
+})();
+</script>
+</body>
+</html>
