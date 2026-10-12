@@ -4,6 +4,7 @@ import { CheckCircle, XCircle, Ban, Loader2, Clock, ExternalLink } from "lucide-
 import { cn } from "@/lib/utils"
 import type { JobDTO, JobStatus } from "@/types/api"
 import { Badge } from "@/components/ui"
+import { MediaPlayer } from "@/components/dna/media-player"
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; variant: "violet" | "success" | "error" | "neutral" | "warning" | "processing"; icon: React.ReactNode }> = {
   queued:     { label: "รอคิว",          variant: "neutral",    icon: <Clock className="w-3 h-3" /> },
@@ -58,10 +59,11 @@ export function JobProgressBar({ job }: { job: JobDTO }) {
 interface JobCardProps {
   job: JobDTO
   onSelect?: () => void
+  onRefresh?: () => Promise<void>
   selected?: boolean
 }
 
-export function JobCard({ job, onSelect, selected }: JobCardProps) {
+export function JobCard({ job, onSelect, onRefresh, selected }: JobCardProps) {
   const isActive = ["queued", "submitted", "processing"].includes(job.status)
 
   return (
@@ -70,10 +72,8 @@ export function JobCard({ job, onSelect, selected }: JobCardProps) {
         "rounded-xl border p-4 transition-all duration-200",
         selected
           ? "border-violet/40 bg-violet/[.07]"
-          : "border-white/[.08] bg-white/[.02] hover:border-white/[.12]",
-        onSelect && "cursor-pointer"
+          : "border-white/[.08] bg-white/[.02] hover:border-white/[.12]"
       )}
-      onClick={onSelect}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -96,11 +96,9 @@ export function JobCard({ job, onSelect, selected }: JobCardProps) {
       {/* Progress */}
       {isActive && <div className="mb-3"><JobProgressBar job={job} /></div>}
 
-      {/* Thumbnail */}
-      {job.result?.thumbnailUrl && (
-        <div className="aspect-video rounded-lg overflow-hidden bg-surface mb-3 border border-white/[.06]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={job.result.thumbnailUrl} alt="Generated output" className="w-full h-full object-cover" />
+      {job.status === "succeeded" && job.result && (
+        <div className="mb-3">
+          <MediaPlayer result={job.result} onRefresh={onRefresh} />
         </div>
       )}
 
@@ -121,7 +119,7 @@ export function JobCard({ job, onSelect, selected }: JobCardProps) {
         <div className="mt-3">
           {selected
             ? <span className="text-xs text-success flex items-center gap-1.5"><CheckCircle className="w-3 h-3" /> เลือกเป็น output แล้ว</span>
-            : <button type="button" className="text-xs text-violet-light hover:text-violet-light/80 transition-colors">เลือกเป็น output ของ scene นี้</button>
+            : <button type="button" onClick={onSelect} className="text-xs text-violet-light hover:text-violet-light/80 transition-colors">เลือกเป็น output ของ scene นี้</button>
           }
         </div>
       )}

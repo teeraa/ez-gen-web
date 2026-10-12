@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, Play, RotateCcw, ChevronRight, CheckCircle, Settings, Film, Sparkles } from "lucide-react"
-import { scenesApi, charactersApi, stylesApi } from "@/lib/api"
+import { scenesApi, jobsApi, charactersApi, stylesApi } from "@/lib/api"
 import type {
   SceneDTO, JobDTO, CharacterProfileDTO, StyleProfileDTO,
   ModelId, AspectRatio, Quality, CreateJobRequest,
@@ -55,6 +55,12 @@ export function SceneDetailContent() {
     try {
       const s = await scenesApi.get(id)
       setScene(s)
+      // The page keeps no job history of its own, so without this the chosen output vanishes on reload.
+      if (s.selectedJobId) {
+        jobsApi.get(s.selectedJobId)
+          .then(j => setJobs(prev => prev.some(p => p.jobId === j.jobId) ? prev : [...prev, j]))
+          .catch(() => null)
+      }
       if (s.characterProfileId) charactersApi.get(s.characterProfileId).then(setChar).catch(() => null)
       if (s.styleProfileId) stylesApi.get(s.styleProfileId).then(setStyle).catch(() => null)
     } catch (e) {
@@ -120,6 +126,11 @@ export function SceneDetailContent() {
       setSubmitting(false)
     }
   }
+
+  const refreshJob = useCallback(async (jobId: string) => {
+    const fresh = await jobsApi.get(jobId)
+    setJobs(prev => prev.map(j => j.jobId === jobId ? fresh : j))
+  }, [])
 
   const handleSelectOutput = async (jobId: string) => {
     if (!scene || scene.selectedJobId === jobId) return
@@ -201,6 +212,7 @@ export function SceneDetailContent() {
                     job={j}
                     selected={scene.selectedJobId === j.jobId}
                     onSelect={j.status === "succeeded" ? () => handleSelectOutput(j.jobId) : undefined}
+                    onRefresh={() => refreshJob(j.jobId)}
                   />
                 ))}
               </div>
