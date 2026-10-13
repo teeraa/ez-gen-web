@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, Film, ChevronRight, GitBranch } from "lucide-react"
@@ -9,6 +9,7 @@ import type { SceneDTO } from "@/types/api"
 import { LinkButton, EmptyState, SectionHeader, LoadingState, ErrorNotice } from "@/components/ui"
 import { SceneCard } from "@/components/dna/scene-card"
 import { SceneActions } from "@/components/dna/scene-actions"
+import { apiErrorMessage } from "@/lib/api-errors"
 
 export default function ScenesPage() {
   const router = useRouter()
@@ -16,12 +17,53 @@ export default function ScenesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [selectingSceneId, setSelectingSceneId] = useState<string | null>(null)
+  const lastRefreshRef = useRef(0)
+
   const load = () => {
     setLoading(true); setError(null)
     scenesApi.list().then(r => setScenes(r.items)).catch(e => setError(e.message)).finally(() => setLoading(false))
   }
 
+  // Background refetch (no loading state) — used to pick up fresh signed preview URLs.
+  // Throttled: a broken URL would otherwise refetch on every media error event.
+  const refreshPreviews = useCallback(() => {
+    if (Date.now() - lastRefreshRef.current < 30_000) return
+    lastRefreshRef.current = Date.now()
+    scenesApi.list().then(r => setScenes(r.items)).catch(() => null)
+  }, [])
+
   useEffect(() => { load() }, [])
+
+  // Preview URLs live ~1h; when the user comes back to a tab that sat past expiresAt, refetch.
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== "visible") return
+      const now = Date.now()
+      const expired = scenes.some(s => s.preview?.expiresAt && new Date(s.preview.expiresAt).getTime() <= now)
+      if (expired) refreshPreviews()
+    }
+    document.addEventListener("visibilitychange", onReturn)
+    window.addEventListener("focus", onReturn)
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn)
+      window.removeEventListener("focus", onReturn)
+    }
+  }, [scenes, refreshPreviews])
+
+  const selectPreview = async (scene: SceneDTO) => {
+    if (!scene.preview || selectingSceneId) return
+    setSelectingSceneId(scene.id)
+    try {
+      await scenesApi.selectOutput(scene.id, scene.preview.jobId)
+      const r = await scenesApi.list()
+      setScenes(r.items)
+    } catch (err) {
+      alert(apiErrorMessage(err, "เลือกคลิปไม่สำเร็จ"))
+    } finally {
+      setSelectingSceneId(null)
+    }
+  }
 
   // Group scenes into chains by previousSceneId
   const roots = scenes.filter(s => !s.previousSceneId)
@@ -77,6 +119,10 @@ export default function ScenesPage() {
                           index={i + 1}
                           onClick={() => router.push(`/studio/scenes/${scene.id}`)}
                           onContinue={() => router.push(`/studio/scenes/${scene.id}?continue=1`)}
+                          onGenerate={() => router.push(`/studio/scenes/${scene.id}`)}
+                          onUsePreview={() => selectPreview(scene)}
+                          usingPreview={selectingSceneId === scene.id}
+                          onMediaError={refreshPreviews}
                           actions={<SceneActions scene={scene} onUpdated={load} onDeleted={load} />}
                         />
                       </div>

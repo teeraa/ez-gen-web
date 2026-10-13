@@ -129,6 +129,16 @@ export interface SceneCharacter {
   sortOrder: number
 }
 
+// Storyboard cover: the selected job, else the latest succeeded one; null if nothing generated yet.
+export interface ScenePreview {
+  jobId: string
+  isSelected: boolean
+  thumbnailUrl: string | null
+  mediaUrl: string
+  mediaType: 'video' | 'image'
+  expiresAt: string | null
+}
+
 export interface SceneDTO {
   id: string
   title: string
@@ -140,6 +150,7 @@ export interface SceneDTO {
   styleProfileId: string | null
   previousSceneId: string | null
   selectedJobId: string | null
+  preview: ScenePreview | null
   sceneOrder: number
   tags: TagDTO[]
   createdAt: string
@@ -258,4 +269,32 @@ export interface UploadResponse {
   sizeBytes: number
   mimeType: string
   expiresAt: string
+}
+
+// ── Sharing ───────────────────────────────────────────────────────────────────
+
+export interface ShareDTO {
+  shareId: string
+  jobId: string
+  url: string            // frontend route /s/:token, built from the backend's PUBLIC_WEB_BASE_URL
+  viewCount: number
+  createdAt: string
+}
+
+export interface DownloadDTO {
+  url: string            // signed URL that forces a save; expires with expiresAt
+  filename: string
+  expiresAt: string | null
+}
+
+// GET /public/v1/shares/:token — deliberately omits prompt, owner and job IDs.
+export interface PublicShareDTO {
+  mediaUrl: string
+  thumbnailUrl: string | null
+  downloadUrl: string
+  mediaType: 'video' | 'image'
+  aspectRatio: AspectRatio
+  duration: number
+  expiresAt: string | null
+  createdAt: string
 }

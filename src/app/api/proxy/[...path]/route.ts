@@ -34,6 +34,11 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
       body,
     })
 
+    // 204/304 must not carry a body — NextResponse.json() would throw on them.
+    if (upstream.status === 204 || upstream.status === 304) {
+      return new NextResponse(null, { status: upstream.status })
+    }
+
     const text = await upstream.text()
     let json: unknown
     try { json = JSON.parse(text) } catch { json = { message: text } }

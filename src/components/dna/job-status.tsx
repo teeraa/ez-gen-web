@@ -1,13 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle, XCircle, Ban, Loader2, Clock, ExternalLink, RotateCcw } from "lucide-react"
+import { CheckCircle, XCircle, Ban, Loader2, Clock, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { JobDTO, JobStatus } from "@/types/api"
 import { TERMINAL_STATUSES } from "@/types/api"
 import { messageForCode } from "@/lib/api-errors"
 import { Badge, Button } from "@/components/ui"
 import { MediaPlayer } from "@/components/dna/media-player"
+import { ShareButton } from "@/components/dna/share-sheet"
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; variant: "violet" | "success" | "error" | "neutral" | "warning" | "processing"; icon: React.ReactNode }> = {
   queued:     { label: "รอคิว",          variant: "neutral",    icon: <Clock className="w-3 h-3" /> },
@@ -122,11 +123,7 @@ export function JobCard({ job, onSelect, onRefresh, onRetry, selected }: JobCard
             <span className="text-[10px] text-text-subtle">{job.creditsCharged} เครดิต</span>
           )}
         </div>
-        {job.result?.mediaUrl && (
-          <a href={job.result.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-violet-light hover:text-violet-light/80 transition-colors" title="เปิดไฟล์">
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        )}
+        <ShareButton job={job} />
       </div>
 
       {/* Progress */}

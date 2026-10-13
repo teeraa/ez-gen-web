@@ -17,6 +17,8 @@ import type {
   CreateJobResponse,
   ContinueSceneRequest,
   UploadResponse,
+  ShareDTO,
+  DownloadDTO,
 } from "@/types/api"
 
 // ── Base fetch through Next.js API proxy ──────────────────────────────────────
@@ -31,6 +33,8 @@ async function apiFetch<T>(
     headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
   })
+  // DELETE endpoints answer 204 with an empty body.
+  if (res.status === 204) return undefined as T
   const json = (await res.json()) as ApiResponse<T> & { code?: string; message?: string; details?: unknown[] }
   if (!res.ok) {
     const err = new Error(json.message ?? "Request failed") as Error & { code: string; details: unknown[] }
@@ -161,4 +165,16 @@ export const uploadsApi = {
     fd.append("file", file)
     return apiFormData<UploadResponse>("uploads", fd)
   },
+}
+
+// ── Sharing ───────────────────────────────────────────────────────────────────
+
+export const sharesApi = {
+  // Idempotent: returns the job's existing active link if there is one.
+  create: (jobId: string) =>
+    apiFetch<ShareDTO>(`jobs/${jobId}/shares`, { method: "POST" }),
+  revoke: (shareId: string) =>
+    apiFetch<void>(`shares/${shareId}`, { method: "DELETE" }),
+  download: (jobId: string) =>
+    apiFetch<DownloadDTO>(`jobs/${jobId}/download`),
 }

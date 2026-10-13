@@ -100,9 +100,14 @@ export function SceneDetailContent() {
         if (idx === -1) return [completedJob, ...prev]
         const next = [...prev]; next[idx] = completedJob; return next
       })
-      if (completedJob.status !== "succeeded" || !scene || scene.selectedJobId || autoSelectedRef.current) return
+      if (completedJob.status !== "succeeded" || !scene) return
+      if (scene.selectedJobId || autoSelectedRef.current) {
+        loadScene()
+        return
+      }
       autoSelectedRef.current = true
-      selectOutput(scene.id, completedJob.jobId).catch(() => null)
+      // Refetch afterwards so scene.preview reflects the new clip.
+      selectOutput(scene.id, completedJob.jobId).catch(() => null).finally(() => { loadScene() })
     },
   })
 

@@ -1,26 +1,29 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { ChevronRight, Palette, Play, GitBranch } from "lucide-react"
+import { ChevronRight, Palette, GitBranch, CheckCircle } from "lucide-react"
 import { cn, formatRelativeDate } from "@/lib/utils"
 import type { SceneDTO } from "@/types/api"
 import { Badge } from "@/components/ui"
-import { JobStatusBadge } from "@/components/dna/job-status"
-import type { JobDTO } from "@/types/api"
+import { ScenePreviewMedia } from "@/components/dna/scene-preview-media"
 
 interface SceneCardProps {
   scene: SceneDTO
   index: number
   styleName?: string
-  latestJob?: JobDTO | null
   onClick?: () => void
   onContinue?: () => void
+  onGenerate?: () => void
+  // Shown when the preview is the latest clip but not the scene's selected output.
+  onUsePreview?: () => void
+  usingPreview?: boolean
+  onMediaError?: () => void
   compact?: boolean
   actions?: ReactNode
 }
 
-export function SceneCard({ scene, index, styleName, latestJob, onClick, onContinue, compact, actions }: SceneCardProps) {
-  const thumbnailUrl = latestJob?.result?.thumbnailUrl
+export function SceneCard({ scene, index, styleName, onClick, onContinue, onGenerate, onUsePreview, usingPreview, onMediaError, compact, actions }: SceneCardProps) {
+  const preview = scene.preview ?? null
   const title = scene.title || `Scene ${index}`
   // `characters` is guaranteed by the current API; older responses only had characterProfileId.
   const characters = [...(scene.characters ?? [])].sort((x, y) => x.sortOrder - y.sortOrder)
@@ -28,25 +31,17 @@ export function SceneCard({ scene, index, styleName, latestJob, onClick, onConti
   return (
     <article className={cn("creation-card group", onClick && "cursor-pointer")} onClick={onClick}>
       <div className="creation-image">
-        {thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumbnailUrl} alt={title} />
-        ) : (
-          <div className="grid h-full place-items-center bg-[radial-gradient(ellipse_at_50%_30%,#30204b,#100d18_70%)]">
-            <span className="font-[family-name:var(--manrope)] text-3xl font-bold text-white/[.12]">{String(index).padStart(2, "0")}</span>
-          </div>
-        )}
+        <ScenePreviewMedia preview={preview} title={title} index={index} onMediaError={onMediaError} onGenerate={onGenerate} />
         <div className="image-vignette" />
-        <div className="creation-top">
+        <div className="creation-top pointer-events-none">
           <span className="creation-tag">Scene {index}</span>
-          {latestJob && <JobStatusBadge status={latestJob.status} />}
+          {preview && !preview.isSelected && <Badge variant="warning">ล่าสุด (ยังไม่ได้เลือก)</Badge>}
         </div>
         {scene.previousSceneId && (
           <span className="duration inline-flex items-center gap-1 text-violet-light">
             <GitBranch className="size-2.5" /> ต่อเนื่อง
           </span>
         )}
-        {onClick && <span className="play-button" aria-hidden="true"><Play /></span>}
       </div>
 
       <div className="creation-info">
@@ -82,6 +77,18 @@ export function SceneCard({ scene, index, styleName, latestJob, onClick, onConti
         </div>
       )}
 
+      {onUsePreview && preview && !preview.isSelected && (
+        <button
+          type="button"
+          disabled={usingPreview}
+          onClick={e => { e.stopPropagation(); onUsePreview() }}
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-[7px] border border-[rgba(113,216,174,.25)] bg-[rgba(113,216,174,.07)] py-[7px] text-[10px] font-medium text-[var(--green)] transition-all hover:bg-[rgba(113,216,174,.14)] disabled:opacity-55"
+        >
+          <CheckCircle className="size-3" />
+          {usingPreview ? "กำลังบันทึก…" : "ใช้คลิปนี้"}
+        </button>
+      )}
+
       {onContinue && scene.selectedJobId && (
         <button
           type="button"
@@ -93,37 +100,5 @@ export function SceneCard({ scene, index, styleName, latestJob, onClick, onConti
         </button>
       )}
     </article>
-  )
-}
-
-// ── Horizontal storyboard lane ─────────────────────────────────────────────────
-
-interface StoryboardLaneProps {
-  scenes: SceneDTO[]
-  onSceneClick: (scene: SceneDTO) => void
-  onContinue: (scene: SceneDTO) => void
-}
-
-export function StoryboardLane({ scenes, onSceneClick, onContinue }: StoryboardLaneProps) {
-  return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
-      {scenes.map((scene, i) => (
-        <div key={scene.id} className="flex items-center gap-3 flex-shrink-0">
-          <SceneCard
-            scene={scene}
-            index={i + 1}
-            compact
-            onClick={() => onSceneClick(scene)}
-            onContinue={() => onContinue(scene)}
-          />
-          {i < scenes.length - 1 && (
-            <ChevronRight className="w-4 h-4 text-text-subtle flex-shrink-0" />
-          )}
-        </div>
-      ))}
-      <div className="flex h-24 w-36 flex-shrink-0 cursor-pointer items-center justify-center rounded-[11px] border border-dashed border-[rgba(184,153,255,.3)] bg-[rgba(155,109,255,.035)] text-xs text-text-muted transition-colors hover:border-[var(--purple)] hover:bg-[rgba(155,109,255,.09)] hover:text-violet-light">
-        + Scene ใหม่
-      </div>
-    </div>
   )
 }

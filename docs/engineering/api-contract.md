@@ -1,6 +1,6 @@
 # API Contract — ez-gen-web ↔ ez-gen-api
 
-> Updated: 2026-10-12 (synced to `ez-gen-api` `main`)
+> Updated: 2026-10-13 (synced to `ez-gen-api` `main` @ f6a0246)
 > Source of truth: `ez-gen-api/docs/engineering/video-generation-api-contract.md` and
 > `ez-gen-api/docs/engineering/violet-dna-api-contract.md`. **If this file disagrees with the
 > backend docs, the backend wins** — update this file.
@@ -108,6 +108,52 @@ so this tail can take a while.
 | `OUTPUT_EXPIRED` | Video couldn't be saved within 24 h of generation | "บันทึกวิดีโอไม่ทัน กรุณาสร้างใหม่" + "สร้างใหม่" button |
 | `422 MODEL_NOT_SUPPORTED` | Duration / aspect ratio / mode outside the model's limits | "ความยาวหรือสัดส่วนนี้ไม่รองรับในโมเดลปัจจุบัน" |
 | `400 VALIDATION_ERROR` | Invalid field(s); see `details[].field` | Field-level message |
+| `409 JOB_NOT_SHAREABLE` | Share/download on a job that isn't `succeeded` or not yet in storage | "วิดีโอยังบันทึกไม่เสร็จ ลองใหม่อีกสักครู่" |
+
+---
+
+## Sharing
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/open/v1/jobs/:jobId/shares` | ✅ | Create or return the job's share link (201 new / 200 existing) |
+| `DELETE` | `/open/v1/shares/:shareId` | ✅ | Revoke (204, no body); the link may keep working ≤ 60 s; re-sharing mints a new URL |
+| `GET` | `/open/v1/jobs/:jobId/download` | ✅ | Signed URL that forces a save |
+| `GET` | `/public/v1/shares/:token` | ❌ | Data for the public share page |
+
+```typescript
+// POST /jobs/:jobId/shares
+{ shareId: string; jobId: string; url: string; viewCount: number; createdAt: string }
+// GET /jobs/:jobId/download
+{ url: string; filename: string; expiresAt: string | null }   // filename e.g. violet-studio-1a2b3c4d.mp4
+// GET /public/v1/shares/:token  (omits prompt, owner, job ID)
+{ mediaUrl: string; thumbnailUrl: string | null; downloadUrl: string; mediaType: "video" | "image";
+  aspectRatio: AspectRatio; duration: number; expiresAt: string | null; createdAt: string }
+```
+
+- `url` is built by the backend from `PUBLIC_WEB_BASE_URL` and points at this app's `/s/:token`
+  route — that env must be the real web origin. Tokens are 43-char base64url.
+- Share/download return 404 for unknown jobs and `409 JOB_NOT_SHAREABLE` as above.
+
+**Share sheet** (`src/components/dna/share-sheet.tsx`, shown on succeeded jobs): copy link,
+LINE (`social-plugins.line.me/lineit/share?url=`), Facebook (`facebook.com/sharer/sharer.php?u=`),
+download, revoke (confirmed), view count, and a "TikTok/Reels" badge for 9:16. File sharing
+(`navigator.share({ files })`) is offered only where `navigator.canShare` accepts a video file;
+the file is fetched when the sheet opens so the share call runs directly from the tap (iOS
+Safari rejects it otherwise). If the `fetch()` of the signed URL fails (e.g. CORS), only file
+sharing is hidden — **CORS against the real Supabase origin still needs a check in production**.
+
+**Public page** `src/app/s/[token]/page.tsx` (no login; `/s` is outside the auth proxy matcher):
+- Fetches `GET {API_URL}/public/v1/shares/:token` server-side through a `"use cache"` function
+  (`cacheLife` 60 s) — the backend rate-limits per IP and every request comes from this server.
+  Malformed tokens never reach the backend.
+- `generateMetadata` emits `og:type=video.other`, `og:url`, title/description, `og:image`
+  (thumbnail, or the permanent `/og-share.png` brand image when null), `og:video*` with size from
+  `aspectRatio`, `twitter:card=summary_large_image`, and `robots: noindex, nofollow`.
+- Unknown/revoked token → "ลิงก์นี้ไม่มีอยู่หรือถูกยกเลิกแล้ว". Crawlers (Facebook/LINE/Twitter/
+  Slack bots, which receive blocking metadata) get **HTTP 404**; regular browsers see the same page
+  with HTTP 200 because Cache Components streams the static shell before the lookup finishes.
+- Absolute OG URLs use `PUBLIC_WEB_BASE_URL` (see `.env.example`), falling back to the Host header.
 
 ---
 
@@ -164,6 +210,28 @@ characterProfileIds?: string[];      // ordered, unique, max 3
 - Multiple characters are text-only for the current model (no reference images), so traits can
   swap between characters; the UI warns at 3 and suggests naming characters in the action text
   ("Elena ยื่นข้าวเหนียวให้ Somchai").
+
+### Storyboard preview
+
+`GET /dna/scenes` and `GET /dna/scenes/:id` include per scene:
+
+```typescript
+preview: {
+  jobId: string;
+  isSelected: boolean;        // false = latest succeeded clip, not the selected output
+  thumbnailUrl: string | null;
+  mediaUrl: string;
+  mediaType: "video" | "image";
+  expiresAt: string | null;   // signed 1 h
+} | null;                     // nothing generated yet (or still generating)
+```
+
+Storyboard cards (`SceneCard` + `ScenePreviewMedia`) show `thumbnailUrl` as a lazy `<img>`, or an
+early video frame when it is null; a muted looping `<video>` is mounted only for the hovered
+(desktop) or tapped (touch) card. `preview === null` shows "ยังไม่มีวิดีโอ" + Generate.
+`isSelected === false` shows "ล่าสุด (ยังไม่ได้เลือก)" and "ใช้คลิปนี้" (→ `select-output`, then
+refetch). The list is refetched (silently, throttled to once per 30 s) on media `onError` and when
+the tab regains focus after any `expiresAt`. No per-scene `GET /jobs/:id` calls.
 
 ### `POST /open/v1/dna/scenes/:id/generate`
 
