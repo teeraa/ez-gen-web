@@ -9,7 +9,7 @@ import type { SceneDTO, ContinueSceneRequest, ModelId, AspectRatio, Quality, Cre
 import { DEFAULT_MODEL, MODEL_OPTIONS, aspectOptions, coerceSettings, durationOptions } from "@/lib/model-capabilities"
 import { Button, Input, Textarea, Select, SegmentControl } from "@/components/ui"
 import { InheritedSettings } from "@/components/dna/profile-selector"
-import { generateUUID } from "@/lib/utils"
+import { cn, generateUUID } from "@/lib/utils"
 
 interface ContinueSceneFormProps {
   scene: SceneDTO
@@ -136,8 +136,9 @@ export function ContinueSceneForm({ scene, onJobCreated, onCancel }: ContinueSce
       {/* Last frame toggle */}
       {canUseLastFrame && (
         <label className="enhance-toggle rounded-[10px] border border-[var(--border)] bg-white/[.022] p-3 whitespace-normal transition-colors hover:border-[rgba(155,109,255,.3)]">
-          <input type="checkbox" checked={form.useLastFrame} onChange={e => set("useLastFrame", e.target.checked)} className="switch-input" />
-          <span className="switch" aria-hidden="true" />
+          {/* Real checkbox stays for keyboard/screen readers but is visually hidden; .switch is the visual. */}
+          <input type="checkbox" checked={form.useLastFrame} onChange={e => set("useLastFrame", e.target.checked)} className="peer sr-only" />
+          <span className={cn("switch peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--purple-light)]", form.useLastFrame && "on")} aria-hidden="true" />
           <span>
             <span className="block text-xs font-medium text-text-base">ใช้ last frame ของ scene ก่อนหน้า</span>
             <span className="mt-0.5 block text-[10px] text-text-subtle">เพิ่มความต่อเนื่องของภาพ (visual continuity)</span>
