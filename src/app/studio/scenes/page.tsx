@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, Film, ChevronRight, GitBranch } from "lucide-react"
 import { scenesApi } from "@/lib/api"
-import type { SceneDTO } from "@/types/api"
-import { LinkButton, EmptyState, SectionHeader, LoadingState, ErrorNotice } from "@/components/ui"
+import { EXPORT_MIN_SCENES, type SceneDTO } from "@/types/api"
+import { LinkButton, EmptyState, SectionHeader, LoadingState, ErrorNotice, Button } from "@/components/ui"
 import { SceneCard } from "@/components/dna/scene-card"
 import { SceneActions } from "@/components/dna/scene-actions"
+import { ExportDialog, isExportEligible } from "@/components/dna/export-dialog"
 import { apiErrorMessage } from "@/lib/api-errors"
 
 export default function ScenesPage() {
@@ -18,6 +19,7 @@ export default function ScenesPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [selectingSceneId, setSelectingSceneId] = useState<string | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
   const lastRefreshRef = useRef(0)
 
   const load = () => {
@@ -78,15 +80,31 @@ export default function ScenesPage() {
     return chain
   }
 
+  const eligibleCount = scenes.filter(isExportEligible).length
+
   return (
     <div>
       <SectionHeader
         title="Storyboard"
         description="Scene chains ที่ใช้ Character + Style เดิม รักษาความต่อเนื่องภาพ"
         action={
-          <LinkButton href="/studio/scenes/new" variant="primary" size="sm" icon={<Plus className="w-3.5 h-3.5" />}>สร้าง Scene</LinkButton>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Film className="w-3.5 h-3.5" />}
+              disabled={eligibleCount < EXPORT_MIN_SCENES}
+              title={eligibleCount < EXPORT_MIN_SCENES ? `ต้องมี scene ที่เลือกคลิปแล้วอย่างน้อย ${EXPORT_MIN_SCENES} ฉาก` : undefined}
+              onClick={() => setExportOpen(true)}
+            >
+              รวมคลิป
+            </Button>
+            <LinkButton href="/studio/scenes/new" variant="primary" size="sm" icon={<Plus className="w-3.5 h-3.5" />}>สร้าง Scene</LinkButton>
+          </div>
         }
       />
+
+      {exportOpen && <ExportDialog scenes={scenes} onClose={() => setExportOpen(false)} />}
 
       {loading && <LoadingState label="กำลังโหลด Scenes..." />}
       {error && <ErrorNotice message={error} />}

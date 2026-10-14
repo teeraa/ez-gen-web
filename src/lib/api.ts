@@ -19,6 +19,9 @@ import type {
   UploadResponse,
   ShareDTO,
   DownloadDTO,
+  CreateExportRequest,
+  ExportDTO,
+  ExportDownloadDTO,
 } from "@/types/api"
 
 // ── Base fetch through Next.js API proxy ──────────────────────────────────────
@@ -165,6 +168,22 @@ export const uploadsApi = {
     fd.append("file", file)
     return apiFormData<UploadResponse>("uploads", fd)
   },
+}
+
+// ── Storyboard Exports ──────────────────────────────────────────────────────────
+
+export const exportsApi = {
+  list: (page = 1, limit = 20) =>
+    apiFetch<PaginatedData<ExportDTO>>(`exports?page=${page}&limit=${limit}`),
+  get: (exportId: string) =>
+    apiFetch<ExportDTO>(`exports/${exportId}`),
+  create: (body: CreateExportRequest) =>
+    apiFetch<ExportDTO>("exports", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  download: (exportId: string) =>
+    apiFetch<ExportDownloadDTO>(`exports/${exportId}/download`),
 }
 
 // ── Sharing ───────────────────────────────────────────────────────────────────

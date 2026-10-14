@@ -287,6 +287,47 @@ export interface DownloadDTO {
   expiresAt: string | null
 }
 
+// ── Storyboard Export ───────────────────────────────────────────────────────────
+
+export type ExportStatus = 'queued' | 'processing' | 'succeeded' | 'failed'
+
+export const EXPORT_TERMINAL_STATUSES: ExportStatus[] = ['succeeded', 'failed']
+
+// A merge needs at least two scenes and accepts at most twenty, in presentation order.
+export const EXPORT_MIN_SCENES = 2
+export const EXPORT_MAX_SCENES = 20
+export const TEXT_LAYER_MAX_LENGTH = 200
+
+export type TextLayerPosition = 'top' | 'center' | 'bottom'
+
+export interface TextLayer {
+  sceneId: string
+  text: string
+  position?: TextLayerPosition
+  fontSize?: number
+  color?: string            // hex without '#', e.g. 'FFFFFF'
+}
+
+export interface CreateExportRequest {
+  sceneIds: string[]
+  audioUploadId?: string | null
+  audioVolume?: number | null
+  textLayers?: TextLayer[] | null
+}
+
+export interface ExportDTO {
+  exportId: string
+  status: ExportStatus
+  createdAt: string
+  completedAt: string | null
+  error: string | null
+}
+
+export interface ExportDownloadDTO {
+  url: string            // signed URL that forces a save as export-<exportId>.mp4
+  expiresAt: string
+}
+
 // GET /public/v1/shares/:token — deliberately omits prompt, owner and job IDs.
 export interface PublicShareDTO {
   mediaUrl: string
