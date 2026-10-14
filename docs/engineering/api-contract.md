@@ -253,6 +253,107 @@ Marks a succeeded job as the scene's output. Called once per job.
 
 ---
 
+## Storyboard Export
+
+Merges the selected clips of 2–20 scenes, in order, into one MP4, with optional background
+audio and burned-in text. Asynchronous: create → poll → download. Full baseline spec lives in
+`ez-gen-api` (`storyboard-export-api-contract.md`, 2026-10-14).
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/open/v1/uploads` | ✅ | Upload audio/image (multipart `file`) → `{ uploadId, mimeType, sizeBytes, expiresAt }` |
+| `POST` | `/open/v1/exports` | ✅ | Queue a merge → `{ exportId, status: "queued", ... }` |
+| `GET`  | `/open/v1/exports/:id` | ✅ | Poll `{ status: "queued"\|"processing"\|"succeeded"\|"failed", error, ... }` |
+| `GET`  | `/open/v1/exports?page&limit` | ✅ | Paginated export history |
+| `GET`  | `/open/v1/exports/:id/download` | ✅ | Signed URL (≈1 h) forcing `export-<id>.mp4` |
+
+Implemented in `src/lib/api.ts` (`exportsApi`, `uploadsApi`), `src/hooks/use-export-polling.ts`
+(poll ≥ 3 s, stop on `succeeded`/`failed`), and the quick-merge dialog
+`src/components/dna/export-dialog.tsx`. A scene is eligible only when it has a selected,
+succeeded job stored as video (`SceneDTO.selectedJobId` + `preview.mediaType === "video"`);
+otherwise `POST /exports` returns `422 SCENE_HAS_NO_OUTPUT`.
+
+### Baseline `POST /open/v1/exports` body
+
+```typescript
+{
+  sceneIds: string[];                 // 2–20, presentation order, each with a selected succeeded clip
+  audioUploadId?: string | null;      // an audio upload
+  audioVolume?: number | null;        // gain; 1.0 == clip audio. default 1.0
+  textLayers?: Array<{
+    sceneId: string;                  // must be in sceneIds
+    text: string;                     // 1–200 chars, shown the whole clip
+    position?: "top" | "center" | "bottom";   // default bottom
+    fontSize?: number;                // px, default 48
+    color?: string;                   // hex without '#', default "FFFFFF"
+  }> | null;
+}
+```
+
+### Export error codes
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `VALIDATION_ERROR` | 400 | Field validation (e.g. fewer than 2 scenes) |
+| `INVALID_FILE_TYPE` | 400 | `audioUploadId` is not audio / upload is an unsupported type |
+| `FILE_TOO_LARGE` | 413 | Upload over its limit (image 8 MB, audio 50 MB) |
+| `SCENE_HAS_NO_OUTPUT` | 422 | A scene lacks a selected succeeded video |
+| `EXPORT_NOT_READY` | 409 | Download requested before the export finished |
+| `NOT_FOUND` | 404 | Export / scene / upload missing or owned by another user |
+
+### Timeline editor extension — **PROPOSED, not yet in backend**
+
+> Status: **proposed by frontend**, awaiting `ez-gen-api`. The baseline body above keeps working;
+> these fields are additive and all optional, so an old backend can ignore them and still produce
+> a (non-trimmed, 3-position) merge. The editor UI (`/studio/scenes/export`) sends this shape; until
+> the backend honours it, trims and free text placement will not appear in the rendered MP4.
+> **Backend wins** — reconcile units (seconds vs frames) and field names before relying on it.
+
+Superset of the baseline `POST /open/v1/exports` body:
+
+```typescript
+{
+  // `clips` supersedes `sceneIds`. If both are sent, `clips` wins. Each scene still appears
+  // at most once (text layers bind to a clip by sceneId).
+  clips?: Array<{
+    sceneId: string;
+    trimStart?: number;   // seconds from the clip start, default 0
+    trimEnd?: number;     // seconds from the clip start, default = full duration; trimEnd > trimStart
+  }>;
+
+  sceneIds?: string[];    // legacy; omit when `clips` is present
+
+  audioUploadId?: string | null;
+  audioVolume?: number | null;
+
+  textLayers?: Array<{
+    sceneId: string;
+    text: string;                         // 1–200 chars
+    // Free placement; normalized 0..1 of the frame, anchor = text box centre.
+    // When x/y are absent the backend falls back to `position` (baseline behaviour).
+    x?: number;                           // 0 (left) … 1 (right)
+    y?: number;                           // 0 (top)  … 1 (bottom)
+    position?: "top" | "center" | "bottom";
+    fontSize?: number;                    // px at 1080-height reference; backend scales to output
+    color?: string;                       // hex without '#'
+    align?: "left" | "center" | "right";  // default center
+    // Timing, in seconds **relative to the clip's trimmed start**. Absent = the whole clip.
+    startTime?: number;
+    endTime?: number;
+  }> | null;
+}
+```
+
+Notes for the backend:
+- Trim precision is seconds (float); snap to the nearest frame at the clip's fps. The UI never
+  assumes a fixed fps — it reads each clip's real duration from the `<video>` metadata of
+  `preview.mediaUrl`.
+- `fontSize` is authored against a 1080-px-tall preview; scale it to the real output height.
+- A clip's playable range in the timeline is `[trimStart, trimEnd]`; total export duration is the
+  sum of trimmed clip lengths.
+
+---
+
 ## Not yet verified against the backend
 
 The following were in the original proposal and have not been reconciled with `ez-gen-api`:

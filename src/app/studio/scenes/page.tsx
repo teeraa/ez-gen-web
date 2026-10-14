@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Plus, Film, ChevronRight, GitBranch } from "lucide-react"
+import { Plus, Film, ChevronRight, GitBranch, Scissors } from "lucide-react"
 import { scenesApi } from "@/lib/api"
 import { EXPORT_MIN_SCENES, type SceneDTO } from "@/types/api"
 import { LinkButton, EmptyState, SectionHeader, LoadingState, ErrorNotice, Button } from "@/components/ui"
@@ -99,6 +99,9 @@ export default function ScenesPage() {
             >
               รวมคลิป
             </Button>
+            {eligibleCount >= EXPORT_MIN_SCENES && (
+              <LinkButton href="/studio/scenes/export" variant="secondary" size="sm" icon={<Scissors className="w-3.5 h-3.5" />}>ตัดต่อ</LinkButton>
+            )}
             <LinkButton href="/studio/scenes/new" variant="primary" size="sm" icon={<Plus className="w-3.5 h-3.5" />}>สร้าง Scene</LinkButton>
           </div>
         }

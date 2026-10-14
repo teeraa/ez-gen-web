@@ -299,17 +299,39 @@ export const EXPORT_MAX_SCENES = 20
 export const TEXT_LAYER_MAX_LENGTH = 200
 
 export type TextLayerPosition = 'top' | 'center' | 'bottom'
+export type TextAlign = 'left' | 'center' | 'right'
+
+// Authoring reference height for fontSize; the backend scales it to the real output height.
+export const EXPORT_REFERENCE_HEIGHT = 1080
+export const TEXT_LAYER_DEFAULT_FONT_SIZE = 48
+export const TEXT_LAYER_DEFAULT_COLOR = 'FFFFFF'
 
 export interface TextLayer {
   sceneId: string
   text: string
   position?: TextLayerPosition
+  // Editor extension (proposed): free placement, normalized 0..1 of the frame, anchor = box centre.
+  x?: number
+  y?: number
+  align?: TextAlign
   fontSize?: number
   color?: string            // hex without '#', e.g. 'FFFFFF'
+  // Seconds relative to the clip's trimmed start; absent = the whole clip.
+  startTime?: number
+  endTime?: number
+}
+
+// Editor extension (proposed): one trimmed clip in the sequence.
+export interface ExportClip {
+  sceneId: string
+  trimStart?: number        // seconds from the clip start, default 0
+  trimEnd?: number          // seconds from the clip start, default = full duration
 }
 
 export interface CreateExportRequest {
-  sceneIds: string[]
+  // `clips` supersedes `sceneIds`; send one or the other. See api-contract.md.
+  sceneIds?: string[]
+  clips?: ExportClip[]
   audioUploadId?: string | null
   audioVolume?: number | null
   textLayers?: TextLayer[] | null
