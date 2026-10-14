@@ -330,7 +330,12 @@ export function ExportEditor() {
                   src={c.src}
                   preload="metadata"
                   muted
-                  onLoadedMetadata={e => setDurations(d => ({ ...d, [c.sceneId]: e.currentTarget.duration }))}
+                  // React nulls a synthetic event's currentTarget for non-bubbling media events;
+                  // read the element off e.target and ignore NaN/Infinity (still-loading / live).
+                  onLoadedMetadata={e => {
+                    const d = (e.target as HTMLVideoElement).duration
+                    if (Number.isFinite(d) && d > 0) setDurations(prev => ({ ...prev, [c.sceneId]: d }))
+                  }}
                 />
               )
             ))}

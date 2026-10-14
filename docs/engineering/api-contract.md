@@ -1,6 +1,6 @@
 # API Contract — ez-gen-web ↔ ez-gen-api
 
-> Updated: 2026-10-13 (synced to `ez-gen-api` `main` @ f6a0246)
+> Updated: 2026-10-14 (synced to `ez-gen-api` `main` — storyboard export + timeline editor live)
 > Source of truth: `ez-gen-api/docs/engineering/video-generation-api-contract.md` and
 > `ez-gen-api/docs/engineering/violet-dna-api-contract.md`. **If this file disagrees with the
 > backend docs, the backend wins** — update this file.
@@ -301,13 +301,12 @@ otherwise `POST /exports` returns `422 SCENE_HAS_NO_OUTPUT`.
 | `EXPORT_NOT_READY` | 409 | Download requested before the export finished |
 | `NOT_FOUND` | 404 | Export / scene / upload missing or owned by another user |
 
-### Timeline editor extension — **PROPOSED, not yet in backend**
+### Timeline editor extension — **implemented in backend**
 
-> Status: **proposed by frontend**, awaiting `ez-gen-api`. The baseline body above keeps working;
-> these fields are additive and all optional, so an old backend can ignore them and still produce
-> a (non-trimmed, 3-position) merge. The editor UI (`/studio/scenes/export`) sends this shape; until
-> the backend honours it, trims and free text placement will not appear in the rendered MP4.
-> **Backend wins** — reconcile units (seconds vs frames) and field names before relying on it.
+> Status: **implemented** in `ez-gen-api`. The baseline body above keeps working; these fields are
+> additive and all optional. The editor UI (`/studio/scenes/export`) sends this shape and also sends
+> `sceneIds` plus a derived `position` so the request stays valid for the baseline path — `clips`
+> wins when both are present. **Backend wins** — if units or field names drift, reconcile here.
 
 Superset of the baseline `POST /open/v1/exports` body:
 
