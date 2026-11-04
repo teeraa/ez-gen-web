@@ -1144,9 +1144,17 @@
   gap: 10px;
   color: var(--st-muted);
   font-size: 13px;
+  /* Covers the placeholder icon so the status text stays legible. */
+  background: color-mix(in srgb, var(--st-card) 92%, transparent);
+  backdrop-filter: blur(2px);
+}
+.viewerState b {
+  color: var(--st-text);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
 }
 .viewerState > div {
-  width: min(60%, 260px);
+  width: min(70%, 320px);
 }
 .viewerState svg {
   width: 24px;
