@@ -644,8 +644,11 @@ definitive response. An ambiguous disconnect must replay that exact payload,
 including its original revision, rather than generate a new key. Logout clears
 Director submissions along with other studio submissions.
 
-Deployment requires migration029, configured model/storage services and six
-static style samples. Director point accounts start at zero; no browser mock
-balance or payment/top-up endpoint is provided by this integration. Video is
-phase2 and remains unavailable. Verification status and fixture boundaries are
+Deployment requires migration029 and configured model/storage services; the six
+static style samples are optional (blank `sampleImageUrl` shows a placeholder).
+Director point accounts start at zero; no browser mock balance or payment/top-up
+endpoint is provided by this integration. Shot video uses
+`POST /projects/:id/video` (`shotIds?`), gated by `capabilities.videoEnabled`;
+each shot exposes `video: null | {status, progress, url, stale, …}` and the
+video model list matches the video menu (`aspectRatios` per model). Verification status and fixture boundaries are
 recorded in the workspace task `docs/engineering/tasks/director-web-20261104.md`.

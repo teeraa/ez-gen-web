@@ -21,7 +21,10 @@ migrated. The existing visual design and CSS were preserved.
 - Real character library and Character Studio image-job/save integration.
 - Visibility-aware2s polling, conditional ETags and unconditional signed-media
   refresh with guards against repeated image-error fetch loops. Progress derives
-  from server state. Video phase2 remains disabled.
+  from server state. Shot video (2026-11-04 follow-up) uses `POST /video`: whole-story
+  and per-shot buttons gated by `capabilities.videoEnabled` and the model's
+  `aspectRatios`; finished clips play in the shot viewer and polling continues
+  while any shot video is queued/processing.
 - Immutable UUID/payload submissions survive ambiguous responses and reload;
   logout clears persisted and in-memory requests. Thai errors expose request IDs,
   revision conflicts, insufficient points and retry timing where provided.

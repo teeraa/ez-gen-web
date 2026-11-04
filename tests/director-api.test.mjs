@@ -30,3 +30,11 @@ test('poll work detection includes scene rewrite and individualshot even when ag
  assert.equal(hasWork({...p,cover:null,scenes:[{status:'ready',shots:[{image:{status:'processing'}}]}]}),true);
  assert.equal(hasWork({...p,cover:null,scenes:[{status:'ready',shots:[{image:{status:'needs_attention'}}]}]}),false);
 });
+test('active shot video keeps polling; finished video stops it',()=>{
+ const {hasWork}=client([]);
+ const shot=status=>({...p,scenes:[{status:'ready',shots:[{image:{status:'succeeded'},video:status?{status}:null}]}],story:{status:'succeeded'},storyboard:{status:'succeeded'}});
+ assert.equal(hasWork(shot('processing')),true);
+ assert.equal(hasWork(shot('queued')),true);
+ assert.equal(hasWork(shot('succeeded')),false);
+ assert.equal(hasWork(shot(null)),false);
+});
