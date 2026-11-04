@@ -1,5 +1,5 @@
 export type RefreshReason = "initial" | "poll" | "manual" | "resume" | "expiry" | "media";
-export interface RefreshPlan { poll?: boolean; expiresAt?: number | number[] }
+export interface RefreshPlan { poll?: boolean; expiresAt?: number | number[]; /** Overrides intervalMs for the next poll (backoff). */ pollDelayMs?: number }
 export interface RefreshClock {
   now: () => number;
   setTimeout: (callback: () => void, delay: number) => unknown;
@@ -50,7 +50,7 @@ export function createRefreshController<T>(options: RefreshOptions<T>) {
     const expiry = eligible.length ? Math.min(...eligible) : undefined;
     const expiryDelay = expiry !== undefined && Number.isFinite(expiry) && expiry !== attemptedExpiry && (expiry > now || attemptedExpiry === undefined)
       ? Math.max(1000, expiry - now) : Infinity;
-    const pollDelay = plan.poll ? Math.max(1000, options.intervalMs) : Infinity;
+    const pollDelay = plan.poll ? Math.max(1000, plan.pollDelayMs ?? options.intervalMs) : Infinity;
     const delay = Math.min(expiryDelay, pollDelay);
     if (!Number.isFinite(delay)) return;
     const reason = expiryDelay <= pollDelay ? "expiry" : "poll";

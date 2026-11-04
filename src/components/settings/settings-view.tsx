@@ -11,7 +11,7 @@ import { WorkbenchHead } from "@/components/workbench/workbench-ui";
 import c from "@/components/creative/collection.module.css";
 
 export interface SettingsUser { name: string; email: string; plan: string; role: string }
-export interface SettingsBalance { points: number; plan: string; mock: boolean }
+export interface SettingsBalance { points: number; plan: string; unavailable: boolean }
 
 const SECTIONS = [
   { id: "account", label: "บัญชี", icon: UserRound },
@@ -142,8 +142,8 @@ export function SettingsView({ user, balance }: { user: SettingsUser; balance: S
               <div className={c.setRow}>
                 <span>พอยต์คงเหลือ</span>
                 <span className={c.setValue}>
-                  <span className={c.points}>{formatPoints(balance.points)}<small>pt</small></span>
-                  {balance.mock && <small>ตัวเลขตัวอย่าง · ระบบพอยต์ยังไม่เชื่อมต่อ</small>}
+                  <span className={c.points}>{balance.unavailable ? "—" : formatPoints(balance.points)}<small>pt</small></span>
+                  {balance.unavailable && <small>โหลดพอยต์คงเหลือไม่สำเร็จ กรุณารีเฟรชหน้า</small>}
                 </span>
                 <button type="button" className={w.secondary} disabled title="เร็วๆ นี้">เติมพอยต์ · เร็วๆ นี้</button>
               </div>

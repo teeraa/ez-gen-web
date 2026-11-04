@@ -3,6 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRefreshPolling } from "@/hooks/use-refresh-polling";
 import { directorApi, DirectorError, errorMessage, hasWork, type Idea, type Project } from "@/lib/director-api";
 import { definiteRejection, finishSubmission, pendingSubmission, prepareSubmission } from "@/lib/director-submission";
+import { notifyPointsChanged } from "@/lib/points-client";
+
+const MAX_POLL_DELAY_MS = 15000;
+const mediaExpiries = (p: Project) => [p.cover?.expiresAt, p.coverImageExpiresAt, ...p.scenes.flatMap(s => s.shots.flatMap(x => [x.image.expiresAt, x.video?.expiresAt]))].flatMap(v => v && Number.isFinite(Date.parse(v)) ? [Date.parse(v)] : []);
+// A failed media load is only fixed by new signed URLs; refreshing for any other cause
+// (missing object, unsupported codec) would poll forever after the work has finished.
+export const mediaNeedsRefresh = (p: Project | null, now = Date.now()) => !!p && mediaExpiries(p).some(t => t - now < 60000);
 
 export function useDirectorProject(id: string) {
   const [server, setServer] = useState<Project | null>(null);
@@ -19,6 +26,8 @@ export function useDirectorProject(id: string) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
   const refreshRef = useRef<() => void>(() => {});
+  const unchanged = useRef(0);
+  const working = useRef(false);
   const apply = useCallback((p: Project) => { current.current = p; if (alive.current) setServer(p); }, []);
   useEffect(() => { alive.current = true; return () => { alive.current = false; if (timer.current) clearTimeout(timer.current); }; }, []);
   const refresh = useRefreshPolling(id, {
@@ -29,8 +38,13 @@ export function useDirectorProject(id: string) {
       return { p, version };
     },
     onData: ({ p, version }) => {
+      // A 304 returns the cached object, so identity means nothing changed on the server.
+      unchanged.current = p === current.current ? unchanged.current + 1 : 0;
       if (version === epoch.current && count.current === 0) { apply(p); if (!actionError.current) setError(null); }
-      return { poll: hasWork(current.current ?? p), expiresAt: [p.cover?.expiresAt, p.coverImageExpiresAt, ...p.scenes.flatMap(s => s.shots.map(x => x.image.expiresAt))].flatMap(v => v && Number.isFinite(Date.parse(v)) ? [Date.parse(v)] : []) };
+      const busy = hasWork(current.current ?? p);
+      if (working.current && !busy) notifyPointsChanged();
+      working.current = busy;
+      return { poll: busy, pollDelayMs: Math.min(MAX_POLL_DELAY_MS, 2000 * 2 ** Math.max(0, unchanged.current - 4)), expiresAt: mediaExpiries(p) };
     },
     onError: setError,
   });
@@ -55,7 +69,8 @@ export function useDirectorProject(id: string) {
     const submission = paid ? prepareSubmission(scope, { ...payload, revision: p.revision }) : null;
     try {
       const result = await directorApi.mutate(id, path, method, submission ? { ...submission.body, idempotencyKey: submission.key } : { ...payload, revision: p.revision });
-      if (paid) finishSubmission(scope);
+      if (paid) { finishSubmission(scope); notifyPointsChanged(); }
+      unchanged.current = 0;
       apply(result);
       actionError.current = false;
       if (alive.current) setError(null);
@@ -96,7 +111,7 @@ export function useDirectorProject(id: string) {
     if (!(paid && pendingSubmission(`${id}:${path || "project"}`)) && draft.current) await saveIdea();
     return enqueue(() => submit(path, method, payload, paid));
   }, [id, enqueue, saveIdea, submit]);
-  const mediaError = useCallback(() => { void refresh("media"); }, [refresh]);
+  const mediaError = useCallback(() => { if (mediaNeedsRefresh(current.current)) void refresh("media"); }, [refresh]);
   return { project: server ? { ...server, idea: ideaDraft ?? server.idea } : null, error, message: error ? errorMessage(error) : null, saving, hasDraft: ideaDraft !== null, changeIdea, saveIdea, mutate, refresh, mediaError };
 }
 export type DirectorMutation = ReturnType<typeof useDirectorProject>["mutate"];

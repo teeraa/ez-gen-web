@@ -22,11 +22,17 @@ export function DirectorProject({ id }: { id: string }) {
   const [setupError, setSetupError] = useState<string | null>(null);
   const [castError, setCastError] = useState<string | null>(null);
   const castMediaRefresh = useRef(false);
+  const castRetried = useRef(false);
   const loadCast = async (page: number) => {
     try { const data = await directorApi.characters(page); setCharacters(old => page === 1 ? data.items : [...old.filter(c => !data.items.some(x => x.id === c.id)), ...data.items]); setCastTotal(data.total); setCastPage(page); setCastError(null); }
     catch (cause) { setCastError(errorMessage(cause)); }
   };
   const castMediaError = () => {
+    // Reload only when a signed URL is about to expire; otherwise one retry, never a loop.
+    const expiring = characters.some(c => c.mediaExpiresAt && Date.parse(c.mediaExpiresAt) - Date.now() < 60000);
+    const unknown = characters.every(c => !c.mediaExpiresAt);
+    if (!expiring && !(unknown && !castRetried.current)) return;
+    castRetried.current = true;
     if (castMediaRefresh.current) return;
     castMediaRefresh.current = true;
     void loadCast(1);

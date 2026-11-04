@@ -38,3 +38,12 @@ test('active shot video keeps polling; finished video stops it',()=>{
  assert.equal(hasWork(shot('succeeded')),false);
  assert.equal(hasWork(shot(null)),false);
 });
+test('poll backoff: plan pollDelayMs overrides interval',async()=>{
+ const src=fs.readFileSync('src/lib/refresh-polling.ts','utf8');
+ const js=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ const ctx={exports:{},AbortController};vm.runInNewContext(js,ctx);
+ const delays=[];const clock={now:()=>0,setTimeout:(cb,d)=>{delays.push(d);return 1},clearTimeout:()=>{}};
+ const c=ctx.exports.createRefreshController({intervalMs:2000,clock,fetch:async()=>1,onData:()=>({poll:true,pollDelayMs:8000})});
+ await new Promise(r=>setTimeout(r,10));
+ assert.equal(delays.at(-1),8000);c.dispose();
+});

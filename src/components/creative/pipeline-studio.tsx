@@ -633,7 +633,7 @@ export function PipelineStudio() {
                   <span className={styles.modelHint}>{c.blockedReason ?? c.hint}</span>
                 </button>
               ))}
-              {!choices.length && <p className={styles.meta}>{capError ? 'โหลดรายการโมเดลไม่สำเร็จ' : 'กำลังโหลดโมเดล…'}</p>}
+              {!choices.length && <p className={styles.meta}>{capError ? 'โหลดรายการโมเดลไม่สำเร็จ' : !cap ? 'กำลังโหลดโมเดล…' : cap.unavailableReason ?? 'ยังไม่มีโมเดลวิดีโอที่ใช้งานได้ กรุณาติดต่อผู้ดูแลระบบเพื่อตรวจการตั้งค่าโมเดล (ARK_DEFAULT_MODEL)'}</p>}
             </div>
 
             <div className={styles.settingLabel}>สัดส่วน</div>

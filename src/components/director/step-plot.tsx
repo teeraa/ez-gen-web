@@ -35,6 +35,7 @@ function SceneEditor({ scene: s, project: p, cap, mutate, saving, onDirtyChange 
   const [title, setTitle] = useState(s.title);
   const [summary, setSummary] = useState(s.summary);
   const [count, setCount] = useState(s.shotCount);
+  const [setting, setSetting] = useState(s.setting ?? "");
   const [changed, setChanged] = useState(false);
   const editVersion = useRef(0);
   useEffect(() => { onDirtyChange(changed); }, [changed, onDirtyChange]);
@@ -42,16 +43,17 @@ function SceneEditor({ scene: s, project: p, cap, mutate, saving, onDirtyChange 
   const markChanged = () => { editVersion.current += 1; setChanged(true); };
   const saveScene = () => {
     const atVersion = editVersion.current;
-    run(mutate(`/scenes/${s.id}`, "PATCH", { title, summary, shotCount: count }).then(() => { if (editVersion.current === atVersion) setChanged(false); }));
+    run(mutate(`/scenes/${s.id}`, "PATCH", { title, summary, shotCount: count, setting }).then(() => { if (editVersion.current === atVersion) setChanged(false); }));
   };
   const blocked = s.status !== "ready" || active(p.storyboard.status);
   const run = (promise: Promise<unknown>) => { void promise.catch(() => {}); };
   const rewrite = () => { if (changed && !window.confirm("ทิ้งการแก้ไขที่ยังไม่บันทึก แล้วให้ AI เขียนฉากนี้ใหม่หรือไม่?")) return; run(mutate(`/scenes/${s.id}/rewrite`, "POST", {}, true).then(() => setChanged(false))); };
   return <div className={st.scroll}>
     {!changed && s.status === "ready" && <p className={st.muted}>{s.title}</p>}
-    <div className={st.section}><label className={st.label} htmlFor="scene-title">ชื่อฉาก</label><input id="scene-title" className={st.select} value={changed ? title : s.title} disabled={blocked} maxLength={cap.limits.nameMaxLength} onChange={e => { if (!changed) { setSummary(s.summary); setCount(s.shotCount); } setTitle(e.target.value); markChanged(); }} /></div>
-    <div className={st.section}><label className={st.label} htmlFor="scene-summary">เนื้อเรื่อง</label><textarea id="scene-summary" className={st.textarea} style={{ minHeight: 160 }} value={changed ? summary : s.summary} disabled={blocked} maxLength={cap.limits.sceneSummaryMaxLength} onChange={e => { if (!changed) { setTitle(s.title); setCount(s.shotCount); } setSummary(e.target.value); markChanged(); }} /></div>
-    <div className={st.section}><span className={st.label}>จำนวน shot</span><Counter label="จำนวน shot" value={changed ? count : s.shotCount} min={cap.limits.minShotsPerScene} max={cap.limits.maxShotsPerScene} disabled={blocked} onChange={value => { if (!changed) { setTitle(s.title); setSummary(s.summary); } setCount(value); markChanged(); }} /><span className={st.muted}>ใช้กับการสร้างสตอรี่บอร์ดครั้งถัดไป</span></div>
+    <div className={st.section}><label className={st.label} htmlFor="scene-title">ชื่อฉาก</label><input id="scene-title" className={st.select} value={changed ? title : s.title} disabled={blocked} maxLength={cap.limits.nameMaxLength} onChange={e => { if (!changed) { setSummary(s.summary); setCount(s.shotCount); setSetting(s.setting ?? ""); } setTitle(e.target.value); markChanged(); }} /></div>
+    <div className={st.section}><label className={st.label} htmlFor="scene-summary">เนื้อเรื่อง</label><textarea id="scene-summary" className={st.textarea} style={{ minHeight: 160 }} value={changed ? summary : s.summary} disabled={blocked} maxLength={cap.limits.sceneSummaryMaxLength} onChange={e => { if (!changed) { setTitle(s.title); setCount(s.shotCount); setSetting(s.setting ?? ""); } setSummary(e.target.value); markChanged(); }} /></div>
+    <div className={st.section}><label className={st.label} htmlFor="scene-setting">ฉากหลัง (ใช้กับทุก shot ในฉากนี้)<span>{(changed ? setting : s.setting ?? "").length}/400</span></label><textarea id="scene-setting" className={st.textarea} style={{ minHeight: 90 }} value={changed ? setting : s.setting ?? ""} disabled={blocked} maxLength={400} placeholder="เช่น ancient stone arena on a mountain at sunset, red lanterns, dusty ground" onChange={e => { if (!changed) { setTitle(s.title); setSummary(s.summary); setCount(s.shotCount); } setSetting(e.target.value); markChanged(); }} /><span className={st.muted}>สถานที่ เวลา แสง และของในฉาก ระบบใส่ไว้ต้น prompt ของทุกภาพในฉาก แม้คำบรรยาย shot ไม่ระบุสถานที่ · ภาษาอังกฤษให้ผลแม่นที่สุด · แก้แล้วภาพเดิมจะขึ้นว่าควรสร้างใหม่</span></div>
+    <div className={st.section}><span className={st.label}>จำนวน shot</span><Counter label="จำนวน shot" value={changed ? count : s.shotCount} min={cap.limits.minShotsPerScene} max={cap.limits.maxShotsPerScene} disabled={blocked} onChange={value => { if (!changed) { setTitle(s.title); setSummary(s.summary); setSetting(s.setting ?? ""); } setCount(value); markChanged(); }} /><span className={st.muted}>ใช้กับการสร้างสตอรี่บอร์ดครั้งถัดไป</span></div>
     <button type="button" className={st.go} disabled={blocked || saving || !changed || !title.trim() || !summary.trim()} onClick={saveScene}>บันทึกฉาก</button>
     <button type="button" className={st.soft} disabled={!cap.enabled || saving || active(p.storyboard.status) || p.scenes.some(scene => scene.status === "writing") || !(s.status === "ready" || (s.status === "failed" && s.canRetry))} onClick={rewrite}><RefreshCw aria-hidden />เขียนฉากนี้ใหม่ · {Math.ceil(p.estimates.story / Math.max(1, p.scenes.length))} pt</button>
     {s.failureMessage && <p role="alert">{s.failureMessage}</p>}{s.pointsRefunded > 0 && <p className={st.muted}>คืนพอยต์แล้ว {s.pointsRefunded} pt</p>}

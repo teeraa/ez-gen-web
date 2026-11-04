@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronRight, Menu, Plus } from "lucide-react";
 import type { SessionUser } from "@/lib/auth/session";
 import type { PointsBalance } from "@/lib/points";
+import { POINTS_CHANGED_EVENT, fetchPointsBalance } from "@/lib/points-client";
 import { initials } from "./app-sidebar";
 import { currentLabel, currentPage } from "./nav-items";
 import { useShell } from "./shell-frame";
@@ -14,9 +15,38 @@ import s from "./shell.module.css";
 
 const formatPoints = (value: number) => value.toLocaleString("th-TH", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-function PointsMenu({ balance }: { balance: PointsBalance }) {
+// Points change while the user stays on one page (generation charges, refunds), so the
+// server-rendered value is refreshed on focus, on explicit change events and every 30s.
+function useLiveBalance(initial: PointsBalance): PointsBalance {
+  const [balance, setBalance] = useState(initial);
+  useEffect(() => {
+    let controller: AbortController | null = null;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      controller?.abort();
+      controller = new AbortController();
+      void fetchPointsBalance(controller.signal).then((points) => {
+        if (points !== null) setBalance((b) => ({ ...b, points, unavailable: false }));
+      });
+    };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener(POINTS_CHANGED_EVENT, refresh);
+    return () => {
+      controller?.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(POINTS_CHANGED_EVENT, refresh);
+    };
+  }, []);
+  return balance;
+}
+
+function PointsMenu({ balance: initial }: { balance: PointsBalance }) {
+  const balance = useLiveBalance(initial);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const shown = balance.unavailable ? "—" : formatPoints(balance.points);
 
   useEffect(() => {
     if (!open) return;
@@ -34,11 +64,11 @@ function PointsMenu({ balance }: { balance: PointsBalance }) {
 
   return (
     <div className={s.points} ref={box}>
-      <button type="button" className={s.pointsBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="dialog" aria-label={`พอยต์คงเหลือ ${formatPoints(balance.points)} pt`}>
+      <button type="button" className={s.pointsBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="dialog" aria-label={balance.unavailable ? "ยังโหลดพอยต์คงเหลือไม่ได้" : `พอยต์คงเหลือ ${shown} pt`}>
         <span className={s.coin} aria-hidden>
           P
         </span>
-        <span className={s.pointsValue}>{formatPoints(balance.points)}</span>
+        <span className={s.pointsValue}>{shown}</span>
         <span>pt</span>
         <span className={s.pointsPlus} aria-hidden>
           <Plus strokeWidth={2.4} />
@@ -48,10 +78,10 @@ function PointsMenu({ balance }: { balance: PointsBalance }) {
         <div className={s.popover} role="dialog" aria-label="พอยต์ของคุณ">
           <h4>
             พอยต์คงเหลือ
-            {balance.mock && <span className={s.mockTag}>ตัวอย่าง</span>}
+            {balance.unavailable && <span className={s.mockTag}>โหลดไม่สำเร็จ</span>}
           </h4>
           <div className={s.popoverBalance}>
-            {formatPoints(balance.points)} <small>pt</small>
+            {shown} <small>pt</small>
           </div>
           <p>แพ็กเกจ {balance.plan} · ระบบแสดงราคาก่อนกดสร้างทุกครั้ง</p>
           <button type="button" className={s.topupBtn} disabled>

@@ -12,6 +12,7 @@ import { ShotArt } from "./shot-art";
 import d from "./director.module.css";
 
 const STEP_LABEL = ["ไอเดีย", "เนื้อเรื่อง", "สตอรี่บอร์ด"];
+const expiresSoon = (iso: string) => Date.parse(iso) - Date.now() < 60000;
 export function DirectorHub() {
   const router = useRouter();
   const [data, setData] = useState<ProjectList | null>(null);
@@ -30,7 +31,11 @@ export function DirectorHub() {
   const [pending, setPending] = useState<Submission | null>(null);
   const mediaRefresh = useRef(new Set<string>());
   useEffect(() => { setPending(pendingSubmission("create-project")); }, []);
-  const failedMedia = (id: string) => { if (mediaRefresh.current.has(id)) return; mediaRefresh.current.add(id); setReload(n => n + 1); setTimeout(() => mediaRefresh.current.delete(id), 15000); };
+  const failedMedia = (id: string) => {
+    const expires = data?.items.find(item => item.id === id)?.coverImageExpiresAt;
+    // Only an expiring signed URL is fixed by reloading; other load failures would loop forever.
+    if (!expires || !expiresSoon(expires)) return;
+    if (mediaRefresh.current.has(id)) return; mediaRefresh.current.add(id); setReload(n => n + 1); setTimeout(() => mediaRefresh.current.delete(id), 15000); };
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {

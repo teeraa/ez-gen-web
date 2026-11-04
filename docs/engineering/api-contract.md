@@ -655,5 +655,9 @@ model names show the configured model (e.g. Gemini 3.5 Flash, Seedream 5.0).
 Video uses the shot image as first frame and the next shot in the scene as last
 frame (`video.usesLastFrame`). Models with `supportsDraft` accept `draft: true`
 (480p, `draftPointsPerUnit`) and `finalize: true` refines drafts to 1080p
-(`video.draft`, `video.canFinalize`). Verification status and fixture boundaries are
+(`video.draft`, `video.canFinalize`).
+The navbar balance reads `GET /director/points` (server render, then refreshed on focus,
+every 30s and after paid Director actions). Scenes carry an editable `setting`.
+Director polling backs off (2s → 15s) while the project is unchanged, and failed media
+loads only refresh signed URLs that are about to expire. Verification status and fixture boundaries are
 recorded in the workspace task `docs/engineering/tasks/director-web-20261104.md`.
