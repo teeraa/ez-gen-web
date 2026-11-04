@@ -650,5 +650,6 @@ Director point accounts start at zero; no browser mock balance or payment/top-up
 endpoint is provided by this integration. Shot video uses
 `POST /projects/:id/video` (`shotIds?`), gated by `capabilities.videoEnabled`;
 each shot exposes `video: null | {status, progress, url, stale, …}` and the
-video model list matches the video menu (`aspectRatios` per model). Verification status and fixture boundaries are
+video models are Seedance 2.0 Fast / 2.5 / 2.0 (`aspectRatios` per model) and story/image
+model names show the configured model (e.g. Gemini 3.5 Flash, Seedream 5.0). Verification status and fixture boundaries are
 recorded in the workspace task `docs/engineering/tasks/director-web-20261104.md`.
