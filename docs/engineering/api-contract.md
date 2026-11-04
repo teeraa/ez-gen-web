@@ -651,5 +651,9 @@ endpoint is provided by this integration. Shot video uses
 `POST /projects/:id/video` (`shotIds?`), gated by `capabilities.videoEnabled`;
 each shot exposes `video: null | {status, progress, url, stale, …}` and the
 video models are Seedance 2.0 Fast / 2.5 / 2.0 (`aspectRatios` per model) and story/image
-model names show the configured model (e.g. Gemini 3.5 Flash, Seedream 5.0). Verification status and fixture boundaries are
+model names show the configured model (e.g. Gemini 3.5 Flash, Seedream 5.0).
+Video uses the shot image as first frame and the next shot in the scene as last
+frame (`video.usesLastFrame`). Models with `supportsDraft` accept `draft: true`
+(480p, `draftPointsPerUnit`) and `finalize: true` refines drafts to 1080p
+(`video.draft`, `video.canFinalize`). Verification status and fixture boundaries are
 recorded in the workspace task `docs/engineering/tasks/director-web-20261104.md`.

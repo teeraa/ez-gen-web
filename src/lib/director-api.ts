@@ -2,7 +2,7 @@ export type Step = "idea" | "plot" | "storyboard";
 export type WorkStatus = "idle" | "queued" | "processing" | "succeeded" | "failed" | "needs_attention";
 export interface Failure { failureCode: string | null; failureMessage: string | null; canRetry: boolean }
 export interface Idea { prompt: string; genre: string; moods: string[]; sceneCount: number; characterAssetIds: string[]; storyModelId: string }
-export interface ModelOption { id: string; name: string; note: string; speedHint: string; pointsPerUnit: number; supportsCharacterReference: boolean; default?: boolean; aspectRatios?: string[] }
+export interface ModelOption { id: string; name: string; note: string; speedHint: string; pointsPerUnit: number; supportsCharacterReference: boolean; default?: boolean; aspectRatios?: string[]; supportsDraft?: boolean; draftPointsPerUnit?: number }
 export interface Option { value: string; label: string; hint: string }
 export interface Capabilities {
   enabled: boolean; videoEnabled?: boolean; unavailableReason: string | null; aspectRatios: Option[]; resolutions: (Option & { available: boolean })[];
@@ -13,7 +13,7 @@ export interface Capabilities {
 }
 export interface Cover extends Failure { id: string; status: Exclude<WorkStatus, "idle">; progress: number; imageUrl: string | null; expiresAt: string | null; source: "generated" | "shot"; shotId: string | null; imageModelId: string | null; pointsCharged: number | null; pointsRefunded: number }
 export interface Shot { id: string; sceneId: string; index: number; description: string; camera: string; characterAssetIds: string[]; image: Failure & { status: Exclude<WorkStatus, "idle"> | "pending"; progress: number; url: string | null; expiresAt: string | null; stale: boolean }; video: ShotVideo | null; pointsCharged: number | null; pointsRefunded: number }
-export interface ShotVideo extends Failure { status: Exclude<WorkStatus, "idle">; progress: number; url: string | null; expiresAt: string | null; stale: boolean; modelId: string; durationSeconds: number; pointsCharged: number; pointsRefunded: number }
+export interface ShotVideo extends Failure { status: Exclude<WorkStatus, "idle">; progress: number; url: string | null; expiresAt: string | null; stale: boolean; modelId: string; durationSeconds: number; draft: boolean; canFinalize: boolean; usesLastFrame: boolean; pointsCharged: number; pointsRefunded: number }
 export interface Scene extends Failure { id: string; index: number; status: "pending" | "writing" | "ready" | "failed"; title: string; summary: string; mood: string | null; characterAssetIds: string[]; shotCount: number; shots: Shot[]; pointsRefunded: number }
 export interface Project {
   id: string; revision: number; name: string; aspectRatio: string; style: string; resolution: string; step: Step; idea: Idea; cover: Cover | null;
