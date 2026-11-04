@@ -12,7 +12,7 @@ import { ShowcaseMedia, ShowcaseStill } from "@/components/landing/showcase-medi
 import { pickLandscape } from "@/components/landing/showcase-pick";
 import { ShowcaseReel } from "@/components/landing/showcase-reel";
 import { PublicNav } from "@/components/landing/public-nav";
-import { ThemeRoot, ThemeToggle } from "@/components/landing/theme-root";
+import { ThemeRoot } from "@/components/landing/theme-root";
 import { AppChrome } from "@/components/shell/app-chrome";
 import { ShellColumn, ShellFrame } from "@/components/shell/shell-frame";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -35,7 +35,7 @@ function interleave<T>(a: T[], b: T[]): T[] {
 // Signed in: the same sidebar + navbar as the studio, so moving between pages feels continuous.
 async function LandingChrome() {
   const user = await getCurrentUser();
-  return user ? <AppChrome user={user} extra={<ThemeToggle />} /> : <PublicNav />;
+  return user ? <AppChrome user={user} /> : <PublicNav />;
 }
 
 export default async function Home() {

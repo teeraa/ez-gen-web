@@ -1,24 +1,21 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Moon, Sun } from "lucide-react";
+import { applyTheme, currentTheme, subscribeTheme, type Theme } from "@/lib/theme";
 import s from "./landing.module.css";
 
-type Theme = "light" | "dark";
 const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({ theme: "light", toggle: () => {} });
-const STORAGE_KEY = "storyflow-theme";
 
 /** Landing wrapper: owns the light/dark choice and the scroll-reveal for [data-reveal] children. */
 export function ThemeRoot({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [theme, setTheme] = useState<Theme>("light");
+  // Follows the site-wide theme so the studio navbar toggle (shown when signed in) and the
+  // public navbar toggle both switch the landing content; no second toggle is needed.
+  const theme = useSyncExternalStore(subscribeTheme, currentTheme, () => "light" as const);
   const [js, setJs] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved === "dark" || saved === "light") setTheme(saved);
-    } catch {}
     setJs(true);
   }, []);
 
@@ -38,17 +35,7 @@ export function ThemeRoot({ children }: { children: ReactNode }) {
     return () => io.disconnect();
   }, []);
 
-  const toggle = () =>
-    setTheme((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      try {
-        localStorage.setItem(STORAGE_KEY, next);
-      } catch {}
-      // Keep the rest of the site (and the next page load) in step with the landing choice.
-      if (next === "dark") document.documentElement.dataset.theme = "dark";
-      else delete document.documentElement.dataset.theme;
-      return next;
-    });
+  const toggle = () => applyTheme(theme === "dark" ? "light" : "dark");
 
   return (
     <ThemeContext.Provider value={{ theme, toggle }}>
