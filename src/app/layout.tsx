@@ -1,26 +1,26 @@
+import type { CSSProperties } from "react";
 import type { Metadata, Viewport } from "next";
-import { Prompt } from "next/font/google";
+import { promptFontFamily } from "./fonts/prompt";
+import { InlineScript } from "@/components/shell/inline-script";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
-const prompt = Prompt({
-  variable: "--font-prompt",
-  subsets: ["thai", "latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  display: "swap",
-});
-
 export const metadata: Metadata = {
-  title: "EZ-Gen Studio — พื้นที่ทำงาน AI สร้างสรรค์",
+  title: "Agent Studio — สร้างตัวละครจากจินตนาการ",
   description: "สร้างวิดีโอ AI ระดับภาพยนตร์จากข้อความและรูปภาพ เปลี่ยนจินตนาการให้เป็นการเคลื่อนไหวด้วย EZ-Gen Studio",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#08080d",
+  themeColor: "#f5f5f7",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="th" className={`${prompt.variable} antialiased`}>
+    // suppressHydrationWarning: data-theme is set by the boot script before React hydrates.
+    <html lang="th" className="antialiased" style={{ "--font-prompt": promptFontFamily } as CSSProperties} suppressHydrationWarning>
+      <head>
+        <InlineScript html={THEME_BOOT_SCRIPT} />
+      </head>
       <body>{children}</body>
     </html>
   );

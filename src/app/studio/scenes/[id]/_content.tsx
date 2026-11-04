@@ -38,6 +38,7 @@ export function SceneDetailContent() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9")
   const [duration, setDuration] = useState(8)
   const [quality, setQuality] = useState<Quality>("standard")
+  const [isDraftMode, setIsDraftMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
 
@@ -52,6 +53,7 @@ export function SceneDetailContent() {
     setModel(next)
     setDuration(fixed.duration)
     setAspectRatio(fixed.aspectRatio)
+    if (next !== "violet-realism") setIsDraftMode(false)
   }
 
   const loadScene = useCallback(async () => {
@@ -124,10 +126,11 @@ export function SceneDetailContent() {
         styleProfileId: scene.styleProfileId ?? undefined,
         tagIds: scene.tags.map(t => t.id),
         idempotencyKey: generateUUID(),
+        ...(model === "violet-realism" && isDraftMode ? { draft: true } : {}),
       }
       const job = await scenesApi.generate(scene.id, req)
       setActiveJobId(job.jobId)
-      setJobs(prev => [{ jobId: job.jobId, status: job.status, progress: 0, currentStep: "queued", estimatedSecondsRemaining: null, model, aspectRatio, duration, quality, creditsCharged: null, result: null, error: null, sceneId: scene.id, characterProfileId: scene.characterProfileId, styleProfileId: scene.styleProfileId, compiledPrompt: null, createdAt: job.createdAt, updatedAt: job.createdAt, completedAt: null } as JobDTO, ...prev])
+      setJobs(prev => [{ jobId: job.jobId, status: job.status, progress: 0, currentStep: "queued", estimatedSecondsRemaining: null, model, aspectRatio, duration, quality, isDraft: model === "violet-realism" && isDraftMode, creditsCharged: null, result: null, error: null, sceneId: scene.id, characterProfileId: scene.characterProfileId, styleProfileId: scene.styleProfileId, compiledPrompt: null, createdAt: job.createdAt, updatedAt: job.createdAt, completedAt: null } as JobDTO, ...prev])
     } catch (err) {
       alert(apiErrorMessage(err))
     } finally {
@@ -264,6 +267,24 @@ export function SceneDetailContent() {
                 <Select label="อัตราส่วนภาพ" options={aspectOptions(model)} value={aspectRatio} onChange={e => setAspectRatio(e.target.value as AspectRatio)} />
                 <Select label="ระยะเวลา" options={durationOptions(model)} value={String(duration)} onChange={e => setDuration(Number(e.target.value))} />
                 <SegmentControl label="คุณภาพ" options={[{ value: "standard", label: "มาตรฐาน" }, { value: "high", label: "สูง HD" }]} value={quality} onChange={v => setQuality(v as Quality)} />
+                {model === "violet-realism" && (
+                  <label className="flex items-center justify-between gap-3 cursor-pointer select-none">
+                    <span className="text-xs text-text-muted">โหมดร่าง (Draft)</span>
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={isDraftMode}
+                      onChange={e => setIsDraftMode(e.target.checked)}
+                    />
+                    <span
+                      role="switch"
+                      aria-checked={isDraftMode}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isDraftMode ? "bg-violet" : "bg-white/[.15]"}`}
+                    >
+                      <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isDraftMode ? "translate-x-4" : "translate-x-0"}`} />
+                    </span>
+                  </label>
+                )}
               </div>
             )}
 
@@ -273,6 +294,9 @@ export function SceneDetailContent() {
                 <Badge variant="neutral">{aspectRatio}</Badge>
                 <Badge variant="neutral">{duration}วิ</Badge>
                 <Badge variant="neutral">{quality === "high" ? "HD" : "SD"}</Badge>
+                {model === "violet-realism" && isDraftMode && (
+                  <Badge variant="warning">ร่าง</Badge>
+                )}
               </div>
             )}
 

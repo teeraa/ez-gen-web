@@ -6,7 +6,7 @@ import { notFound } from "next/navigation"
 import { Download, Sparkles } from "lucide-react"
 import { getPublicShare, videoSize } from "@/lib/public-share"
 
-const TITLE = "สร้างด้วย VIOLET STUDIO"
+const TITLE = "สร้างด้วย AGENT STUDIO"
 const DESCRIPTION = "วิดีโอ AI ระดับภาพยนตร์จาก EZ-Gen Studio — สร้างวิดีโอของคุณเองได้ฟรี"
 // Permanent brand image: thumbnails are signed for 1h but LINE/Facebook cache previews much longer.
 const FALLBACK_IMAGE = "/og-share.png"

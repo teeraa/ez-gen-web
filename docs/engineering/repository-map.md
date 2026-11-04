@@ -192,3 +192,4 @@ Any failure introduced after this point is a regression.
 | No test framework | Medium | No Jest/Vitest/Playwright present; must be added before implementation |
 | No CI configuration | Low | Not needed for preparation phase |
 | No `.env.example` | Medium | Backend URL and any API keys need documented env vars |
+| 2026-10-15 host prevents Turbopack child process binding a port | Medium | `pnpm build` fails with `Operation not permitted (os error 1)` in `src/app/globals.css.css`, including an escalated retry. No Next.js source changes are part of the standalone `design-reference/ai-film-ads-studio/` task. HTML browser verification, lint and type-check are recorded in that prototype's `docs/testing.md`; the existing application's production build gate remains blocked by this environment. |

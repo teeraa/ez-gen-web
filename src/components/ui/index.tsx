@@ -14,19 +14,19 @@ import type { Toast } from "@/hooks/use-toast"
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger"
 type ButtonSize = "sm" | "md" | "lg"
 
-const BUTTON_BASE = "inline-flex items-center justify-center gap-2 rounded-lg border font-semibold whitespace-nowrap transition-all duration-200 [&_svg]:size-3.5 disabled:opacity-55 disabled:cursor-not-allowed disabled:translate-y-0"
+const BUTTON_BASE = "inline-flex items-center justify-center gap-2 rounded-full border font-medium whitespace-nowrap transition-all duration-200 [&_svg]:size-3.5 disabled:opacity-55 disabled:cursor-not-allowed disabled:translate-y-0"
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-[linear-gradient(120deg,#a37aff,#8050e7)] border-[rgba(222,203,255,.3)] text-white shadow-[0_5px_24px_rgba(127,75,236,.2),inset_0_1px_rgba(255,255,255,.16)] hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_8px_28px_rgba(127,75,236,.3)]",
-  secondary: "bg-white/[.055] border-white/[.14] text-[#e3ddec] font-medium hover:bg-white/10 hover:border-white/[.23]",
-  ghost: "bg-transparent border-transparent text-[#a9a2b7] font-medium hover:bg-[var(--glass-hover)] hover:text-white",
-  danger: "bg-[rgba(243,165,165,.06)] border-[rgba(243,165,165,.2)] text-[#f3a5a5] font-medium hover:bg-[rgba(243,165,165,.12)] hover:border-[rgba(243,165,165,.32)]",
+  primary: "bg-violet border-transparent text-white shadow-none hover:bg-violet-dark",
+  secondary: "bg-surface border-[var(--border-strong)] text-text-base font-medium hover:bg-canvas",
+  ghost: "bg-transparent border-transparent text-text-muted font-medium hover:bg-canvas hover:text-text-base",
+  danger: "bg-[#fff4f3] border-[#e8c9c6] text-[#8d2424] font-medium hover:bg-[#fce9e7]",
 }
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
   sm: "text-[11px] px-3 py-[7px]",
   md: "text-xs px-[15px] py-[9px]",
-  lg: "text-xs px-[17px] py-[11px]",
+  lg: "text-base px-6 py-3",
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -71,11 +71,11 @@ export function LinkButton({ href, variant = "secondary", size = "md", icon, chi
 
 // ── Form fields ───────────────────────────────────────────────────────────────
 
-const LABEL = "block text-[11px] font-medium text-[#aaa3ba]"
+const LABEL = "block text-sm font-medium text-text-base"
 const FIELD_BORDER = (error?: string) =>
-  error ? "border-[rgba(243,165,165,.45)] focus:border-[rgba(243,165,165,.65)]" : "border-white/10 focus:border-[rgba(155,109,255,.5)]"
-const FIELD_ERROR = "text-[11px] text-[#f3a5a5]"
-const FIELD_HINT = "text-[11px] text-text-subtle"
+  error ? "border-[#b43b32] focus:border-[#b43b32]" : "border-[var(--border-strong)] focus:border-[#0071e3]"
+const FIELD_ERROR = "text-sm text-[#8d2424]"
+const FIELD_HINT = "text-xs text-text-muted"
 
 export function FieldLabel({ htmlFor, children }: { htmlFor?: string; children: ReactNode }) {
   return <label htmlFor={htmlFor} className={LABEL}>{children}</label>
@@ -97,7 +97,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            "h-9 w-full rounded-[7px] border bg-white/[.035] px-2.5 text-xs text-[#e8e3f1] outline-none transition-colors placeholder:text-[#777186]",
+            "min-h-12 w-full rounded-[10px] border bg-surface px-3 text-base text-text-base transition-colors placeholder:text-text-muted",
             FIELD_BORDER(error),
             className
           )}
@@ -139,7 +139,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           maxLength={maxLength}
           value={value}
           className={cn(
-            "min-h-[88px] w-full resize-y rounded-[10px] border bg-[rgba(5,5,10,.38)] px-3.5 py-3 text-xs leading-[1.8] text-text-base outline-none transition-colors placeholder:text-[#777186]",
+            "min-h-[88px] w-full resize-y rounded-[10px] border bg-surface px-3.5 py-3 text-base leading-[1.8] text-text-base transition-colors placeholder:text-[#777186]",
             FIELD_BORDER(error),
             className
           )}
@@ -170,14 +170,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              "h-9 w-full cursor-pointer appearance-none rounded-[7px] border bg-white/[.035] pl-2.5 pr-[30px] text-xs text-[#e8e3f1] outline-none transition-colors",
+              "min-h-12 w-full cursor-pointer appearance-none rounded-[10px] border bg-surface pl-3 pr-[30px] text-base text-text-base transition-colors",
               FIELD_BORDER(error),
               className
             )}
             {...props}
           >
             {options.map(o => (
-              <option key={o.value} value={o.value} className="bg-[#15121f] text-white">
+              <option key={o.value} value={o.value} className="bg-surface text-text-base">
                 {o.label}
               </option>
             ))}
@@ -313,7 +313,7 @@ export function LoadingState({ label = "กำลังโหลด..." }: { lab
 
 export function ErrorNotice({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-[10px] border border-[rgba(243,165,165,.2)] bg-[rgba(243,165,165,.05)] p-3.5 text-xs text-[#f3a5a5]">
+    <div className="flex items-start gap-2.5 rounded-[10px] border border-[#e8c9c6] bg-[#fff4f3] p-3.5 text-sm text-[#8d2424]">
       <AlertCircle className="mt-px size-4" />
       <span>{message === "Backend is not reachable" ? "Backend ยังไม่ได้เชื่อมต่อ — เริ่ม ez-gen-api ก่อนใช้งาน" : message}</span>
     </div>

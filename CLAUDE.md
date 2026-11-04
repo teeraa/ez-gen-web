@@ -23,8 +23,11 @@ The AI provider is BytePlus ModelArk, accessed only through the Go backend.
 
 ## Design Reference
 
-`design-reference/index.html` — the complete UI prototype. All visual decisions
-must be verified against this file. Do not modify it.
+`design-reference/ai-film-ads-studio/` — the current standalone UI prototype,
+based on AI Film & Ads Studio SRS v1.0 and the independent redesign documented in
+`design-reference/ai-film-ads-studio/docs/redesign.md`. Use this prototype for new
+visual and interaction decisions. The user explicitly retired
+`design-reference/index.html` as a design source; preserve it only as an archive.
 
 ## Engineering Documentation
 
@@ -77,9 +80,9 @@ Any new failure after changes is a regression and must be fixed before merging.
 1. Default to Server Components. Add `"use client"` only when the component needs
    browser APIs, event handlers, or incompatible third-party libraries.
 2. All Go backend calls from the browser must go through Next.js Route Handlers.
-3. The credit estimate formula and generation modes must match `api-contract.md`.
-4. Do not implement features not present in `design-reference/index.html` unless
-   explicitly requested.
+3. Generation settings and configured pricing, when available, must match the actual backend contract. Do not invent credit estimates.
+4. Keep features within the supplied SRS and the current prototype at
+   `design-reference/ai-film-ads-studio/` unless explicitly requested.
 
 ### Code style
 1. TypeScript strict mode — no `any`, no `!` non-null assertions without a comment.
@@ -91,7 +94,7 @@ Any new failure after changes is a regression and must be fixed before merging.
 ### Do NOT
 - Rewrite the design reference file (`design-reference/index.html`)
 - Upgrade major dependencies without explicit approval
-- Implement real BytePlus API calls, payments, or authentication in this phase
+- Treat historical scaffold preparation notes as authority to disable current working authentication/provider integrations. Modify integrations only within the authorized task scope; payment work still needs its own task authorization.
 - Skip the `pnpm lint && pnpm type-check` gate before committing
 
 ## Environment Setup

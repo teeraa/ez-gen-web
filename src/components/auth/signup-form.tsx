@@ -16,21 +16,21 @@ export function SignUpForm() {
     <div className="modal">
       <div className="modal-head">
         <div>
-          <span className="eyebrow">START CREATING</span>
+          <span className="eyebrow">เริ่มสร้างสรรค์</span>
           <h2 className="mt-1.5">สมัครสมาชิก</h2>
-          <p>สร้างบัญชีเพื่อเริ่มใช้ VIOLET DNA Studio — ทดลองฟรี 7 วัน</p>
+          <p>สร้างบัญชีเพื่อออกแบบตัวละครและเก็บไว้ในคลังส่วนตัว</p>
         </div>
       </div>
 
       {/* key resets the uncontrolled inputs' defaultValue after each server round-trip */}
       <form key={`${state.name}|${state.email}`} action={formAction} className="flex flex-col gap-3.5">
         <input type="hidden" name="next" value={next} />
-        <Input label="ชื่อที่แสดง" name="name" autoComplete="name" required
+        <Input label="ชื่อที่แสดง" name="name" autoComplete="name" required maxLength={100}
           defaultValue={state.name} error={errors.name} placeholder="เช่น Jordan Davis" />
         <Input label="อีเมล" name="email" type="email" autoComplete="email" required
           defaultValue={state.email} error={errors.email} placeholder="you@example.com" />
-        <Input label="รหัสผ่าน" name="password" type="password" autoComplete="new-password" required minLength={8}
-          error={errors.password} hint="อย่างน้อย 8 ตัวอักษร" placeholder="••••••••" />
+        <Input label="รหัสผ่าน" name="password" type="password" autoComplete="new-password" required minLength={10} maxLength={72}
+          error={errors.password} hint="10–72 ไบต์ (อักขระภาษาไทยใช้หลายไบต์)" placeholder="••••••••" />
         <Input label="ยืนยันรหัสผ่าน" name="confirm" type="password" autoComplete="new-password" required
           error={errors.confirm} placeholder="••••••••" />
         {state.error && <ErrorNotice message={state.error} />}
@@ -38,7 +38,7 @@ export function SignUpForm() {
           สร้างบัญชี
         </Button>
         <p className="m-0 text-center text-[10px] leading-relaxed text-text-subtle">
-          บัญชีจำลองสำหรับ prototype — เก็บไว้ในหน่วยความจำของเซิร์ฟเวอร์และจะหายเมื่อรีสตาร์ท
+          บัญชีและผลงานถูกบันทึกอย่างปลอดภัยในสตูดิโอของคุณ
         </p>
       </form>
 

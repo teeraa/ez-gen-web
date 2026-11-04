@@ -28,7 +28,26 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | **F — Quality Specialist** | Verification procedures, acceptance criteria | `docs/engineering/verification-playbook.md` |
 | **G — Security Reviewer** | Trust boundaries, secret handling | `docs/engineering/frontend-security.md` |
 
-## Current Phase: ENVIRONMENT PREPARATION
+## Frontend design and UX/UI review
+
+Active project roles in `.codex/agents/`:
+
+- `nextjs_fe_designer`: product flow, interaction, visual/component specifications.
+- `nextjs_fe_developer`: implementation within assigned files.
+- `nextjs_ux_ui_reviewer`: independent rendered UX/UI/accessibility review.
+- `nextjs_fe_auditor`: independent engineering, security, API and verification audit.
+
+Follow [UX/UI workflow](docs/engineering/ux-ui-workflow.md) and
+[FE agent workflow](docs/engineering/fe-agent-workflow.md). PM selects relevant
+roles, separates authors from reviewers, and accepts only current evidence.
+The latest approved interface is Thai with Prompt, neutral readable Liquid Glass
+and quiet blue actions. Session/user instructions override historical prototype,
+font and preparation notes below. Existing authentication/provider integration
+must be preserved; old preparation restrictions are not a claim of absent code.
+Custom-role runtime discovery is not proven by parsing TOML; use exact role
+instructions with fresh generic delegates if unavailable and disclose that fact.
+
+## Historical baseline: environment preparation (superseded)
 
 **What is complete:**
 - Repository inspected and mapped
@@ -37,7 +56,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - All 7 engineering documents produced
 - Baseline verification: type-check, lint, build all pass
 
-**What is NOT yet done:**
+**What was not yet done at the original scaffold survey (not current status):**
 - No product features implemented
 - No real API calls connected
 - No authentication wired up
@@ -55,7 +74,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 4. **Document blockers immediately.** If a task cannot be completed, add the
    blocker to `docs/engineering/repository-map.md` section 9.
 
-## Implementation Phase Prerequisites (not yet started)
+## Historical preparation checklist (verify current source instead)
 
 Before any implementation agent begins:
 - [ ] shadcn/ui initialized: `pnpm dlx shadcn@latest init`

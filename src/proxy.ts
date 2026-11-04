@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-// Must match SESSION_COOKIE in lib/auth/session.ts; duplicated so Proxy doesn't bundle the mock account store.
+// Keep the optimistic routing check independent of server session validation.
 const SESSION_COOKIE = "ezgen_session"
 
 // Optimistic cookie check only — the studio layout re-validates the session on the server.
@@ -12,10 +12,6 @@ export function proxy(request: NextRequest) {
     const url = new URL("/signin", request.url)
     url.searchParams.set("next", pathname + search)
     return NextResponse.redirect(url)
-  }
-
-  if ((pathname === "/signin" || pathname === "/signup") && hasSession) {
-    return NextResponse.redirect(new URL("/studio", request.url))
   }
 
   return NextResponse.next()

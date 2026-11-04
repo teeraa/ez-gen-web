@@ -119,6 +119,9 @@ export function JobCard({ job, onSelect, onRefresh, onRetry, selected }: JobCard
           {job.model && (
             <span className="text-[10px] text-text-subtle">{job.model.replace("violet-", "EZ-")}</span>
           )}
+          {job.isDraft && (
+            <Badge variant="warning" className="text-[10px]">ร่าง</Badge>
+          )}
           {job.creditsCharged !== null && (
             <span className="text-[10px] text-text-subtle">{job.creditsCharged} เครดิต</span>
           )}

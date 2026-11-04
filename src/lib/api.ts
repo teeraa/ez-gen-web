@@ -147,10 +147,10 @@ export const scenesApi = {
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 export const jobsApi = {
-  list: (page = 1, limit = 20) =>
-    apiFetch<PaginatedData<JobDTO>>(`jobs?page=${page}&limit=${limit}`),
-  get: (jobId: string) =>
-    apiFetch<JobDTO>(`jobs/${jobId}`),
+  list: (page = 1, limit = 20, signal?: AbortSignal) =>
+    apiFetch<PaginatedData<JobDTO>>(`jobs?page=${page}&limit=${limit}`, { signal }),
+  get: (jobId: string, signal?: AbortSignal) =>
+    apiFetch<JobDTO>(`jobs/${jobId}`, { signal }),
   create: (body: CreateJobRequest) =>
     apiFetch<CreateJobResponse>("jobs", {
       method: "POST",
@@ -175,8 +175,8 @@ export const uploadsApi = {
 export const exportsApi = {
   list: (page = 1, limit = 20) =>
     apiFetch<PaginatedData<ExportDTO>>(`exports?page=${page}&limit=${limit}`),
-  get: (exportId: string) =>
-    apiFetch<ExportDTO>(`exports/${exportId}`),
+  get: (exportId: string, signal?: AbortSignal) =>
+    apiFetch<ExportDTO>(`exports/${exportId}`, { signal }),
   create: (body: CreateExportRequest) =>
     apiFetch<ExportDTO>("exports", {
       method: "POST",

@@ -1,3 +1,5 @@
+import type { CharacterDesignOptions, ImageCategory } from "@/lib/character-design"
+
 // ── Shared ────────────────────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {
@@ -217,6 +219,11 @@ export interface JobDTO {
   characterProfileId: string | null
   styleProfileId: string | null
   compiledPrompt: string | null
+  rawPrompt?: string
+  imageCategory?: ImageCategory
+  productDesign?: Pick<CharacterDesignOptions, "visualStyle" | "mood">
+  characterDesign?: CharacterDesignOptions
+  isDraft: boolean
   createdAt: string
   updatedAt: string
   completedAt: string | null
@@ -237,6 +244,8 @@ export interface CreateJobRequest {
   styleProfileId?: string | null
   tagIds?: string[]
   idempotencyKey?: string
+  // Draft mode: lower-quality preview render. Only accepted when model == "violet-realism".
+  draft?: boolean
 }
 
 export interface CreateJobResponse {

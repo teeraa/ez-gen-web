@@ -99,7 +99,7 @@ function ShareSheet({ job, onClose }: { job: JobDTO; onClose: () => void }) {
     const file = fileRef.current
     if (!file || !share) return
     try {
-      await navigator.share({ files: [file], title: "สร้างด้วย VIOLET STUDIO", text: share.url })
+      await navigator.share({ files: [file], title: "สร้างด้วย AGENT STUDIO", text: share.url })
     } catch (err) {
       if ((err as Error).name !== "AbortError") setError("แชร์ไฟล์ไม่สำเร็จ — ลองดาวน์โหลดแล้วอัปโหลดเองแทน")
     }

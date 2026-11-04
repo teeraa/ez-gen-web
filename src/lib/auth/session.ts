@@ -1,29 +1,55 @@
-import { cookies } from "next/headers"
-import { findUserById, type MockUser } from "@/lib/auth/mock-accounts"
-
-export const SESSION_COOKIE = "ezgen_session"
-const SESSION_MAX_AGE = 60 * 60 * 24 * 7
-
-export async function getCurrentUser(): Promise<MockUser | null> {
-  const id = (await cookies()).get(SESSION_COOKIE)?.value
-  return id ? findUserById(id) : null
+import "server-only";
+import { cookies } from "next/headers";
+export const SESSION_COOKIE = "ezgen_session";
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  plan: string;
+  role: string;
 }
-
-export async function startSession(user: MockUser): Promise<void> {
-  (await cookies()).set(SESSION_COOKIE, user.id, {
+export async function getCurrentUser(): Promise<SessionUser | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const response = await fetch(
+      `${process.env.API_URL ?? "http://localhost:8080"}/open/v1/auth/me`,
+      { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+    );
+    if (!response.ok) return null;
+    const { data } = await response.json();
+    return { ...data, name: data.displayName ?? data.name ?? data.email };
+  } catch {
+    return null;
+  }
+}
+export async function startSession(
+  token: string,
+  expiresAt: string,
+): Promise<void> {
+  (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: SESSION_MAX_AGE,
-  })
+    maxAge: Math.max(
+      0,
+      Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000),
+    ),
+  });
 }
-
 export async function endSession(): Promise<void> {
-  (await cookies()).delete(SESSION_COOKIE)
+  (await cookies()).delete(SESSION_COOKIE);
 }
-
-// Only same-origin relative paths; "//evil.com" would otherwise be an open redirect.
-export function safeRedirectPath(value: FormDataEntryValue | null, fallback = "/studio"): string {
-  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") ? value : fallback
+export function safeRedirectPath(
+  value: FormDataEntryValue | null,
+  fallback = "/studio",
+): string {
+  return typeof value === "string" &&
+    value.startsWith("/") &&
+    !value.startsWith("//") &&
+    !value.includes("\\") &&
+    !/[\u0000-\u0020\u007f]/.test(value)
+    ? value
+    : fallback;
 }
