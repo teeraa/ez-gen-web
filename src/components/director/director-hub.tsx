@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Clapperboard, Plus, Search, Trash2, X } from "lucide-react";
@@ -89,7 +90,9 @@ export function DirectorHub() {
     </CreateModal>}
   </div>;
 }
-export function CreateModal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+// `portal` renders at document.body: full-screen players must escape the studio layout's
+// stacking context, or the app navbar covers their header and close button.
+export function CreateModal({ onClose, children, portal = false }: { onClose: () => void; children: React.ReactNode; portal?: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => { closeRef.current = onClose; }, [onClose]);
@@ -108,5 +111,6 @@ export function CreateModal({ onClose, children }: { onClose: () => void; childr
     window.addEventListener("keydown", key);
     return () => { window.removeEventListener("keydown", key); previous?.focus(); };
   }, []);
-  return <div ref={root} className={d.scrim} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>{children}</div>;
+  const modal = <div ref={root} className={d.scrim} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>{children}</div>;
+  return portal ? createPortal(modal, document.body) : modal;
 }
