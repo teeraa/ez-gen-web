@@ -62,9 +62,9 @@ export function DirectorHub() {
     catch (cause) { setError(errorMessage(cause)); }
   };
   return <div className={w.page}>
-    <WorkbenchHead icon={<Clapperboard aria-hidden />} title="ผู้กำกับ" description="เล่าเรื่องใน 3 ขั้น: ใส่ไอเดีย → เนื้อเรื่อง → สตอรี่บอร์ด" actions={<button type="button" className={w.primary} disabled={!caps} onClick={openCreate}><Plus aria-hidden />สร้างโปรเจกต์</button>} />
+    <WorkbenchHead preview={false} icon={<Clapperboard aria-hidden />} title="ผู้กำกับ" description="เล่าเรื่องใน 3 ขั้น: ใส่ไอเดีย → เนื้อเรื่อง → สตอรี่บอร์ด" actions={<button type="button" className={w.primary} disabled={!caps} onClick={openCreate}><Plus aria-hidden />สร้างโปรเจกต์</button>} />
     <div className={w.toolbar}><label className={w.search}><Search aria-hidden /><input maxLength={80} value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="ค้นหาโปรเจกต์" aria-label="ค้นหาโปรเจกต์" /></label>{data && <span className={w.tag}>{data.total} โปรเจกต์</span>}</div>
-    {pending && <div role="status" className={d.hint}>มีคำขอสร้างโปรเจกต์ “{String(pending.body.name)}” ที่ยังไม่ยืนยันผล ระบบจะใช้ข้อมูลเดิมเพื่อป้องกันการสร้างซ้ำ <button type="button" className={w.primary} disabled={submitting} onClick={() => { void create(); }}>ส่งคำขอเดิมอีกครั้ง</button></div>}
+    {pending && <div role="status" className={d.hint}>มีคำขอสร้างโปรเจกต์ “{String(pending.body.name)}” ที่ยังไม่ยืนยันผล ระบบจะใช้ข้อมูลเดิมเพื่อป้องกันการสร้างซ้ำ <button type="button" className={w.primary} disabled={submitting} onClick={() => { void create(); }}>ส่งคำขอเดิมอีกครั้ง</button> <button type="button" className={w.secondary} disabled={submitting} onClick={() => { if (!window.confirm("ทิ้งคำขอเดิม? ถ้าคำขอนั้นสร้างโปรเจกต์ไปแล้ว โปรเจกต์นั้นจะยังอยู่ในรายการ")) return; finishSubmission("create-project"); setPending(null); setError(null); }}>ทิ้งคำขอเดิม</button></div>}
     {error && <div role="alert" className={d.hint}>{error} <button type="button" className={w.secondary} onClick={() => setReload(n => n + 1)}>ลองโหลดใหม่</button></div>}
     {caps && !caps.enabled && <p role="status">{caps.unavailableReason ?? "ระบบสร้างเนื้อหายังไม่พร้อมใช้งาน"}</p>}
     {!data && !error ? <p role="status">กำลังโหลดโปรเจกต์…</p> : <div className={d.projects}>
