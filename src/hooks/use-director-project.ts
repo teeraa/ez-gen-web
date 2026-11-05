@@ -6,7 +6,7 @@ import { definiteRejection, finishSubmission, pendingSubmission, prepareSubmissi
 import { notifyPointsChanged } from "@/lib/points-client";
 
 const MAX_POLL_DELAY_MS = 15000;
-const mediaExpiries = (p: Project) => [p.cover?.expiresAt, p.coverImageExpiresAt, ...p.scenes.flatMap(s => s.shots.flatMap(x => [x.image.expiresAt, x.video?.expiresAt]))].flatMap(v => v && Number.isFinite(Date.parse(v)) ? [Date.parse(v)] : []);
+const mediaExpiries = (p: Project) => [p.cover?.expiresAt, p.coverImageExpiresAt, p.export?.expiresAt, ...p.scenes.flatMap(s => s.shots.flatMap(x => [x.image.expiresAt, x.video?.expiresAt]))].flatMap(v => v && Number.isFinite(Date.parse(v)) ? [Date.parse(v)] : []);
 // A failed media load is only fixed by new signed URLs; refreshing for any other cause
 // (missing object, unsupported codec) would poll forever after the work has finished.
 export const mediaNeedsRefresh = (p: Project | null, now = Date.now()) => !!p && mediaExpiries(p).some(t => t - now < 60000);

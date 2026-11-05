@@ -657,7 +657,8 @@ frame (`video.usesLastFrame`). Models with `supportsDraft` accept `draft: true`
 (480p, `draftPointsPerUnit`) and `finalize: true` refines drafts to 1080p
 (`video.draft`, `video.canFinalize`).
 The navbar balance reads `GET /director/points` (server render, then refreshed on focus,
-every 30s and after paid Director actions). Scenes carry an editable `setting`.
+every 30s and after paid Director actions). Scenes carry an editable `setting`. `POST /projects/:id/export` merges all shot clips into one MP4
+(`export.status/progress/url/stale`); the storyboard panel shows Export, progress and download.
 Director polling backs off (2s → 15s) while the project is unchanged, and failed media
 loads only refresh signed URLs that are about to expire. Verification status and fixture boundaries are
 recorded in the workspace task `docs/engineering/tasks/director-web-20261104.md`.

@@ -14,12 +14,13 @@ export interface Capabilities {
 export interface Cover extends Failure { id: string; status: Exclude<WorkStatus, "idle">; progress: number; imageUrl: string | null; expiresAt: string | null; source: "generated" | "shot"; shotId: string | null; imageModelId: string | null; pointsCharged: number | null; pointsRefunded: number }
 export interface Shot { id: string; sceneId: string; index: number; description: string; camera: string; characterAssetIds: string[]; image: Failure & { status: Exclude<WorkStatus, "idle"> | "pending"; progress: number; url: string | null; expiresAt: string | null; stale: boolean }; video: ShotVideo | null; pointsCharged: number | null; pointsRefunded: number }
 export interface ShotVideo extends Failure { status: Exclude<WorkStatus, "idle">; progress: number; url: string | null; expiresAt: string | null; stale: boolean; modelId: string; durationSeconds: number; draft: boolean; canFinalize: boolean; usesLastFrame: boolean; pointsCharged: number; pointsRefunded: number }
+export interface ProjectExport extends Failure { status: Exclude<WorkStatus, "idle">; progress: number; url: string | null; expiresAt: string | null; stale: boolean; clipCount: number }
 export interface Scene extends Failure { id: string; index: number; status: "pending" | "writing" | "ready" | "failed"; title: string; summary: string; mood: string | null; characterAssetIds: string[]; shotCount: number; setting: string; shots: Shot[]; pointsRefunded: number }
 export interface Project {
   id: string; revision: number; name: string; aspectRatio: string; style: string; resolution: string; step: Step; idea: Idea; cover: Cover | null;
   story: Failure & { status: WorkStatus; phase: "analyzing" | "writing" | "reviewing" | null; logline: string | null; storyModelId: string | null; completedScenes: number; totalScenes: number; estimatedSecondsRemaining: number | null; pointsCharged: number; pointsRefunded: number };
   storyboard: { status: WorkStatus; imageModelId: string; videoModelId: string; completedImages: number; totalShots: number; estimatedSecondsRemaining: number | null; styleReference: "cover" | "style" };
-  scenes: Scene[]; estimates: { story: number; cover: number; storyboard: number; video: number };
+  scenes: Scene[]; export: ProjectExport | null; estimates: { story: number; cover: number; storyboard: number; video: number };
   coverImageUrl: string | null; coverImageExpiresAt: string | null; createdAt: string; updatedAt: string;
 }
 export interface ProjectSummary { id: string; name: string; aspectRatio: string; style: string; resolution: string; step: Step; storyStatus: WorkStatus; storyboardStatus: WorkStatus; sceneCount: number; totalShots: number; completedImages: number; coverImageUrl: string | null; coverImageExpiresAt: string | null; updatedAt: string }
@@ -71,7 +72,7 @@ export const directorApi = {
   character: (id: string, signal?: AbortSignal) => request<Character>(`assets/${encodeURIComponent(id)}`, { signal }),
 };
 export const active = (status: string | undefined) => status === "queued" || status === "processing";
-export const hasWork = (p: Project) => active(p.story.status) || active(p.storyboard.status) || active(p.cover?.status) || p.scenes.some(s => s.status === "writing" || s.shots.some(x => active(x.image.status) || active(x.video?.status)));
+export const hasWork = (p: Project) => active(p.export?.status) || active(p.story.status) || active(p.storyboard.status) || active(p.cover?.status) || p.scenes.some(s => s.status === "writing" || s.shots.some(x => active(x.image.status) || active(x.video?.status)));
 export const statusLabel = (status: string) => ({ idle: "ยังไม่เริ่ม", pending: "รอคิว", queued: "รอคิว", writing: "กำลังเขียน", processing: "กำลังสร้าง", succeeded: "เสร็จแล้ว", ready: "พร้อม", failed: "ไม่สำเร็จ", needs_attention: "ต้องตรวจสอบ" }[status] ?? "กำลังตรวจสอบ");
 export function errorMessage(error: unknown) {
   if (!(error instanceof DirectorError)) return error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่";

@@ -488,6 +488,8 @@
   font-weight: 600;
 }
 .go:hover:not(:disabled) {
+  /* Also used on links; the global a:hover color equals this background. */
+  color: #fff;
   filter: brightness(1.07);
 }
 .go:disabled {
