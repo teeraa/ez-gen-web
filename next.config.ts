@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    agentUpgrade: "security",
+  },
   distDir: process.env.NEXT_BUILD_DIR || ".next",
   cacheComponents: true,
   partialPrefetching: true,
