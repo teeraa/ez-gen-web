@@ -1481,3 +1481,35 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* Episode breadcrumb: series › episode (2026-11-08). */
+.crumbs {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+}
+.crumbs a {
+  flex: 0 1 auto;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--st-muted);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crumbs a:hover {
+  color: inherit;
+  text-decoration: underline;
+}
+.title .crumbSep {
+  display: inline;
+  flex: none;
+  color: var(--st-muted);
+  font-size: 14px;
+}
+.crumbs b {
+  flex: 1 1 auto;
+  min-width: 0;
+}

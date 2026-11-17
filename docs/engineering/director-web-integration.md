@@ -81,3 +81,34 @@ fund production accounts, commit or deploy.
 Director costs and insufficient-balance messages use the real API. The existing
 global points widget/payment integration remains separate; its mock account
 display is not a Director account balance. No payment/top-up endpoint was added.
+
+## Series and episodes — 2026-11-08
+
+Status: implemented against the fixed wire contract in
+the coordinator task record `2026-11-08-director-series-episodes.md`; see the "Director series & episodes"
+section of [api-contract.md](api-contract.md) for the endpoints. Not yet verified
+against a running API (built in parallel) or in a browser.
+
+- Hub `/studio/director`: "สร้างโปรเจกต์" creates a series (`POST /series`: name,
+  aspect ratio, style, resolution; no cast picker existed in the create flow, so
+  `characterAssetIds` is not sent) and opens its Episodes page. The hub lists series
+  (`GET /series`, cover, episode count, updated time, rename via `PATCH /series/:id`,
+  delete via `DELETE /series/:id` with a Thai `SERIES_BUSY` message), and below them
+  "โปรเจกต์เดี่ยว (เดิม)" with the unchanged `GET /projects` search/paging/delete.
+  The legacy section is hidden when there are no standalone projects and no search.
+  An uncertain pre-series `create-project` submission can still be replayed or discarded.
+- Episodes `/studio/director/series/[seriesId]` (`GET /series/:id`): header with name,
+  defaults and episode count; "ตั้งค่าโปรเจกต์" edits name/defaults (`PATCH`, revision
+  conflict reloads) and deletes the series; episode cards show ตอนที่ N, title, step,
+  story/storyboard status, cover and updated date, with title rename
+  (`GET /projects/:id` for revision, then `PATCH /projects/:id {revision, episodeTitle}`)
+  and delete (`DELETE /projects/:id`). "สร้างตอนใหม่" (optional title) posts
+  `/series/:id/episodes` and opens `/studio/director/<episodeId>` at the Idea step.
+  Loading, not-found, error/retry and empty (primary CTA) states are present.
+- Episode page: when `seriesId` is set, the header shows the breadcrumb
+  "ชื่อโปรเจกต์ › ตอนที่ N: title" (series name from `GET /series/:id`), back/arrow and
+  delete return to the Episodes page, and the settings menu edits the episode title
+  (may be cleared). Standalone projects are unchanged.
+- `tests/director.browser.mjs` now drives create series (drop/reload/replay) -> Episodes empty
+  state -> create episode -> Idea step + breadcrumb, back to Episodes, and deletes the episode
+  and series. Not yet run against a series-capable API.

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clapperboard, Film, Plus, Search, Sparkles, X } from "lucide-react";
+import { Clapperboard, Film, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { videoEditorApi, type EditorProjectSummary, type EditorRatio } from "@/lib/video-editor-api";
 import styles from "./project-hub.module.css";
 
@@ -44,21 +44,28 @@ export function ProjectHub() {
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [ratio, setRatio] = useState<EditorRatio>("9:16");
+  const [removing, setRemoving] = useState<EditorProjectSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const requestId = useRef<string | null>(null);
+  const cancelDelete = useRef<HTMLButtonElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
+  const alive = useRef(true);
 
   useEffect(() => {
     const controller = new AbortController();
-    videoEditorApi.projects(1, controller.signal).then(list => { setProjects(list.items ?? []); setTotal(list.total); }, failure => { if (!controller.signal.aborted) setError(message(failure)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+    alive.current = true;
+    videoEditorApi.projects(1, controller.signal).then(list => { if (controller.signal.aborted) return; setProjects(list.items ?? []); setTotal(list.total); }, failure => { if (!controller.signal.aborted) setError(message(failure)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => { alive.current = false; controller.abort(); };
   }, []);
   useEffect(() => { if (creating) nameInput.current?.focus(); }, [creating]);
+  useEffect(() => { if (removing) cancelDelete.current?.focus(); }, [removing]);
 
   const open = useCallback((id: string) => router.push(`/studio/ai-editor?project=${encodeURIComponent(id)}`), [router]);
   async function more() {
+    if (loadingMore) return;
     setLoadingMore(true);
-    try { const list = await videoEditorApi.projects(Math.floor(projects.length / 20) + 1); setProjects(previous => [...previous, ...list.items.filter(item => !previous.some(value => value.id === item.id))]); setTotal(list.total); }
-    catch (failure) { setError(message(failure)); } finally { setLoadingMore(false); }
+    try { const list = await videoEditorApi.projects(Math.floor(projects.length / 20) + 1); if (!alive.current) return; setProjects(previous => [...previous, ...list.items.filter(item => !previous.some(value => value.id === item.id))]); setTotal(list.total); }
+    catch (failure) { if (alive.current) setError(message(failure)); } finally { if (alive.current) setLoadingMore(false); }
   }
   async function create() {
     if (busy) return;
@@ -70,8 +77,20 @@ export function ProjectHub() {
       const project = await videoEditorApi.create(requestId.current, title);
       requestId.current = null;
       if (project.aspectRatio !== ratio) await videoEditorApi.save(project.id, { revision: project.revision, title: project.title, aspectRatio: ratio, segments: [] }).catch(() => undefined);
-      open(project.id);
-    } catch (failure) { setError(message(failure)); setBusy(false); }
+      if (alive.current) open(project.id);
+    } catch (failure) { if (alive.current) { setError(message(failure)); setBusy(false); } }
+  }
+  async function remove() {
+    if (!removing || deleting) return;
+    setDeleting(true); setError("");
+    try {
+      await videoEditorApi.remove(removing.id);
+      if (!alive.current) return;
+      setProjects(previous => previous.filter(item => item.id !== removing.id));
+      setTotal(previous => Math.max(0, previous - 1));
+      setRemoving(null);
+    } catch (failure) { if (alive.current) setError(message(failure)); }
+    finally { if (alive.current) setDeleting(false); }
   }
   const visible = useMemo(() => projects.filter(item => item.title.toLowerCase().includes(query.trim().toLowerCase())), [projects, query]);
 
@@ -82,19 +101,35 @@ export function ProjectHub() {
       {projects.length > 0 && <label className={styles.search}><Search /><input aria-label="ค้นหาโปรเจกต์" placeholder="ค้นหาโปรเจกต์" value={query} onChange={event => setQuery(event.target.value)} /></label>}
     </header>
     {error && <p className={styles.error} role="alert">{error}<button aria-label="ปิดข้อความแจ้งเตือน" onClick={() => setError("")}><X /></button></p>}
-    <div className={styles.grid}>
+    <div className={styles.grid} aria-busy={loadingMore || undefined}>
       <button className={`${styles.card} ${styles.newCard}`} onClick={() => setCreating(true)} aria-haspopup="dialog">
         <span className={styles.cover}><span className={styles.plus}><Plus /></span></span>
         <span className={styles.cardBody}><b>สร้างโปรเจกต์ใหม่</b><small>เริ่มจากคลิปของคุณ หรือให้ AI ช่วยตัด</small></span>
       </button>
-      {visible.map(item => <button key={item.id} className={styles.card} onClick={() => open(item.id)}>
-        <span className={styles.cover}><span className={styles.ratioShape} data-ratio={item.aspectRatio}><Film /></span><span className={styles.badge}>{item.aspectRatio}</span></span>
-        <span className={styles.cardBody}><b title={item.title}>{item.title}</b><small>แก้ไข{edited(item.updatedAt)} · ฉบับที่ {item.revision}</small></span>
-      </button>)}
+      {visible.map(item => <div key={item.id} className={styles.cardWrap}>
+        <button className={styles.card} onClick={() => open(item.id)}>
+          <span className={styles.cover}><span className={styles.ratioShape} data-ratio={item.aspectRatio}><Film /></span><span className={styles.badge}>{item.aspectRatio}</span></span>
+          <span className={styles.cardBody}><b title={item.title}>{item.title}</b><small>แก้ไข{edited(item.updatedAt)}</small></span>
+        </button>
+        {/* Sibling of the card button (a button cannot contain a button); shown on hover or keyboard focus. */}
+        <button className={styles.cardDelete} aria-label={`ลบโปรเจกต์ ${item.title}`} title="ลบโปรเจกต์" aria-haspopup="dialog" onClick={() => setRemoving(item)}><Trash2 /></button>
+      </div>)}
+      {loadingMore && Array.from({ length: 4 }, (_, index) => <div key={`more-${index}`} className={styles.card} aria-hidden="true"><span className={`${styles.skeleton} ${styles.cover}`} /><div className={styles.cardBody}><span className={`${styles.skeleton} ${styles.skLine}`} /><span className={`${styles.skeleton} ${styles.skShort}`} /></div></div>)}
     </div>
     {!projects.length && <div className={styles.empty}><Sparkles /><b>ยังไม่มีโปรเจกต์</b><span>สร้างโปรเจกต์แรก แล้วอัปโหลดวิดีโอ เพลง หรือเพิ่มข้อความได้ทันที</span></div>}
     {projects.length > 0 && !visible.length && <p className={styles.muted}>ไม่พบโปรเจกต์ที่ตรงกับ “{query}”</p>}
-    {projects.length < total && <button className={styles.more} disabled={loadingMore} onClick={() => void more()}>{loadingMore ? "กำลังโหลด…" : "โหลดเพิ่มเติม"}</button>}
+    {projects.length < total && <button className={styles.more} aria-disabled={loadingMore || undefined} onClick={() => void more()}>โหลดเพิ่มเติม</button>}
+
+    {removing && <div className={styles.overlay} onClick={event => { if (event.target === event.currentTarget && !deleting) setRemoving(null); }}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="hub-delete-title" aria-describedby="hub-delete-body" className={styles.dialog} onKeyDown={event => { if (event.key === "Escape" && !deleting) setRemoving(null); }}>
+        <div className={styles.dialogHead}><h2 id="hub-delete-title">ลบโปรเจกต์นี้?</h2><button type="button" aria-label="ปิด" disabled={deleting} onClick={() => setRemoving(null)}><X /></button></div>
+        <p id="hub-delete-body" className={styles.muted}>“{removing.title}” จะหายจากรายการ และงานวิเคราะห์ AI ที่ยังค้างในโปรเจกต์นี้จะถูกยกเลิก คลิปในโปรเจกต์นี้จะเปิดดูไม่ได้อีก</p>
+        <div className={styles.dialogActions}>
+          <button ref={cancelDelete} type="button" className={styles.secondary} disabled={deleting} onClick={() => setRemoving(null)}>ยกเลิก</button>
+          <button type="button" className={styles.danger} disabled={deleting} onClick={() => void remove()}>{deleting ? "กำลังลบ…" : "ลบโปรเจกต์"}</button>
+        </div>
+      </div>
+    </div>}
 
     {creating && <div className={styles.overlay} onClick={event => { if (event.target === event.currentTarget && !busy) setCreating(false); }}>
       <form role="dialog" aria-modal="true" aria-labelledby="hub-create-title" className={styles.dialog} onSubmit={event => { event.preventDefault(); void create(); }} onKeyDown={event => { if (event.key === "Escape" && !busy) setCreating(false); }}>

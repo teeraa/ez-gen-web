@@ -1,9 +1,12 @@
 // Pure audio/text track rules shared by the editor UI and node tests. No runtime imports.
 export type TrackAudioClip = { id: string; assetId: string; at: number; start: number; end: number; volume: number; originJobId?: string; fadeIn?: number; fadeOut?: number };
 export type TrackTextAlign = "left" | "center" | "right";
-export type TrackTextAnimation = "fade" | "slide";
+export type TrackTextAnimation = "fade" | "slide" | "pop";
 /** Style fields exist only with capabilities.clipEffects: outline px at 1080, box opacity 0..1 (0 = none). */
-export type TrackTextStyle = { outlineColor?: string; outlineWidth?: number; boxColor?: string; boxOpacity?: number; animation?: TrackTextAnimation };
+export type TrackTextStyle = { outlineColor?: string; outlineWidth?: number; boxColor?: string; boxOpacity?: number; animation?: TrackTextAnimation; font?: TrackTextFont; accentText?: string; accentColor?: string };
+/** "heavy" = bundled Kanit ExtraBold (public/fonts), the same file the export burns in. */
+export type TrackTextFont = "heavy";
+export const HEAVY_FONT_FAMILY = '"EZ Kanit Heavy", sans-serif';
 export type TrackTextLayer = { id: string; text: string; start: number; end: number; x: number; y: number; fontSize: number; color: string; align: TrackTextAlign; scaleX?: number; scaleY?: number; originJobId?: string } & TrackTextStyle;
 
 export const TRACK_LIMITS = { maxTimeline: 1200, maxAudioClips: 20, maxTextLayers: 50, maxTextChars: 500, maxTextLines: 6, minFont: 12, maxFont: 200 };
@@ -122,10 +125,29 @@ export function styleTextLayer(layer: TrackTextLayer, patch: Partial<TrackTextSt
   next.boxOpacity = next.boxOpacity === undefined ? undefined : round(clamp(next.boxOpacity, 0, 1));
   if (!next.outlineWidth || !HEX.test(next.outlineColor ?? "")) { delete next.outlineWidth; delete next.outlineColor; }
   if (!next.boxOpacity || !HEX.test(next.boxColor ?? "")) { delete next.boxOpacity; delete next.boxColor; }
-  if (next.animation !== "fade" && next.animation !== "slide") delete next.animation;
+  if (next.animation !== "fade" && next.animation !== "slide" && next.animation !== "pop") delete next.animation;
+  if (next.font !== "heavy") delete next.font;
+  if (next.accentText !== undefined) next.accentText = next.accentText.trim();
+  if (next.accentColor !== undefined) next.accentColor = next.accentColor.toUpperCase();
+  // Like the server: a phrase within one line, in a valid colour; one no longer in the text is dropped.
+  if (!next.accentText || next.accentText.includes("\n") || [...next.accentText].length > 100 || !HEX.test(next.accentColor ?? "") || !next.text.includes(next.accentText)) { delete next.accentText; delete next.accentColor; }
   return next;
 }
-export const hasTextStyle = (layer: TrackTextStyle) => Boolean(layer.outlineWidth || layer.boxOpacity || layer.animation);
+export const hasTextStyle = (layer: TrackTextStyle) => Boolean(layer.outlineWidth || layer.boxOpacity || layer.animation || layer.font);
+
+/** Text split into plain and accent runs (every occurrence of accentText), for the preview. */
+export function accentRuns(text: string, accentText?: string): { text: string; accent: boolean }[] {
+  if (!accentText) return [{ text, accent: false }];
+  const runs: { text: string; accent: boolean }[] = [];
+  let from = 0;
+  for (let at = text.indexOf(accentText); at >= 0; at = text.indexOf(accentText, from)) {
+    if (at > from) runs.push({ text: text.slice(from, at), accent: false });
+    runs.push({ text: accentText, accent: true });
+    from = at + accentText.length;
+  }
+  if (from < text.length) runs.push({ text: text.slice(from), accent: false });
+  return runs;
+}
 
 /** Preview CSS matching export: outline and box paint outside the measured text box without changing layout. */
 export function textStylePreview(layer: Pick<TrackTextLayer, "fontSize"> & TrackTextStyle, frameHeight: number) {
@@ -138,16 +160,22 @@ export function textStylePreview(layer: Pick<TrackTextLayer, "fontSize"> & Track
     const alpha = Math.round(layer.boxOpacity * 255).toString(16).padStart(2, "0");
     style.backgroundColor = `${layer.boxColor}${alpha}`;
     style.boxShadow = `0 0 0 ${pad}px ${layer.boxColor}${alpha}`;
+    // Export corners: radius 0.6 × font px on the outer edge (the spread adds pad to this inner radius).
+    style.borderRadius = `${Math.max(0, Math.round(fontPx * .6) - pad)}px`;
   }
   return style;
 }
 
-/** Entrance/exit like export: 0.3 s (or a third of short layers); "slide" rises 4% of the frame height. */
+/**
+ * Entrance/exit like export: 0.3 s (or a third of short layers); "slide" rises 4% of the frame
+ * height; "pop" grows from 60% with an 18% overshoot around the text's centre (ffmpeg textPopScale).
+ */
 export function textAnimationAt(layer: Pick<TrackTextLayer, "start" | "end"> & TrackTextStyle, time: number) {
-  if (!layer.animation) return { opacity: 1, rise: 0 };
+  if (!layer.animation) return { opacity: 1, rise: 0, scale: 1 };
   const duration = Math.min(.3, (layer.end - layer.start) / 3);
   const opacity = clamp(Math.min((time - layer.start) / duration, (layer.end - time) / duration), 0, 1);
-  return { opacity, rise: layer.animation === "slide" ? .04 * Math.max(0, 1 - (time - layer.start) / duration) : 0 };
+  const u = clamp((time - layer.start) / duration, 0, 1);
+  return { opacity, rise: layer.animation === "slide" ? .04 * Math.max(0, 1 - (time - layer.start) / duration) : 0, scale: layer.animation === "pop" ? .6 + .4 * u + .18 * Math.sin(Math.PI * u) : 1 };
 }
 
 /** Local pre-save validation mirroring the server contract; returns a Thai message or "". */
@@ -179,7 +207,7 @@ export function normaliseAudioClips(value: unknown): TrackAudioClip[] {
 export function normaliseTextLayers(value: unknown): TrackTextLayer[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is TrackTextLayer => Boolean(item) && typeof item === "object" && typeof item.id === "string" && typeof item.text === "string" && finite(item.start) && finite(item.end) && item.end > item.start)
-    .map(item => styleTextLayer({ id: item.id, text: item.text, start: item.start, end: item.end, x: finite(item.x) ? clamp(item.x, 0, 1) : TEXT_DEFAULTS.x, y: finite(item.y) ? clamp(item.y, 0, 1) : TEXT_DEFAULTS.y, fontSize: finite(item.fontSize) ? clamp(item.fontSize, TRACK_LIMITS.minFont, TRACK_LIMITS.maxFont) : TEXT_DEFAULTS.fontSize, color: typeof item.color === "string" && /^#[0-9a-fA-F]{6}$/.test(item.color) ? item.color.toUpperCase() : TEXT_DEFAULTS.color, align: ["left", "center", "right"].includes(item.align) ? item.align : "center", ...(item.scaleX !== undefined ? { scaleX: finite(item.scaleX) ? clamp(item.scaleX, .1, 5) : 1 } : {}), ...(item.scaleY !== undefined ? { scaleY: finite(item.scaleY) ? clamp(item.scaleY, .1, 5) : 1 } : {}), ...trackOrigin(item) }, { outlineColor: typeof item.outlineColor === "string" ? item.outlineColor : undefined, outlineWidth: finite(item.outlineWidth) ? item.outlineWidth : undefined, boxColor: typeof item.boxColor === "string" ? item.boxColor : undefined, boxOpacity: finite(item.boxOpacity) ? item.boxOpacity : undefined, animation: item.animation }));
+    .map(item => styleTextLayer({ id: item.id, text: item.text, start: item.start, end: item.end, x: finite(item.x) ? clamp(item.x, 0, 1) : TEXT_DEFAULTS.x, y: finite(item.y) ? clamp(item.y, 0, 1) : TEXT_DEFAULTS.y, fontSize: finite(item.fontSize) ? clamp(item.fontSize, TRACK_LIMITS.minFont, TRACK_LIMITS.maxFont) : TEXT_DEFAULTS.fontSize, color: typeof item.color === "string" && /^#[0-9a-fA-F]{6}$/.test(item.color) ? item.color.toUpperCase() : TEXT_DEFAULTS.color, align: ["left", "center", "right"].includes(item.align) ? item.align : "center", ...(item.scaleX !== undefined ? { scaleX: finite(item.scaleX) ? clamp(item.scaleX, .1, 5) : 1 } : {}), ...(item.scaleY !== undefined ? { scaleY: finite(item.scaleY) ? clamp(item.scaleY, .1, 5) : 1 } : {}), ...trackOrigin(item) }, { outlineColor: typeof item.outlineColor === "string" ? item.outlineColor : undefined, outlineWidth: finite(item.outlineWidth) ? item.outlineWidth : undefined, boxColor: typeof item.boxColor === "string" ? item.boxColor : undefined, boxOpacity: finite(item.boxOpacity) ? item.boxOpacity : undefined, animation: item.animation, font: item.font, accentText: typeof item.accentText === "string" ? item.accentText : undefined, accentColor: typeof item.accentColor === "string" ? item.accentColor : undefined }));
 }
 
 export function normaliseImageLayers(value: unknown): TrackImageLayer[] {
@@ -212,7 +240,7 @@ export function incomingTracks<T>(value: unknown, local: T[], keepWhenMissing: b
   return normalise(value);
 }
 
-type SaveSegment = { id: string; asset: string; start: number; end: number; volume: number; speed?: number; fadeIn?: number; fadeOut?: number; brightness?: number; contrast?: number; saturation?: number; fit?: "cover"; zoom?: number; panX?: number; panY?: number; transition?: string; transitionDuration?: number };
+type SaveSegment = { id: string; asset: string; start: number; end: number; volume: number; speed?: number; fadeIn?: number; fadeOut?: number; brightness?: number; contrast?: number; saturation?: number; fit?: "cover"; zoom?: number; panX?: number; panY?: number; zoomTo?: number; transition?: string; transitionDuration?: number };
 const nonZero = <K extends string>(key: K, value: unknown): Partial<Record<K, number>> => finite(value) && value !== 0 ? { [key]: value } as Record<K, number> : {};
 /** Speed/fade fields at their defaults are omitted so the stored JSON matches older projects. */
 function segmentEffects(segment: SaveSegment) {
@@ -221,7 +249,7 @@ function segmentEffects(segment: SaveSegment) {
 /** Looks and transitions need capabilities.clipStyles (a newer server than speed/fades). */
 function segmentStyles(segment: SaveSegment) {
   return { ...nonZero("brightness", segment.brightness), ...nonZero("contrast", segment.contrast), ...nonZero("saturation", segment.saturation), ...nonZero("panX", segment.panX), ...nonZero("panY", segment.panY),
-    ...(segment.fit === "cover" ? { fit: "cover" as const } : {}), ...(segment.zoom !== undefined && segment.zoom !== 1 ? { zoom: segment.zoom } : {}),
+    ...(segment.fit === "cover" ? { fit: "cover" as const } : {}), ...(segment.zoom !== undefined && segment.zoom !== 1 ? { zoom: segment.zoom } : {}), ...nonZero("zoomTo", segment.zoomTo),
     ...(segment.transition && finite(segment.transitionDuration) && segment.transitionDuration > 0 ? { transition: segment.transition, transitionDuration: segment.transitionDuration } : {}) };
 }
 
@@ -230,7 +258,7 @@ export function saveRequestBody(snapshot: { title: string; ratio: string; segmen
   return {
     revision, title: snapshot.title.trim(), aspectRatio: snapshot.ratio.replace("/", ":"),
     segments: snapshot.segments.map(segment => ({ id: segment.id, assetId: segment.asset, start: segment.start, end: segment.end, volume: segment.volume, ...(clipEffects ? segmentEffects(segment) : {}), ...(clipStyles ? segmentStyles(segment) : {}) })),
-    ...(tracksSupported ? { audioClips: snapshot.audioClips.map(({ fadeIn, fadeOut, ...clip }) => ({ ...clip, ...(clipEffects ? { ...positive("fadeIn", fadeIn), ...positive("fadeOut", fadeOut) } : {}) })), textLayers: snapshot.textLayers.map(({ outlineColor, outlineWidth, boxColor, boxOpacity, animation, ...layer }) => ({ ...layer, text: layer.text.trim(), ...(clipStyles ? styleTextLayer({ ...layer, outlineColor, outlineWidth, boxColor, boxOpacity, animation }, {}) : {}) })) } : {}),
+    ...(tracksSupported ? { audioClips: snapshot.audioClips.map(({ fadeIn, fadeOut, ...clip }) => ({ ...clip, ...(clipEffects ? { ...positive("fadeIn", fadeIn), ...positive("fadeOut", fadeOut) } : {}) })), textLayers: snapshot.textLayers.map(({ outlineColor, outlineWidth, boxColor, boxOpacity, animation, font, accentText, accentColor, ...layer }) => ({ ...layer, text: layer.text.trim(), ...(clipStyles ? styleTextLayer({ ...layer, text: layer.text.trim(), outlineColor, outlineWidth, boxColor, boxOpacity, animation, font, accentText, accentColor }, {}) : {}) })) } : {}),
     ...(imagesSupported ? { imageLayers: (snapshot.imageLayers ?? []).map(layer => ({ ...layer })) } : {}),
   };
 }

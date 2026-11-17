@@ -16,7 +16,7 @@ export function ImageTab(props: { assets: Asset[]; layers: ImageLayer[]; maxLaye
   const full = props.layers.length >= props.maxLayers;
   return <>
     <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" multiple hidden aria-hidden="true" tabIndex={-1} onChange={event => { if (event.target.files) props.onImport(event.target.files); event.target.value = ""; }} />
-    {!props.supported && <p className={`${styles.alert} ${styles.warning}`} role="status">เซิร์ฟเวอร์ยังไม่รองรับรูปภาพ ต้องอัปเดตฐานข้อมูล (migration 028) ก่อน</p>}
+    {!props.supported && <p className={`${styles.alert} ${styles.warning}`} role="status">ระบบยังไม่รองรับรูปภาพในโปรเจกต์ กรุณาลองใหม่ภายหลัง</p>}
     <button className={styles.importButton} disabled={props.busy || !props.supported} onClick={() => input.current?.click()}><ImageIcon /><span><b>นำเข้ารูป / สติกเกอร์ / โลโก้</b><small>PNG (โปร่งใสได้), JPG, WebP · ไม่เกิน 50 MB</small></span></button>
     <small className={styles.muted}>บน timeline {props.layers.length}/{props.maxLayers} ชั้น · ลากรูปลง timeline หรือกด + เพื่อวางที่ตำแหน่งเล่น</small>
     <div className={styles.mediaGrid}>

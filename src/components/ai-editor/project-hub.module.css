@@ -66,3 +66,20 @@
 @media(max-width:850px){.hub{margin:-12px -8px -16px;padding:20px 16px}.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}}
 @media(max-width:480px){.hub{margin:-10px -6px -12px;padding:16px 12px;border-radius:12px}.grid{grid-template-columns:1fr 1fr;gap:10px}.ratios{gap:6px}}
 @media(prefers-reduced-motion:reduce){.skeleton{animation:none}.card{transition:none}}
+
+/* Delete on hover: the trash button sits over the card's cover, outside the card button */
+.cardWrap{position:relative;display:flex;flex-direction:column}
+.cardWrap>.card{flex:1}
+.cardDelete{position:absolute;top:8px;left:8px;display:grid;place-items:center;width:30px;height:30px;padding:0;border-radius:8px;border:1px solid light-dark(#0000001a,#ffffff26);background:light-dark(#ffffffe6,#181a20e6);color:light-dark(#b4232f,#ffb3bd);cursor:pointer;opacity:0;transform:translateY(-2px);transition:opacity .15s,transform .15s,background .15s}
+.cardDelete svg{width:16px;height:16px}
+.cardWrap:hover .cardDelete,.cardDelete:focus-visible{opacity:1;transform:translateY(0)}
+.cardWrap:hover>.card{border-color:var(--hub-hover);transform:translateY(-2px)}
+.cardDelete:hover{background:light-dark(#fdecee,#3a1a20)}
+.cardDelete:focus-visible{outline:2px solid var(--hub-primary);outline-offset:2px}
+/* Touch screens have no hover: keep the button visible */
+@media (hover:none){.cardDelete{opacity:1;transform:none}}
+.dialogActions{display:flex;justify-content:flex-end;gap:8px}
+.secondary{height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--hub-border);background:var(--hub-bg);cursor:pointer}
+.danger{height:40px;padding:0 16px;border:0;border-radius:10px;background:light-dark(#d92d3a,#e5484d);color:#fff;font-weight:500;cursor:pointer}
+.danger:hover{background:light-dark(#b4232f,#d13a40)}
+.secondary:disabled,.danger:disabled{opacity:.6;cursor:wait}

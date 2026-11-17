@@ -48,8 +48,8 @@ export function snapShift(edges: number[], points: number[], threshold: number):
 }
 
 /** Picture adjustment of a segment, matching the server: colour -1..1, zoom 1..3, pan -1..1, fit "" | "cover". */
-export type ClipLook = { brightness?: number; contrast?: number; saturation?: number; fit?: "cover"; zoom?: number; panX?: number; panY?: number };
-export const LOOK_KEYS = ["brightness", "contrast", "saturation", "fit", "zoom", "panX", "panY"] as const;
+export type ClipLook = { brightness?: number; contrast?: number; saturation?: number; fit?: "cover"; zoom?: number; panX?: number; panY?: number; zoomTo?: number};
+export const LOOK_KEYS = ["brightness", "contrast", "saturation", "fit", "zoom", "panX", "panY", "zoomTo"] as const;
 export const LOOK_PRESETS: { id: string; label: string; look: Pick<ClipLook, "brightness" | "contrast" | "saturation"> }[] = [
   { id: "none", label: "ต้นฉบับ", look: {} },
   { id: "vivid", label: "สดใส", look: { contrast: .2, saturation: .45 } },
@@ -65,17 +65,24 @@ export function lookColour(look: ClipLook) {
   return { slope, intercept: .5 * (1 - slope) + offset, saturate: 1 + (look.saturation ?? 0) };
 }
 export const hasColour = (look: ClipLook) => Boolean(look.brightness || look.contrast || look.saturation);
-export const hasFrame = (look: ClipLook) => look.fit === "cover" || (look.zoom ?? 1) !== 1;
+export const hasFrame = (look: ClipLook) => look.fit === "cover" || (look.zoom ?? 1) !== 1 || Boolean(look.zoomTo);
+/** Zoom at progress 0..1 through the clip: zoom → zoomTo with smoothstep easing, like the export's zoomingParts. */
+export function lookZoomAt(look: ClipLook, progress: number) {
+  const from = look.zoom ?? 1;
+  if (!look.zoomTo) return from;
+  const u = clamp(Number.isFinite(progress) ? progress : 0, 0, 1);
+  return from + (look.zoomTo - from) * u * u * (3 - 2 * u);
+}
 
 /**
  * Where the video sits inside the frame, in frame pixels, mirroring the export's scale→pad→crop:
  * scale by min (contain) or max (cover) of the axis ratios × zoom, centre what is smaller than the
  * frame, and offset what overflows by (overflow)·(0.5 + pan/2).
  */
-export function frameRect(look: ClipLook, video: { width: number; height: number }, frame: { width: number; height: number }) {
+export function frameRect(look: ClipLook, video: { width: number; height: number }, frame: { width: number; height: number }, progress = 0) {
   if (!(video.width > 0 && video.height > 0 && frame.width > 0 && frame.height > 0)) return;
   const ratios = [frame.width / video.width, frame.height / video.height];
-  const scale = (look.fit === "cover" ? Math.max(...ratios) : Math.min(...ratios)) * (look.zoom ?? 1);
+  const scale = (look.fit === "cover" ? Math.max(...ratios) : Math.min(...ratios)) * lookZoomAt(look, progress);
   const width = video.width * scale, height = video.height * scale;
   // "+ 0" turns -0 into 0 for the left/top edge.
   const place = (size: number, room: number, pan: number) => (size > room ? -(size - room) * (.5 + pan / 2) : (room - size) / 2) + 0;
@@ -92,6 +99,7 @@ export function patchLook<T extends ClipLook>(item: T, patch: Partial<ClipLook>)
     if (clean === 0) delete next[key]; else next[key] = clean;
   }
   if (next.zoom !== undefined) { const zoom = Math.round(clamp(next.zoom, 1, 3) * 100) / 100; if (zoom === 1) delete next.zoom; else next.zoom = zoom; }
+  if (next.zoomTo !== undefined) { const zoomTo = next.zoomTo ? Math.round(clamp(next.zoomTo, 1, 3) * 100) / 100 : 0; if (!zoomTo || zoomTo === (next.zoom ?? 1)) delete next.zoomTo; else next.zoomTo = zoomTo; }
   if (next.fit !== "cover") delete next.fit;
   return next;
 }
@@ -101,6 +109,9 @@ export const TRANSITIONS = [
   { id: "fade", label: "ครอสเฟด" }, { id: "fadeblack", label: "ผ่านจอดำ" }, { id: "fadewhite", label: "ผ่านจอขาว" },
   { id: "wipeleft", label: "ปาดซ้าย" }, { id: "wiperight", label: "ปาดขวา" }, { id: "slideleft", label: "เลื่อนซ้าย" },
   { id: "slideright", label: "เลื่อนขวา" }, { id: "circleopen", label: "วงกลมเปิด" },
+  { id: "slideup", label: "เลื่อนขึ้น" }, { id: "slidedown", label: "เลื่อนลง" }, { id: "smoothleft", label: "ปัดซ้ายนุ่ม" },
+  { id: "smoothright", label: "ปัดขวานุ่ม" }, { id: "zoomin", label: "ซูมเข้า" }, { id: "hblur", label: "เบลอ" },
+  { id: "pixelize", label: "พิกเซล" }, { id: "fadegrays", label: "เฟดขาวดำ" }, { id: "radial", label: "หมุนกวาด" },
 ] as const;
 export type TransitionType = typeof TRANSITIONS[number]["id"];
 export const MAX_TRANSITION = 2;
@@ -108,7 +119,7 @@ export const MIN_TRANSITION = .1;
 /** Longest transition between two clips: 2 s and half of either, so neighbouring transitions never meet. */
 export const maxTransition = (previous: number, current: number) => Math.min(MAX_TRANSITION, Math.min(previous, current) / 2);
 
-type Layer = { opacity?: number; transform?: string; clipPath?: string; zIndex?: number };
+type Layer = { opacity?: number; transform?: string; clipPath?: string; zIndex?: number; filter?: string };
 /**
  * Preview of xfade at progress p (0 → 1): "from" is the outgoing clip drawn over the
  * incoming one (which plays in the main video), "cover" a black/white flash layer.
@@ -126,8 +137,32 @@ export function transitionFrame(type: string, p: number): { from: Layer; to: Lay
     case "slideright": return { from: { transform: `translateX(${pct(p)})` }, to: { transform: `translateX(${pct(p - 1)})` } };
     // The incoming clip grows from the centre over the outgoing one (70.8% of the reference reaches the corners).
     case "circleopen": return { from: { zIndex: 1 }, to: { clipPath: `circle(${round(p * 70.8)}% at 50% 50%)`, zIndex: 2 } };
+    case "slideup": return { from: { transform: `translateY(${pct(-p)})` }, to: { transform: `translateY(${pct(1 - p)})` } };
+    case "slidedown": return { from: { transform: `translateY(${pct(p)})` }, to: { transform: `translateY(${pct(p - 1)})` } };
+    // smooth*: a soft-edged wipe; the preview approximates it with a moving gradient mask edge.
+    case "smoothleft": return { from: { clipPath: `inset(0 ${pct(p)} 0 0)`, opacity: 1 - p * .3 }, to: {} };
+    case "smoothright": return { from: { clipPath: `inset(0 0 0 ${pct(p)})`, opacity: 1 - p * .3 }, to: {} };
+    // zoomin: the outgoing clip grows towards the centre while it fades out.
+    case "zoomin": return { from: { transform: `scale(${round(1 + p)})`, opacity: 1 - p }, to: {} };
+    case "hblur": return { from: { opacity: 1 - p, filter: `blur(${round(Math.sin(Math.PI * p) * 12)}px)` }, to: { filter: `blur(${round(Math.sin(Math.PI * p) * 12)}px)` } };
+    case "pixelize": return { from: { opacity: p < .5 ? 1 : 0, filter: `blur(${round(Math.sin(Math.PI * p) * 6)}px) contrast(1.4)` }, to: { filter: `blur(${round(Math.sin(Math.PI * p) * 6)}px) contrast(1.4)` } };
+    case "fadegrays": return { from: { opacity: 1 - p, filter: `grayscale(${round(Math.min(1, 2 * p))})` }, to: { filter: `grayscale(${round(Math.max(0, 1 - 2 * (p - .5)))})` } };
+    // radial: a clock-hand sweep; the incoming clip is revealed by a growing conic sector.
+    case "radial": return { from: { zIndex: 1 }, to: { clipPath: sweep(p), zIndex: 2 } };
     default: return { from: { opacity: 1 - p }, to: {} };
   }
+}
+
+/** Polygon covering the sector swept clockwise from 12 o'clock by fraction p of a turn. */
+function sweep(p: number) {
+  if (p >= 1) return "none";
+  const points = ["50% 50%", "50% -50%"];
+  for (let step = 1; step <= 16; step++) {
+    const angle = Math.min(p, step / 16) * 2 * Math.PI;
+    points.push(`${round(50 + 100 * Math.sin(angle))}% ${round(50 - 100 * Math.cos(angle))}%`);
+    if (step / 16 >= p) break;
+  }
+  return `polygon(${points.join(", ")})`;
 }
 
 type Transitioned = { transition?: string; transitionDuration?: number };
@@ -146,4 +181,16 @@ export function fitTransitions<T extends Transitioned>(segments: T[], length: (s
     }
     return duration === segment.transitionDuration ? segment : { ...segment, transitionDuration: duration };
   });
+}
+
+/**
+ * The animated zoom (zoomTo) as a transform of the element laid out at progress 0, so playback
+ * moves it on the compositor instead of re-laying out the video every frame. Use with
+ * transform-origin 0 0; "" when the look has no zoomTo.
+ */
+export function zoomTransform(look: ClipLook, video: { width: number; height: number }, frame: { width: number; height: number }, progress: number) {
+  if (!look.zoomTo) return "";
+  const base = frameRect(look, video, frame, 0), now = frameRect(look, video, frame, progress);
+  if (!base || !now || !base.width) return "";
+  return `translate(${round(now.left - base.left)}px, ${round(now.top - base.top)}px) scale(${Math.round(now.width / base.width * 10000) / 10000})`;
 }

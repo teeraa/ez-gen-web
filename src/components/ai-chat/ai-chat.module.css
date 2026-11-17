@@ -1,0 +1,89 @@
+.ghost{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:10px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer;text-decoration:none;color:var(--c-text)}
+.ghost:hover{border-color:var(--c-primary)}
+.ghost:disabled{opacity:.5;cursor:not-allowed}
+.messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;flex-direction:column;gap:6px;max-width:min(620px,92%)}
+.row[data-role="user"]{align-self:flex-end;align-items:flex-end}
+.bubble{padding:10px 13px;border-radius:14px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.row[data-role="user"] .bubble{background:var(--c-primary);color:#fff;border-bottom-right-radius:4px}
+.row[data-role="assistant"] .bubble{background:var(--c-card-2);border-bottom-left-radius:4px}
+.tools{display:flex;flex-wrap:wrap;gap:4px}
+.tool{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--c-border);color:var(--c-muted)}
+.tool svg{width:12px;height:12px}
+.tool[data-ok="true"] svg{color:var(--c-ok)}
+.tool[data-ok="false"] svg{color:var(--c-danger)}
+.working{display:flex;align-items:center;gap:8px;color:var(--c-muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--c-primary);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.card{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--c-border);border-radius:12px;background:var(--c-card);min-width:min(360px,100%)}
+.card[data-selected]{border-color:var(--c-primary);box-shadow:0 0 0 1px var(--c-primary)}
+.cardHead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:500}
+.status{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--c-card-2);color:var(--c-muted)}
+.status[data-status="applied"],.status[data-status="review"]{color:var(--c-ok)}
+.status[data-status="failed"],.status[data-status="stale"]{color:var(--c-danger)}
+.ops{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:2px;color:var(--c-muted)}
+.ops b{color:var(--c-text);font-weight:500;margin-right:4px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.primary{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border:0;border-radius:10px;background:var(--c-primary);color:#fff;font-weight:500;cursor:pointer}
+.primary:hover{background:var(--c-primary-hover)}
+.primary:disabled{opacity:.55;cursor:not-allowed}
+.progress{height:6px;border-radius:99px;background:var(--c-card-2);overflow:hidden}
+.progress span{display:block;height:100%;background:var(--c-primary);transition:width .3s}
+.muted{color:var(--c-muted);margin:0;font-size:12px}
+.error{margin:0;padding:8px 10px;border-radius:10px;background:light-dark(#fdecee,#3a1a20);color:var(--c-danger);font-size:12px}
+.notice{margin:0 16px;padding:8px 12px;border-radius:10px;background:var(--c-tint);font-size:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.composer{border-top:1px solid var(--c-border);padding:10px;display:flex;flex-direction:column;gap:8px}
+.inputRow{display:flex;gap:8px;align-items:flex-end}
+.inputRow textarea{flex:1;resize:none;min-height:42px;max-height:160px;padding:10px 12px;border-radius:12px;border:1px solid var(--c-border);background:var(--c-bg);outline:0;line-height:1.45}
+.inputRow textarea:focus{border-color:var(--c-primary)}
+.iconButton{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer}
+.iconButton:disabled{opacity:.5;cursor:not-allowed}
+.send{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;border:1px solid var(--c-primary);cursor:pointer;background:var(--c-primary);border-color:var(--c-primary);color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{padding:5px 10px;border-radius:99px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer;font-size:12px}
+.chips button:hover{border-color:var(--c-primary)}
+.empty{margin:auto;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--c-muted);max-width:420px;padding:24px}
+.empty svg{width:30px;height:30px;color:var(--c-primary)}
+.empty b{color:var(--c-text);font-size:15px;font-weight:600}
+.send:disabled{opacity:.5;cursor:not-allowed}
+/* Compact chat inside the editor's library panel (rail tab). */
+.railChat{--c-bg:var(--edit-bg);--c-card:var(--edit-panel);--c-card-2:var(--edit-card);--c-border:var(--edit-border);--c-text:var(--edit-text);--c-muted:var(--edit-muted);--c-primary:var(--edit-primary);--c-primary-hover:var(--edit-primary-hover);--c-tint:var(--edit-tint);--c-ok:var(--edit-ok);--c-danger:var(--edit-danger);display:flex;flex-direction:column;gap:8px;flex:1;min-height:0;font-size:12.5px;color:var(--c-text)}
+.railChat *{box-sizing:border-box}
+.railChat button,.railChat textarea{font:inherit;color:inherit}
+.railChat svg{width:14px;height:14px;flex-shrink:0}
+.railChat .messages{padding:2px 0;gap:10px;min-height:120px}
+.railChat .row{max-width:100%}
+.railChat .card{min-width:0;padding:10px}
+.railChat .composer{padding:8px 0 0;position:sticky;bottom:-12px;background:var(--edit-panel)}
+.railChat .notice{margin:0}
+.railChat .empty{padding:12px 4px}
+.railChat .inputRow textarea{box-sizing:border-box;height:38px;min-height:38px;padding:8px 12px;line-height:20px;overflow-y:hidden}
+.railChat .inputRow textarea[data-scroll]{overflow-y:auto}
+.railChat .iconButton,.railChat .send{box-sizing:border-box;width:38px;height:38px;min-height:38px;padding:0;flex:none}
+.railChat .primary,.railChat .ghost{height:30px;padding:0 10px;font-size:12px}
+
+/* Skeletons while the thread or a job card loads */
+.skeletonStack{display:flex;flex-direction:column;gap:10px}
+.skeleton{display:block;background:linear-gradient(90deg,light-dark(#ececef,#1c1f26) 0%,light-dark(#f8f8fa,#2a2e38) 50%,light-dark(#ececef,#1c1f26) 100%);background-size:200% 100%;animation:chatShimmer 1.3s ease-in-out infinite;border-radius:10px}
+.skUser{height:36px;width:62%;align-self:flex-end}
+.skBubble{height:56px;width:80%}
+.skCard{height:92px;width:100%}
+.skLine{height:14px;width:55%}
+.skBar{height:8px;width:100%;border-radius:999px}
+@keyframes chatShimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.skeleton{animation:none}}
+
+/* Model picker above the input */
+.modelRow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--c-muted,light-dark(#6e6e73,#8d93a3))}
+.modelRow span{flex:none}
+.modelRow select{flex:1;min-width:0;height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-bg);color:inherit;font:inherit;font-size:12px;text-overflow:ellipsis}
+.modelRow select:focus-visible{outline:2px solid var(--c-primary);outline-offset:1px}
+.modelRow select:disabled{opacity:.6}
+.templateLead{font-size:12px;color:var(--c-muted,#888);margin-top:4px}
+.chips button svg{width:13px;height:13px;vertical-align:-2px;margin-right:4px}
+.templates{display:flex;flex-direction:column;gap:4px;max-height:280px;overflow:auto;border:1px solid var(--c-border);border-radius:10px;background:var(--c-card);padding:6px}
+.templates button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:7px 9px;border:0;border-radius:8px;background:none;cursor:pointer;color:inherit}
+.templates button:hover,.templates button:focus-visible{background:var(--c-hover,rgba(127,127,127,.12))}
+.templates b{font-size:13px}
+.templates span{font-size:11.5px;color:var(--c-muted,#888)}
+.templates small{font-size:11px;color:var(--c-muted,#888);padding:2px 9px}

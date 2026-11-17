@@ -122,9 +122,13 @@ try {
     let failMedia = false;
     await context.route(/^https:\/\/(owned|samples)\.test\//, route => failMedia ? route.abort('failed') : route.fulfill({ contentType: 'image/png', body: png }));
     const page = await context.newPage();
-    const errors = [], consoleErrors = [], network = [], createBodies = [], reads = [];
+    const errors = [], consoleErrors = [], network = [], createBodies = [], episodeBodies = [], reads = [];
     let dropCreate = true;
-    await context.route(`${base}/api/proxy/director/projects`, async route => {
+    await context.route(`${base}/api/proxy/director/series/*/episodes`, async route => {
+      if (route.request().method() === 'POST') episodeBodies.push(route.request().postDataJSON());
+      return route.continue();
+    });
+    await context.route(`${base}/api/proxy/director/series`, async route => {
       if (route.request().method() !== 'POST') return route.continue();
       createBodies.push(route.request().postDataJSON());
       if (!dropCreate) return route.continue();
@@ -140,7 +144,7 @@ try {
     page.on('response', response => {
       if (response.url().includes('/api/proxy/director/')) network.push({ method: response.request().method(), path: new URL(response.url()).pathname, status: response.status() });
     });
-    let id;
+    let id, seriesId;
     const project = async () => {
       const response = await context.request.get(`${base}/api/proxy/director/projects/${id}`);
       assert.equal(response.status(), 200);
@@ -174,19 +178,40 @@ try {
       }
       await page.getByRole('button', { name: 'สร้างโปรเจกต์', exact: true }).click();
       await dialog.waitFor();
-      let name = `Director integration ${width} ${Date.now()}`;
-      await dialog.locator('input').first().fill(name);
+      const seriesName = `Director integration ${width} ${Date.now()}`;
+      await dialog.locator('input').first().fill(seriesName);
       assert.equal(await dialog.getByRole('button', { name: /^4k/i }).isDisabled(), true);
-      await dialog.getByRole('button', { name: 'สร้างและเริ่มใส่ไอเดีย', exact: true }).click();
+      await dialog.getByRole('button', { name: 'สร้างโปรเจกต์', exact: true }).click();
       await page.getByRole('button', { name: 'ส่งคำขอเดิมอีกครั้ง', exact: true }).first().waitFor();
       const frozenCreate = structuredClone(createBodies[0]);
       assert.equal(await dialog.locator('input').first().isDisabled(), true);
       await page.reload();
       await page.getByRole('button', { name: 'ส่งคำขอเดิมอีกครั้ง', exact: true }).click();
-      await page.waitForURL(/\/studio\/director\/[^/]+$/);
+      await page.waitForURL(/\/studio\/director\/series\/[^/]+$/);
       assert.deepEqual(createBodies[1], frozenCreate);
+      seriesId = page.url().split('/').pop();
+      console.log(`${width}: series create/drop/reload/replay passed series=${seriesId}`);
+      await page.getByRole('heading', { name: seriesName }).waitFor();
+      await page.getByRole('heading', { name: 'ยังไม่มีตอน', exact: true }).waitFor();
+      await page.screenshot({ path: `${artifacts}/episodes-empty-${width}.png`, fullPage: true });
+      await page.getByRole('button', { name: 'สร้างตอนแรก', exact: true }).click();
+      const episodeDialog = page.getByRole('dialog', { name: 'สร้างตอนใหม่' });
+      await episodeDialog.waitFor();
+      await episodeDialog.locator('input').first().fill('จุดเริ่มต้น');
+      await episodeDialog.getByRole('button', { name: 'สร้างและเริ่มใส่ไอเดีย', exact: true }).click();
+      await page.waitForURL(url => /\/studio\/director\/[^/]+$/.test(url.pathname) && !url.pathname.includes('/series/'));
+      assert.equal(episodeBodies.length, 1);
+      assert.equal(episodeBodies[0].title, 'จุดเริ่มต้น');
       id = page.url().split('/').pop();
-      console.log(`${width}: create/drop/reload/replay passed project=${id}`);
+      const created = await project();
+      assert.equal(created.seriesId, seriesId);
+      assert.equal(created.episodeNumber, 1);
+      assert.equal(created.episodeTitle, 'จุดเริ่มต้น');
+      assert.equal(created.step, 'idea');
+      const crumbs = page.getByRole('navigation', { name: 'เส้นทาง' });
+      await crumbs.getByRole('link', { name: seriesName, exact: true }).waitFor();
+      await crumbs.getByText('ตอนที่ 1: จุดเริ่มต้น', { exact: true }).waitFor();
+      console.log(`${width}: episode create passed project=${id}`);
       await page.getByLabel('ไอเดีย', { exact: false }).first().waitFor();
       await page.locator('#idea-prompt').fill('เด็กน้อยออกเดินทางตามหาดวงดาวที่หายไปในป่ามหัศจรรย์');
       await page.getByRole('button', { name: 'อบอุ่น', exact: true }).click();
@@ -205,8 +230,7 @@ try {
       console.log(`${width}: real 402/refund/cover retry passed`);
       await page.getByText('ภาพปกจาก AI', { exact: true }).waitFor();
       const beforeConflict = await project();
-      name += ' อีกแท็บ';
-      const external = await context.request.patch(`${base}/api/proxy/director/projects/${id}`, { data: { revision: beforeConflict.revision, name } });
+      const external = await context.request.patch(`${base}/api/proxy/director/projects/${id}`, { data: { revision: beforeConflict.revision, name: `${beforeConflict.name} อีกแท็บ` } });
       assert.equal(external.status(), 200);
       await page.locator('#idea-prompt').fill('เด็กน้อยออกเดินทางตามหาดวงดาวที่หายไปในป่ามหัศจรรย์ แล้วพบความกล้า');
       await page.getByRole('alert').filter({ hasText: 'มีการแก้ไขจากอีกแท็บ' }).waitFor();
@@ -214,8 +238,8 @@ try {
       await page.getByRole('button', { name: 'ลองบันทึกอีกครั้ง', exact: true }).click();
       await eventually(project, value => value.idea.prompt.endsWith('แล้วพบความกล้า'), 'explicit conflict retry');
       await page.locator('#idea-prompt').fill('เด็กน้อยออกเดินทางตามหาดวงดาว แล้วพบความกล้าและเพื่อนใหม่');
-      await page.getByRole('link', { name: 'กลับไปหน้าโปรเจกต์', exact: true }).click();
-      await page.waitForURL(`${base}/studio/director`);
+      await page.getByRole('link', { name: 'กลับไปหน้ารายการตอน', exact: true }).click();
+      await page.waitForURL(`${base}/studio/director/series/${seriesId}`);
       await page.locator(`a[href="/studio/director/${id}"]`).click();
       await page.locator('#idea-prompt').waitFor();
       assert.match(await page.locator('#idea-prompt').inputValue(), /เพื่อนใหม่$/);
@@ -332,20 +356,25 @@ try {
       assert.equal(await page.getByRole('button', { name: /^สร้างภาพใหม่จากคำบรรยายนี้/ }).isDisabled(), true);
       await page.screenshot({ path: `${artifacts}/unavailable-${width}.png`, fullPage: true });
       await context.unroute(`${base}/api/proxy/director/capabilities`, capsUnavailable);
-      await page.getByRole('link', { name: 'กลับไปหน้าโปรเจกต์', exact: true }).click();
-      await page.getByRole('textbox', { name: 'ค้นหาโปรเจกต์', exact: true }).fill(name);
-      await page.getByRole('heading', { name, exact: true }).waitFor();
+      await page.getByRole('navigation', { name: 'เส้นทาง' }).getByRole('link', { name: seriesName, exact: true }).click();
+      await page.waitForURL(`${base}/studio/director/series/${seriesId}`);
       page.once('dialog', dialog => dialog.accept());
-      await page.getByRole('button', { name: `ลบ ${name}`, exact: true }).click();
-      await page.getByRole('heading', { name: 'ไม่พบโปรเจกต์', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'ลบ ตอนที่ 1', exact: true }).click();
+      await page.getByRole('heading', { name: 'ยังไม่มีตอน', exact: true }).waitFor();
       assert.equal((await context.request.get(`${base}/api/proxy/director/projects/${id}`)).status(), 404);
-      observations.push({ width, id, computed, errors, consoleErrors, network, reads, createBodies, characters, boundary: 'Next production + real Go/isolated PostgreSQL; fake analysis/image/storage/auth, injected broken media and one network disconnect after real create acceptance' });
+      await page.getByRole('button', { name: 'ตั้งค่าโปรเจกต์', exact: true }).click();
+      page.once('dialog', dialog => dialog.accept());
+      await page.getByRole('dialog', { name: 'ตั้งค่าโปรเจกต์' }).getByRole('button', { name: 'ลบโปรเจกต์', exact: true }).click();
+      await page.waitForURL(`${base}/studio/director`);
+      assert.equal((await context.request.get(`${base}/api/proxy/director/series/${seriesId}`)).status(), 404);
+      observations.push({ width, id, seriesId, computed, errors, consoleErrors, network, reads, createBodies, episodeBodies, characters, boundary: 'Next production + real Go/isolated PostgreSQL; fake analysis/image/storage/auth, injected broken media and one network disconnect after real create acceptance' });
     } catch (error) {
       await page.screenshot({ path: `${artifacts}/failure-${width}.png`, fullPage: true }).catch(() => {});
       fs.writeFileSync(`${artifacts}/failure-${width}.json`, JSON.stringify({ error: error.stack, errors, consoleErrors, network }, null, 2));
       throw error;
     } finally {
       if (id) await context.request.delete(`${base}/api/proxy/director/projects/${id}`);
+      if (seriesId) await context.request.delete(`${base}/api/proxy/director/series/${seriesId}`);
       await context.close();
     }
   }

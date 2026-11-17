@@ -35,8 +35,18 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
   const isMultipart = contentType.includes("multipart/form-data")
 
   const isEditorUpload = req.method === "POST" && /^video-editor\/projects\/[^/]+\/assets$/.test(path)
+  const isChatStream = req.method === "POST" && /^video-editor\/projects\/[^/]+\/ai-chat\/messages$/.test(path)
+  // Chunked uploads: raw bytes (never decoded as text), one 5 MiB chunk per request.
+  const isUploadChunk = req.method === "PUT" && /^video-editor\/projects\/[^/]+\/uploads\/[^/]+\/chunks\/\d+$/.test(path)
   let body: BodyInit | undefined
-  if (isEditorUpload) {
+  if (isUploadChunk) {
+    const maxChunk = 6 * 1024 * 1024
+    if (Number(req.headers.get("content-length")) > maxChunk) return NextResponse.json({code:"FILE_TOO_LARGE",message:"ส่วนของไฟล์ใหญ่เกินกำหนด"},{status:413})
+    const bytes = await req.arrayBuffer()
+    if (bytes.byteLength > maxChunk) return NextResponse.json({code:"FILE_TOO_LARGE",message:"ส่วนของไฟล์ใหญ่เกินกำหนด"},{status:413})
+    body = bytes
+    headers["Content-Type"] = "application/octet-stream"
+  } else if (isEditorUpload) {
     const maxBody = 55 * 1024 * 1024
     if (!isMultipart) return NextResponse.json({code:"INVALID_FILE_TYPE",message:"กรุณาส่งไฟล์วิดีโอ"},{status:422})
     if (Number(req.headers.get("content-length")) > maxBody) return NextResponse.json({code:"FILE_TOO_LARGE",message:"ไฟล์มีขนาดใหญ่เกินกำหนด"},{status:413})
@@ -75,7 +85,12 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
       body,
       cache: "no-store",
       ...(isEditorUpload ? { signal: AbortSignal.timeout(145000) } : {}),
+      ...(isChatStream ? { signal: req.signal } : {}),
     })
+    // AI chat replies stream as server-sent events; pass them through unbuffered.
+    if (isChatStream && upstream.ok && (upstream.headers.get("content-type") ?? "").includes("text/event-stream") && upstream.body) {
+      return new NextResponse(upstream.body, { status: upstream.status, headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" } })
+    }
     const responseHeaders = new Headers()
     for (const name of ["ETag", "Retry-After"]) {
       const value = upstream.headers.get(name)

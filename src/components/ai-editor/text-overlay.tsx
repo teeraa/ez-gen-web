@@ -1,10 +1,19 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import styles from "./ai-editor.module.css";
-import { clampedTextBox, textAnimationAt, textPlacement, textShadow, textStylePreview, transformTextGeometry, type TextGeometry, type TrackTextLayer } from "./tracks";
+import { HEAVY_FONT_FAMILY, accentRuns, clampedTextBox, textAnimationAt, textPlacement, textShadow, textStylePreview, transformTextGeometry, type TextGeometry, type TrackTextLayer } from "./tracks";
 
 type Mode = "move" | "width" | "height" | "both";
+
+// Kanit ExtraBold (SIL OFL, public/fonts/OFL-kanit.txt) is registered once, on first use, from the
+// same file the export burns in, so the preview matches it.
+let heavyFont: Promise<unknown> | undefined;
+function loadHeavyFont() {
+  if (typeof document === "undefined" || typeof FontFace === "undefined" || !document.fonts) return Promise.resolve();
+  heavyFont ??= new FontFace("EZ Kanit Heavy", "url(/fonts/kanit-extrabold.ttf)", { weight: "800" }).load().then(face => { document.fonts.add(face); }).catch(() => { heavyFont = undefined; });
+  return heavyFont;
+}
 type Gesture = { pointer: number; x: number; y: number; mode: Mode; layer: TrackTextLayer; next: TextGeometry | null };
 
 export function TextOverlay({ layer, frame, selected, disabled, resizable, time, onSelect, onCommit }: {
@@ -16,18 +25,26 @@ export function TextOverlay({ layer, frame, selected, disabled, resizable, time,
   const [draft, setDraft] = useState<TextGeometry | null>(null);
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   const place = textPlacement(layer, frame.height);
+  // The heavy font arrives after first paint; measure again once it has loaded.
+  const [fontEpoch, setFontEpoch] = useState(0);
+  useEffect(() => {
+    if (layer.font !== "heavy") return;
+    let live = true;
+    void loadHeavyFont().then(() => { if (live) setFontEpoch(value => value + 1); });
+    return () => { live = false; };
+  }, [layer.font]);
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
     const width = element.offsetWidth, height = element.offsetHeight;
     setBox(previous => previous && previous.width === width && previous.height === height ? previous : { width, height });
-  }, [layer.text, place.fontSize, frame.width, frame.height]);
+  }, [layer.text, layer.font, layer.accentText, fontEpoch, place.fontSize, frame.width, frame.height]);
   const geometry = draft ?? layer;
   const scaleX = geometry.scaleX ?? 1, scaleY = geometry.scaleY ?? 1;
   const size = box ? { width: box.width * scaleX, height: box.height * scaleY } : null;
   const position = size && frame.width > 0 ? clampedTextBox(geometry, size, frame) : undefined;
   // While selected for editing, show the text fully so its animation never hides what is being edited.
-  const motion = selected ? { opacity: 1, rise: 0 } : textAnimationAt(layer, time);
+  const motion = selected ? { opacity: 1, rise: 0, scale: 1 } : textAnimationAt(layer, time);
   function start(event: PointerEvent<HTMLDivElement>) {
     if (disabled || !box || !frame.width || !frame.height || event.button !== 0 || !event.isPrimary) return;
     event.preventDefault(); event.stopPropagation();
@@ -46,7 +63,7 @@ export function TextOverlay({ layer, frame, selected, disabled, resizable, time,
   }
   return <div className={styles.textOverlay} data-selected={selected || undefined} data-text-layer={layer.id}
     role="group" tabIndex={disabled ? -1 : 0} aria-label={`ข้อความบนพรีวิว ${layer.text}`} aria-disabled={disabled || undefined}
-    style={{ left: position?.left ?? 0, top: (position?.top ?? 0) + motion.rise * frame.height, width: size?.width, height: size?.height, visibility: position ? undefined : "hidden", opacity: motion.opacity, fontSize: place.fontSize, color: layer.color }}
+    style={{ left: position?.left ?? 0, top: (position?.top ?? 0) + motion.rise * frame.height, width: size?.width, height: size?.height, visibility: position ? undefined : "hidden", opacity: motion.opacity, ...(motion.scale !== 1 ? { transform: `scale(${motion.scale})`, transformOrigin: "center" } : {}), fontSize: place.fontSize, color: layer.color, ...(layer.font === "heavy" ? { fontFamily: HEAVY_FONT_FAMILY, fontWeight: 800 } : {}) }}
     onFocus={() => { if (!disabled) onSelect(); }} onPointerDown={start}
     onPointerMove={event => {
       const current = gesture.current;
@@ -64,7 +81,7 @@ export function TextOverlay({ layer, frame, selected, disabled, resizable, time,
       const delta = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -2 : 2;
       onCommit(transformTextGeometry(layer, box, frame, horizontal ? delta : 0, horizontal ? 0 : delta, event.shiftKey && resizable ? horizontal ? "width" : "height" : "move"));
     }}>
-    <span ref={ref} className={styles.textGlyphs} style={{ transform: `scale(${scaleX}, ${scaleY})`, textAlign: layer.align, textShadow: textShadow(frame.height), ...textStylePreview(layer, frame.height) }}>{layer.text}</span>
+    <span ref={ref} className={styles.textGlyphs} style={{ transform: `scale(${scaleX}, ${scaleY})`, textAlign: layer.align, textShadow: textShadow(frame.height), ...textStylePreview(layer, frame.height) }}>{accentRuns(layer.text, layer.accentColor ? layer.accentText : undefined).map((run, index) => run.accent ? <span key={index} style={{ color: layer.accentColor }}>{run.text}</span> : run.text)}</span>
     {selected && !disabled && resizable && <>
       <span className={styles.textResize} data-resize="width" title="ลากเพื่อปรับความกว้าง" />
       <span className={styles.textResize} data-resize="height" title="ลากเพื่อปรับความสูง" />

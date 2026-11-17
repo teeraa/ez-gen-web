@@ -1252,7 +1252,9 @@
   font-size: 13px;
 }
 .playerTop button,
-.playerNav button {
+.playerNav button,
+.playerNav a {
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1268,7 +1270,8 @@
   font-size: 13px;
 }
 .playerTop button:hover,
-.playerNav button:hover {
+.playerNav button:hover,
+.playerNav a:hover {
   background: rgb(255 255 255 / 0.2);
 }
 .playerTop svg,
@@ -1384,5 +1387,156 @@
   .actionBar {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+/* Series hub, episodes page and shared card actions (2026-11-08). */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sectionHead h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+ol.projects {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+ol.projects > li > .newProject {
+  width: 100%;
+  height: 100%;
+}
+.cardWrap {
+  position: relative;
+  min-width: 0;
+}
+.cardActions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+.cardActions .projectMenu {
+  position: static;
+  width: 36px;
+  height: 36px;
+}
+.cardWrap:hover .projectMenu,
+.cardWrap:focus-within .projectMenu {
+  opacity: 1;
+}
+.episodeNo {
+  font-variant-numeric: tabular-nums;
+}
+.emptyBlock {
+  width: 100%;
+  max-width: none;
+  padding: 36px 16px;
+  border: 1.5px dashed var(--wb-border);
+  border-radius: 16px;
+}
+.modalSmall {
+  width: min(100%, 460px);
+}
+.formError {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: light-dark(#fdecec, #3a1d1d);
+  color: light-dark(#b42318, #ffb4ab);
+  font-size: 13px;
+}
+.ratioOptions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.dangerBtn {
+  color: light-dark(#b42318, #ff8a80);
+}
+.spacer {
+  flex: 1;
+}
+.seriesHead {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 32px;
+  color: var(--wb-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.backLink:hover {
+  color: var(--wb-text);
+}
+.backLink svg {
+  width: 15px;
+  height: 15px;
+}
+.seriesTitleRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.seriesTitle {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.seriesTitle h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+  min-width: 0;
+}
+.seriesTitle h1 span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seriesTitle h1 svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--wb-primary);
+}
+.seriesTitle p {
+  margin: 4px 0 0;
+  color: var(--wb-muted);
+}
+@media (max-width: 480px) {
+  .ratioOptions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .seriesTitle h1 {
+    font-size: 20px;
+  }
+  .modalActions {
+    flex-wrap: wrap;
+  }
+  .spacer {
+    display: none;
   }
 }

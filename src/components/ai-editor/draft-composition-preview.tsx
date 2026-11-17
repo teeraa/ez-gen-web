@@ -3,7 +3,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {Pause, Play, SkipBack} from "lucide-react";
 import type {AiDraft} from "@/lib/video-editor-ai-api";
 import type {Asset, AudioClip, TextLayer} from "./use-editor-project";
-import {playbackTimeline, playbackWindowAt, connectMediaPlayback} from "./media-playback";
+import {playbackTimeline, playbackWindowAt, connectMediaPlayback, segmentSpeed} from "./media-playback";
 import {previewCompositionTracks} from "./ai-composition";
 import {TextOverlay} from "./text-overlay";
 import {useAudioPreview} from "./use-audio-preview";
@@ -18,10 +18,10 @@ export function DraftCompositionPreview({draft,assets,ratio,manualAudio,manualTe
   const total=timeline.at(-1)?.timelineEnd??0,current=playbackWindowAt(timeline,time),asset=assets.find(asset=>asset.id===current?.assetId);
   const audio=useMemo(()=>previewCompositionTracks(manualAudio,draft.audioClips).map(item=>({...item,url:assets.find(asset=>asset.id===item.assetId)?.url})),[manualAudio,draft.audioClips,assets]);
   const texts=previewCompositionTracks(manualText,draft.textLayers);
-  const currentId=current?.id,start=current?.start??0,end=current?.end??0,at=current?.at??0,until=current?.timelineEnd??0,volume=current?.volume??1,url=asset?.url;
+  const currentId=current?.id,start=current?.start??0,end=current?.end??0,at=current?.at??0,until=current?.timelineEnd??0,volume=current?.volume??1,speed=current?segmentSpeed(current):1,url=asset?.url;
   useEffect(()=>{position.current=time;},[time]);
   useEffect(()=>{const element=frame.current;if(!element)return;const observer=new ResizeObserver(([entry])=>setSize({width:entry.contentRect.width,height:entry.contentRect.height}));observer.observe(element);return()=>observer.disconnect();},[]);
-  useEffect(()=>{const element=video.current;if(!element||!url)return;element.volume=volume;return connectMediaPlayback(element,{start,end,at,timelineEnd:until},position.current,playing,true,value=>{position.current=value;setTime(value);},()=>{if(until>=total)setPlaying(false);},()=>{setPlaying(false);setError("เล่นฉบับร่างไม่ได้ กรุณาตรวจไฟล์สื่อแล้วลองอีกครั้ง");});},[currentId,url,start,end,at,until,volume,playing,seek,total]);
+  useEffect(()=>{const element=video.current;if(!element||!url)return;element.volume=volume;return connectMediaPlayback(element,{start,end,at,timelineEnd:until,speed},position.current,playing,true,value=>{position.current=value;setTime(value);},()=>{if(until>=total)setPlaying(false);},()=>{setPlaying(false);setError("เล่นฉบับร่างไม่ได้ กรุณาตรวจไฟล์สื่อแล้วลองอีกครั้ง");});},[currentId,url,start,end,at,until,volume,speed,playing,seek,total]);
   useAudioPreview(audio,playing,time,seek,total,()=>setError("เบราว์เซอร์ยังเล่นเสียงประกอบไม่ได้ กดเล่นอีกครั้งหรือตรวจไฟล์เสียง"));
   function seekTo(value:number){position.current=value;setTime(value);setSeek(previous=>previous+1);}
   return <section className={styles.compositionPreview} aria-label="พรีวิวฉบับตัดต่อ AI">

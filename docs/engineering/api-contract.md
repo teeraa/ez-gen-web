@@ -614,10 +614,23 @@ Capability `clipEffects: true` (absent on older backends) gates every field belo
 
 - Capability `clipStyles: true` gates segment looks, transitions and text styles; the web client never sends them otherwise (older servers would drop them silently).
 - Segment look (all optional, flat on the segment): `brightness`/`contrast`/`saturation` −1..1 → FFmpeg `eq` brightness·0.3, contrast 1+c/2, saturation 1+s (−1 = greyscale); `fit: "cover"` fills by cropping (default letterbox); `zoom` 1..3; `panX`/`panY` −1..1 pick the visible part (−1 = left/top). Preview uses an SVG filter with the same formula and the same scale→pad→crop geometry.
-- Segment `transition` (`fade`, `fadeblack`, `fadewhite`, `wipeleft`, `wiperight`, `slideleft`, `slideright`, `circleopen`) with `transitionDuration` 0.1..2 s, at most half of this and the previous segment; never on the first. The segment starts that much earlier, so the total is Σ(timeline lengths) − Σ(transitions). Export: `xfade` + `acrossfade` (tri), `concat` where a clip has none; with no transitions the legacy single `concat` is unchanged.
-- Text style: `outlineWidth` 0..20 px@1080 with `outlineColor`; `boxOpacity` 0..1 with `boxColor` (box padding = round(0.3·font px) + outline); `animation` `fade` | `slide` (0.3 s or a third of short layers; slide rises 4% of the height). Style is painted outside the measured text box, so clamping is unchanged.
+- Segment `zoomTo` (optional, 1..3, 0/absent = none): the zoom moves from `zoom` (default 1) to `zoomTo` over the segment's played length with smoothstep easing u²(3−2u); the export rescales every frame onto the w×h canvas exactly like the static scale→pad→crop (centre what is smaller, pan what overflows), and the Web preview uses the same curve.
+- Segment `transition` (`fade`, `fadeblack`, `fadewhite`, `wipeleft`, `wiperight`, `slideleft`, `slideright`, `circleopen`, `slideup`, `slidedown`, `smoothleft`, `smoothright`, `zoomin`, `hblur`, `pixelize`, `fadegrays`, `radial`) with `transitionDuration` 0.1..2 s, at most half of this and the previous segment; never on the first. The segment starts that much earlier, so the total is Σ(timeline lengths) − Σ(transitions). Export: `xfade` + `acrossfade` (tri), `concat` where a clip has none; with no transitions the legacy single `concat` is unchanged.
+- Text style: `outlineWidth` 0..20 px@1080 with `outlineColor`; `boxOpacity` 0..1 with `boxColor` (box padding = round(0.3·font px) + outline); `accentText` (a phrase inside one line, ≤100 chars, every occurrence; dropped on save when no longer in the text) with `accentColor` #RRGGBB draws that phrase in a second colour; the box has rounded corners of radius min(0.6·font px, half the box) on its outer edge (export rasterizes boxed or accented layers with the same pad/position as drawtext); `font` absent | `heavy` (bundled Kanit ExtraBold, SIL OFL; the Web preview loads the same file from `/fonts/kanit-extrabold.ttf`, and when the configured `FFMPEG_FONT_FILE` is missing or cannot draw Thai text the export falls back to bundled Kanit Regular); `animation` `fade` | `slide` | `pop` (pop also grows from 60% with an 18% overshoot around the text centre: scale = 0.6+0.4u+0.18·sin(πu), u = entrance progress; 0.3 s or a third of short layers; slide rises 4% of the height). Style is painted outside the measured text box, so clamping is unchanged.
 - Image layers (capability `imageLayers: true`, requires **migration 028**): assets of kind `image` (PNG/JPEG/WebP stills ≤ 4096 px, decoded on upload); `Project.imageLayers: {id, assetId, start, end, x, y, width, opacity}[]` max 20 — centre x/y 0..1, width 0.02..1 of the frame width, opacity 0.05..1. Overlaid under text; clipped to the video like text.
 - Ripple delete (client only): deleting a video clip shifts later audio/text/image items left by the amount the video got shorter.
+
+### Video editor AI tools and instruction edits (2026-11-08)
+
+> Owner: Agent E (API Contract Specialist). Added by nextjs_fe_developer under the 2026-11-08 AI editor task; Agent E to confirm. Authoritative backend text: `ez-gen-api/docs/engineering/video-editor-ai-api-contract.md` ("Instruction edits").
+
+- **Draft effects.** `AiDraftSegment` carries the same optional fields as a timeline segment: `speed, fadeIn, fadeOut, transition, transitionDuration, brightness, contrast, saturation, fit, zoom, panX, panY` (omitted/zero = unchanged). `PUT /ai-jobs/:id/draft` accepts them and `POST /ai-jobs/:id/apply` copies them. The draft view shows Thai badges per scene; removing one deletes those fields and is a draft edit that must be saved before apply.
+- **Capability.** `GET /ai-capabilities` adds `instructionEdits?: boolean` (absent = false). The web hides the instruction UI unless it is `true`.
+- **`POST /projects/:id/ai-edits/preview`** body `{instruction: 1–500 runes (trimmed), revision}` → `200 {data:{baseRevision, summary, operations:[{tool,target,description}], proposal:{title,aspectRatio,segments,audioClips,textLayers,imageLayers?}}}`. Never saves. `proposal.imageLayers` is omitted when the server lacks image-layer support; the client keeps it omitted.
+- **Apply** = the existing `PUT /projects/:id` with `{...proposal, revision: baseRevision}`, under the same save lock as manual save. 409 `REVISION_CONFLICT` → reload the project (or show keep-local / load-latest when the timeline is dirty) and ask for a new preview.
+- **Errors (Thai copy per code in `src/components/ai-editor/ai-edit-rules.ts`):** 400 `VALIDATION_ERROR`; 404 `NOT_FOUND`; 409 `REVISION_CONFLICT`; 422 `AI_EDIT_NO_CHANGES`, `AI_INVALID_RESULT`, `AI_INPUT_TOO_LARGE`; 429 `AI_RATE_LIMITED` (provider quota or a preview already in flight), `AI_DAILY_LIMIT` (50 previews/user/UTC day); 503 `AI_UNAVAILABLE`, `MEDIA_UNAVAILABLE`, `AI_PROVIDER_UNAVAILABLE`. Unknown 4xx codes show the server's sanitized message.
+- **Privacy.** Before sending, the panel states that the instruction, timeline description, asset names and on-screen text go to the external AI provider (no frames, video or transcripts), with `cloudNotice` and the terms link.
+- Client/types: `src/lib/video-editor-ai-api.ts` (`previewEdit`, `parseAiEditPreview`); state `src/components/ai-editor/use-instruction-edit.ts`; UI `ai-instruction-panel.tsx`; tests `tests/ai-edit-rules.test.mjs`, browser script `tests/video-editor-ai-instruction.browser.mjs`.
 
 ### Director API handoff (2026-11-04)
 
@@ -662,3 +675,66 @@ every 30s and after paid Director actions). Scenes carry an editable `setting`. 
 Director polling backs off (2s → 15s) while the project is unchanged, and failed media
 loads only refresh signed URLs that are about to expire. Verification status and fixture boundaries are
 recorded in the workspace task `docs/engineering/tasks/director-web-20261104.md`.
+
+### Director series & episodes (2026-11-08)
+
+Backend authority: the "Series & episodes" section of the
+[Director contract](../../../ez-gen-api/docs/engineering/director-api-contract.md).
+Task record: coordinator workspace `tasks/2026-11-08-director-series-episodes.md` (fixed wire contract).
+A Director "project" in the UI (โปรเจกต์) is now a **series**; each existing
+`director_projects` row is one **episode** and keeps every existing project endpoint.
+
+All paths are under `/open/v1/director` (browser: `/api/proxy/director/*`), JWT,
+user-scoped (another user's id → 404 with the same not-found code as projects),
+camelCase, envelope `{data, requestId}`, errors `{code, message, requestId}`.
+
+```typescript
+interface DirectorSeries {
+  id: string; revision: number; name: string; aspectRatio: string; style: string; resolution: string;
+  characterAssetIds: string[]; episodeCount: number;
+  coverImageUrl: string | null; coverImageExpiresAt: string | null; // RFC3339
+  createdAt: string; updatedAt: string;
+}
+type DirectorSeriesDetail = DirectorSeries & { episodes: DirectorSummary[] }; // episodeNumber asc
+// DirectorSummary and DirectorProject gain (null for legacy standalone projects):
+//   seriesId: string | null; episodeNumber: number | null; episodeTitle: string | null
+```
+
+| Method | Path | Body | Success | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/series` | `{name, aspectRatio, style, resolution, characterAssetIds?, idempotencyKey(uuid)}` | 201 `DirectorSeries` | Same idempotency semantics as `POST /projects` |
+| GET | `/series?page=1&limit=20` | — | 200 `{items: DirectorSeries[], total, page, limit}` | `limit` max 50, newest `updatedAt` first |
+| GET | `/series/:id` | — | 200 `DirectorSeriesDetail` | Episodes ordered by `episodeNumber` asc |
+| PATCH | `/series/:id` | `{revision, name?, aspectRatio?, style?, resolution?, characterAssetIds?}` | 200 `DirectorSeries` | Stale revision → 409 `REVISION_CONFLICT` (same shape as projects). Changing defaults does not rewrite existing episodes |
+| DELETE | `/series/:id` | — | 204 | Any episode with a busy job → 409 `SERIES_BUSY`; otherwise soft-deletes the series and all its episodes |
+| POST | `/series/:id/episodes` | `{title?(0–120), idempotencyKey(uuid)}` | 201 `DirectorProject` | Above 999 episodes → 409 `EPISODE_LIMIT`; `episodeNumber` = max+1; `name` = `"<series name> ตอนที่ N"` (or title); aspectRatio/style/resolution and `idea.characterAssetIds` copied from the series; `step` = `"idea"` |
+
+Changes to existing project endpoints:
+
+- `GET /projects` now returns only standalone projects (`seriesId` null).
+- `GET/PATCH/DELETE /projects/:id` work for episodes too. `PATCH` accepts
+  `episodeTitle?` (0–120) for episodes, with the usual `revision`.
+- Validation: series name 1–120, episode title 0–120, existing style/ratio/resolution enums.
+- Story context: an episode's story planner receives the series name, the episode
+  number/title and up to 5 earlier episodes' number + title + logline as descriptive
+  context (within the existing budget).
+
+Web usage (`src/lib/director-api.ts`): `listSeries`, `createSeries`, `getSeries`,
+`updateSeries`, `removeSeries`, `createEpisode`. Create calls keep the immutable
+UUID-keyed submission (`create-series`, `series:<id>:episode` scopes) until a
+definitive response, like project create. Episode rename on the Episodes page reads
+`GET /projects/:id` for the current `revision` (summaries carry none) before
+`PATCH /projects/:id {revision, episodeTitle}`. `SERIES_BUSY` and `EPISODE_LIMIT` are shown
+as Thai explanations with the request id; the Episodes page disables "สร้างตอนใหม่" once the
+next number would exceed 999. Series name inputs allow 120 characters (project names stay 80).
+Inside an episode, the Idea settings panel and header menu edit `episodeTitle`, not `name`.
+The hub loads series, standalone projects and capabilities independently, each with its own retry.
+
+
+#### Series mode — เมนูสร้างหนัง (2026-11-12)
+
+`DirectorSeries.mode` is `"director"` or `"film"` (backend contract: Director series section, Mode). `/studio/director` lists `GET /series?mode=director`; `/studio/film` lists `GET /series?mode=film` and creates with `POST /series { mode: "film", ... }`, then immediately `POST /series/:id/episodes` for episode 1 (separate idempotency scope `film-series:<id>:episode`) and opens `/studio/film/<seriesId>/<episodeId>`. If episode 1 fails, the user lands on `/studio/film/<seriesId>` where the pending request can be resent. The episode chat content is still a UI mock.
+
+#### สร้างหนัง episode workspace (2026-11-12, phase 2)
+
+`/studio/film/<seriesId>/<episodeId>` uses `src/lib/film-api.ts` against `/open/v1/film/*` (backend contract: `ez-gen-api/docs/engineering/film-api-contract.md`). Elements tab: list/create (optional library asset)/edit/delete, `POST /elements/:id/image` with `generate` or, for realistic/cinematic characters, `prepare` (faceless reference). Shots tab: local drafts saved with `PUT /episodes/:id/shots` (revision), per-shot `POST .../shots/:shot/video` with the selected model; video buttons are disabled while drafts are unsaved, the shot lacks an action, or a referenced element is not `prepared`. Paid POSTs keep their idempotency key via `director-submission` scopes `film-video:<shotId>`, `film-image:<elementId>`, `film-element:<seriesId>:<kind>`. The page polls `GET /episodes/:id` every 4 s while an image or video is queued/processing. The chat column is a static guide until phase 3; `film-studio.tsx`/`film-data.ts` (concept mock) are no longer routed.

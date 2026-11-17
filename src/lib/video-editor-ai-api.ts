@@ -1,4 +1,4 @@
-import {EditorApiError, type EditorProject, type EditorTextLayer, type EditorAudioClip} from "./video-editor-api";
+import {EditorApiError, type EditorProject, type EditorTextLayer, type EditorAudioClip, type EditorImageLayer, type EditorRatio, type EditorSegment} from "./video-editor-api";
 
 export type AiStyle = "warm" | "fun" | "minimal" | "professional";
 export type AiAudioMode = "keep" | "low" | "mute";
@@ -7,13 +7,17 @@ export interface AiCapabilities {
   autoCompose?: boolean; available: boolean; unavailableReason: string; transcriptionAvailable: boolean; analysisAvailable: boolean;
   maxAssets: number; maxSourceDuration: number; maxFrames: number; maxTargetDuration: number; maxSegments: number;
   maxJobsPerDay: number; maxCloudCalls: number; cloudNotice: string; connectionMode: "configured" | "fixture";
+  /** Missing on older servers: treated as false. */
+  instructionEdits?: boolean;
   supportedOptions: {removeSilence: boolean; filler: boolean; shaky: boolean; subtitles: boolean; music: boolean};
 }
 export interface AiTranscriptRefinement {text: string; segments: {segmentIndex: number; text: string; uncertain: boolean}[]}
 export interface AiTranscript {refinement?: AiTranscriptRefinement | null; assetId: string; language: string; text: string; hasSpeech: boolean; segments: {start: number; end: number; text: string; words: {start: number; end: number; text: string}[]}[]}
 export interface AiVisual {assetId: string; summary: string; frames: {time: number; description: string}[]}
 export interface AiConcept {id: string; title: string; summary: string; duration: number; durationReason?: string}
-export interface AiDraftSegment {id: string; assetId: string; start: number; end: number; volume: number; title: string; reason: string; evidenceId: string}
+/** Same optional fields and meaning as a timeline segment; omitted/zero means unchanged. */
+export interface AiSegmentEffects {speed?: number; fadeIn?: number; fadeOut?: number; transition?: string; transitionDuration?: number; brightness?: number; contrast?: number; saturation?: number; fit?: "cover"; zoom?: number; panX?: number; panY?: number; zoomTo?: number}
+export interface AiDraftSegment extends AiSegmentEffects {id: string; assetId: string; start: number; end: number; volume: number; title: string; reason: string; evidenceId: string}
 export interface AiDraft {revision: number; duration: number; segments: AiDraftSegment[]; durationReason?: string; textLayers?: EditorTextLayer[]; audioClips?: EditorAudioClip[]; compositionNotes?: string[]}
 export interface AiJob {
   id: string; projectId: string; sourceRevision: number; phase: "analysis" | "planning"; status: AiStatus; stage: string;
@@ -24,6 +28,13 @@ export interface AiJob {
 }
 export interface AiCreateRequest {requestId: string; revision: number; assetIds: string[]; brief: string; targetDuration: number; style: AiStyle; audioMode: AiAudioMode; removeSilence: boolean; cloudConsent: true; autoCompose?: boolean}
 export interface AiApplyRequest {requestId: string; revision: number; draftRevision: number; approvedSegmentIds: string[]}
+export interface AiEditOperation {tool: string; target: string; description: string}
+/**
+ * Exactly the PUT /projects/:id body (minus revision) that applying the preview sends. imageLayers is absent
+ * when the server lacks image-layer support; sending the proposal as-is then omits it and keeps stored layers.
+ */
+export interface AiEditProposal {title: string; aspectRatio: EditorRatio; segments: EditorSegment[]; audioClips: EditorAudioClip[]; textLayers: EditorTextLayer[]; imageLayers?: EditorImageLayer[]}
+export interface AiEditPreview {baseRevision: number; summary: string; operations: AiEditOperation[]; proposal: AiEditProposal}
 const base = "/api/proxy/video-editor";
 const statuses = new Set<string>(["queued", "processing", "awaiting_concept", "review", "applied", "failed", "cancelled"]);
 function object(value: unknown): value is Record<string, unknown> {return Boolean(value) && typeof value === "object";}
@@ -76,9 +87,22 @@ export function parseAiJob(value: unknown): AiJob {
   if (value.draft !== null && (!object(value.draft) || !Array.isArray(value.draft.segments) || typeof value.draft.revision !== "number" || !validDurationReason(value.draft.durationReason) || !validComposition(value.draft))) throw new EditorApiError("ข้อมูลฉบับร่างไม่สมบูรณ์", 200, "INVALID_RESPONSE");
   return value as unknown as AiJob;
 }
+const invalidPreview = () => new EditorApiError("ระบบส่งตัวอย่างการแก้ไม่สมบูรณ์ กรุณาลองใหม่", 200, "INVALID_RESPONSE");
+const timed = (item: unknown) => object(item) && typeof item.id === "string" && [item.start, item.end].every(finite);
+/** The proposal is sent back verbatim as a save body, so segment/audio/text tracks must be present (a missing one would wipe it); imageLayers may be absent. */
+export function parseAiEditPreview(value: unknown): AiEditPreview {
+  if (!object(value) || !finite(value.baseRevision) || !Number.isInteger(value.baseRevision) || value.baseRevision < 0 || typeof value.summary !== "string" || !Array.isArray(value.operations) || !object(value.proposal)) throw invalidPreview();
+  if (value.operations.length > 200 || !value.operations.every(item => object(item) && typeof item.tool === "string" && typeof item.target === "string" && typeof item.description === "string")) throw invalidPreview();
+  const proposal = value.proposal;
+  if (typeof proposal.title !== "string" || !["9:16", "16:9", "1:1"].includes(String(proposal.aspectRatio))) throw invalidPreview();
+  for (const field of ["segments", "audioClips", "textLayers"] as const) if (!Array.isArray(proposal[field]) || !(proposal[field] as unknown[]).every(timed)) throw invalidPreview();
+  if (proposal.imageLayers !== undefined && (!Array.isArray(proposal.imageLayers) || !proposal.imageLayers.every(timed))) throw invalidPreview();
+  if (!(proposal.segments as Record<string, unknown>[]).every(item => typeof item.assetId === "string" && finite(item.volume))) throw invalidPreview();
+  return value as unknown as AiEditPreview;
+}
 export const videoEditorAiApi = {
   owner: async (signal?: AbortSignal) => {const value = await request("/auth/me", "GET", undefined, signal, "/api/proxy"); if (!object(value) || typeof value.id !== "string" || !value.id) throw new EditorApiError("ไม่สามารถยืนยันบัญชีผู้ใช้ได้", 401, "UNAUTHORIZED"); return value.id;},
-  capabilities: async (signal?: AbortSignal) => {const value = await request("/ai-capabilities", "GET", undefined, signal); if (!object(value) || typeof value.available !== "boolean" || (value.autoCompose !== undefined && typeof value.autoCompose !== "boolean") || !["configured", "fixture"].includes(String(value.connectionMode)) || !object(value.supportedOptions)) throw new EditorApiError("ข้อมูลความพร้อมของ AI ไม่สมบูรณ์", 200, "INVALID_RESPONSE"); return value as unknown as AiCapabilities;},
+  capabilities: async (signal?: AbortSignal) => {const value = await request("/ai-capabilities", "GET", undefined, signal); if (!object(value) || typeof value.available !== "boolean" || (value.autoCompose !== undefined && typeof value.autoCompose !== "boolean") || (value.instructionEdits !== undefined && typeof value.instructionEdits !== "boolean") || !["configured", "fixture"].includes(String(value.connectionMode)) || !object(value.supportedOptions)) throw new EditorApiError("ข้อมูลความพร้อมของ AI ไม่สมบูรณ์", 200, "INVALID_RESPONSE"); return value as unknown as AiCapabilities;},
   jobs: async (projectId: string, signal?: AbortSignal) => {const value = await request(`/projects/${encodeURIComponent(projectId)}/ai-jobs`, "GET", undefined, signal); if (!object(value) || !Array.isArray(value.items)) throw new EditorApiError("ไม่สามารถอ่านรายการงานวิเคราะห์ได้", 200, "INVALID_RESPONSE"); return value.items.map(parseAiJob);},
   job: async (id: string, signal?: AbortSignal) => parseAiJob(await request(`/ai-jobs/${encodeURIComponent(id)}`, "GET", undefined, signal)),
   create: async (projectId: string, body: AiCreateRequest, signal?: AbortSignal) => parseAiJob(await request(`/projects/${encodeURIComponent(projectId)}/ai-jobs`, "POST", body, signal)),
@@ -87,4 +111,5 @@ export const videoEditorAiApi = {
   apply: async (id: string, body: AiApplyRequest, signal?: AbortSignal) => await request(`/ai-jobs/${encodeURIComponent(id)}/apply`, "POST", body, signal) as EditorProject,
   cancel: async (id: string, signal?: AbortSignal) => parseAiJob(await request(`/ai-jobs/${encodeURIComponent(id)}/cancel`, "POST", undefined, signal)),
   retry: async (id: string, requestId: string, signal?: AbortSignal) => parseAiJob(await request(`/ai-jobs/${encodeURIComponent(id)}/retry`, "POST", {requestId}, signal)),
+  previewEdit: async (projectId: string, body: {instruction: string; revision: number}, signal?: AbortSignal) => parseAiEditPreview(await request(`/projects/${encodeURIComponent(projectId)}/ai-edits/preview`, "POST", body, signal)),
 };

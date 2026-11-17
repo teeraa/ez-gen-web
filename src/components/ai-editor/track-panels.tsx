@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type InputHTMLAttributes } from "react";
-import { Captions, Heading, Highlighter, Music, Pencil, Plus, Trash2, Type } from "lucide-react";
+import { Captions, Heading, Highlighter, LoaderCircle, Mic, Music, Pencil, Plus, Trash2, Type } from "lucide-react";
 import styles from "./ai-editor.module.css";
 import type { Asset, AudioClip, TextLayer } from "./use-editor-project";
 import { TRACK_LIMITS, parseNumberInput, type TrackTextLayer, type TrackTextStyle } from "./tracks";
@@ -20,7 +20,29 @@ export const STYLED_TEXT_PRESETS: typeof TEXT_PRESETS = [
   { id: "boxed", label: "ซับมีกล่อง", icon: Captions, preset: { text: "ซับไตเติล", fontSize: 40, y: .88, boxColor: "#000000", boxOpacity: .6, animation: "fade" } },
   { id: "outlined", label: "ตัวหนาขอบดำ", icon: Type, preset: { text: "ข้อความ", fontSize: 72, y: .5, outlineColor: "#000000", outlineWidth: 6, animation: "slide" } },
   { id: "sticker", label: "ป้ายเหลือง", icon: Highlighter, preset: { text: "ใหม่!", fontSize: 64, y: .2, color: "#1D1D1F", boxColor: "#FFD43B", boxOpacity: 1, animation: "slide" } },
+  { id: "hook", label: "ฮุกเปิดคลิป", icon: Type, preset: { text: "ฮุกบรรทัดบน\nบรรทัดล่างสีเหลือง", fontSize: 60, y: .5, outlineColor: "#1A1A1A", outlineWidth: 6, animation: "pop", font: "heavy", accentText: "บรรทัดล่างสีเหลือง", accentColor: "#FFC400" } },
+  { id: "keyword", label: "คำเด้งเหลือง", icon: Highlighter, preset: { text: "คำสำคัญ", fontSize: 76, y: .72, color: "#FFC400", outlineColor: "#1A1A1A", outlineWidth: 6, animation: "pop", font: "heavy" } },
+  { id: "label", label: "ป้ายเหลืองหนา", icon: Highlighter, preset: { text: "ป้ายหัวข้อ", fontSize: 44, y: .585, color: "#1A1A1A", boxColor: "#FFC400", boxOpacity: 1, animation: "pop", font: "heavy" } },
 ];
+
+/**
+ * A second colour for a word or phrase of the text (every occurrence, inside one line). The draft
+ * is local so a half-typed phrase that is not in the text yet is not dropped while typing.
+ */
+function AccentField({ layer, busy, onStyle }: { layer: TextLayer; busy: boolean; onStyle: (patch: Partial<TrackTextStyle>, key?: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? layer.accentText ?? "";
+  const lines = layer.text.split("\n").map(line => line.trim()).filter(Boolean);
+  const found = !value.trim() || layer.text.includes(value.trim());
+  const commit = (phrase: string) => { setDraft(null); onStyle({ accentText: phrase.trim(), accentColor: layer.accentColor ?? "#FFC400" }); };
+  return <div className={styles.styleRow}>
+    <label className={styles.styleSlider}>ไฮไลต์คำ<input type="text" disabled={busy} maxLength={100} placeholder="คำหรือวลีในข้อความ" value={value} aria-invalid={!found || undefined}
+      onChange={event => setDraft(event.target.value)} onBlur={() => { if (draft !== null) commit(draft); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commit(value); } }} /></label>
+    <input className={styles.colorInput} type="color" aria-label="สีไฮไลต์" disabled={busy || !layer.accentText} value={(layer.accentColor ?? "#FFC400").toLowerCase()} onChange={event => onStyle({ accentColor: event.target.value }, "accentColor")} />
+    {lines.length > 1 && <button type="button" className={styles.linkButton} disabled={busy} onClick={() => commit(lines[lines.length - 1])}>บรรทัดล่าง</button>}
+    {!found && <small className={styles.muted}>ไม่พบในข้อความ</small>}
+  </div>;
+}
 
 const fmt = (time: number) => `${Math.floor(Math.max(0, time) / 60)}:${(Math.max(0, time) % 60).toFixed(1).padStart(4, "0")}`;
 const two = (value: number) => Number(value.toFixed(2));
@@ -35,6 +57,8 @@ export function NumberField({ value, onCommit, ...rest }: Omit<InputHTMLAttribut
 export function AudioTab(props: {
   assets: Asset[]; clips: AudioClip[]; maxClips: number; formats: string[]; supported: boolean; busy: boolean; unavailable: boolean; playhead: number;
   loading: boolean; canAdd: (asset: Asset) => boolean; onImport: (files: FileList) => void; onRetry: (asset: Asset) => void; onAdd: (asset: Asset) => void; onEdit: (id: string) => void;
+  /** Text-to-speech; absent when the server has no voice provider. Resolves once the clip is placed. */
+  onVoice?: (text: string, voice: string, speechRate: number) => Promise<void>;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const accept = [...props.formats.map(value => `.${value}`), "audio/*"].join(",");
@@ -42,7 +66,8 @@ export function AudioTab(props: {
   return <>
     <input ref={input} type="file" accept={accept} multiple hidden aria-hidden="true" tabIndex={-1} onChange={event => { if (event.target.files) props.onImport(event.target.files); event.target.value = ""; }} />
     {!props.supported && <p className={`${styles.alert} ${styles.warning}`} role="status">ระบบยังไม่รองรับไฟล์เสียงในโปรเจกต์นี้ กรุณาลองใหม่เมื่อเซิร์ฟเวอร์อัปเดตแล้ว</p>}
-    <button className={styles.drop} disabled={props.busy || props.unavailable || !props.supported} onClick={() => input.current?.click()}><b>+ อัปโหลดเพลง / เสียง</b><span>คลิกหรือลากไฟล์มาวาง</span><small>{label} · ไม่เกิน 50 MB</small></button>
+    {props.onVoice && <VoiceForm busy={props.busy || props.unavailable || !props.supported} playhead={props.playhead} onVoice={props.onVoice} />}
+    <button className={styles.drop} disabled={props.busy || props.unavailable || !props.supported} onClick={() => input.current?.click()}><b>+ อัปโหลดเพลง / เสียง</b><span>คลิกหรือลากไฟล์มาวาง</span><small>{label} · ไม่เกิน 500 MB (เกิน 50 MB จะถูกบีบอัด)</small></button>
     <div className={styles.aiSectionHeader}><b>ไฟล์เสียง</b><span>บน timeline {props.clips.length}/{props.maxClips} คลิป</span></div>
     {props.assets.map(asset => <div className={styles.asset} key={asset.id} draggable={asset.status === "ready"} onDragStart={event => { event.dataTransfer.setData(AUDIO_ASSET_MIME, asset.id); event.dataTransfer.effectAllowed = "copy"; }} title={asset.status === "ready" ? "ลากลง timeline หรือกด + เพื่อวางที่ตำแหน่งเล่น" : undefined}>
       <div className={`${styles.thumbnail} ${styles.audioThumb}`}><Music /></div>
@@ -60,6 +85,30 @@ export function AudioTab(props: {
     </>}
     <p className={styles.footnote}>เสียงจะเล่นและส่งออกเฉพาะช่วงที่อยู่ในความยาววิดีโอ ส่วนที่เกินจะถูกตัด</p>
   </>;
+}
+
+const VOICE_PRESETS = ["ผู้ชายวัยกลางคน เสียงทุ้ม สุขุม", "ผู้หญิงวัยรุ่น เสียงสดใส", "ผู้บรรยายสารคดี น้ำเสียงนุ่ม ชัดเจน", "เด็กผู้ชาย เสียงร่าเริง"];
+const VOICE_TEXT_MAX = 2700; // the API budget is 3000 characters including the voice description
+
+function VoiceForm({ busy, playhead, onVoice }: { busy: boolean; playhead: number; onVoice: (text: string, voice: string, speechRate: number) => Promise<void> }) {
+  const [text, setText] = useState("");
+  const [voice, setVoice] = useState("");
+  const [rate, setRate] = useState(0);
+  const [working, setWorking] = useState(false);
+  const submit = async () => {
+    if (!text.trim() || working) return;
+    setWorking(true);
+    try { await onVoice(text.trim(), voice.trim(), rate); setText(""); } finally { setWorking(false); }
+  };
+  return <div className={styles.voiceForm}>
+    <div className={styles.aiSectionHeader}><b><Mic className={styles.inlineIcon} />สร้างเสียงพูดจากข้อความ</b></div>
+    <label>บทพูด<textarea rows={3} maxLength={VOICE_TEXT_MAX} value={text} disabled={working} placeholder="พิมพ์ข้อความที่ต้องการให้พูด เช่น สวัสดีครับ วันนี้เราจะพาไปรู้จัก…" onChange={event => setText(event.target.value)} /></label>
+    <label>ลักษณะเสียง<input className={styles.input} maxLength={200} value={voice} disabled={working} placeholder="ไม่ใส่ก็ได้ เช่น ผู้หญิงวัยรุ่น เสียงสดใส" onChange={event => setVoice(event.target.value)} list="voice-presets" /></label>
+    <datalist id="voice-presets">{VOICE_PRESETS.map(item => <option key={item} value={item} />)}</datalist>
+    <label>ความเร็ว {rate === 0 ? "ปกติ" : `${(1 + rate / 100).toFixed(2)}×`}<input type="range" min={-50} max={100} step={5} value={rate} disabled={working} onChange={event => setRate(Number(event.target.value))} /></label>
+    <button className={styles.primary} disabled={busy || working || !text.trim()} onClick={() => { void submit(); }}>{working ? <><LoaderCircle className={styles.spin} />กำลังสร้างเสียง…</> : <><Mic />สร้างเสียงแล้ววางที่ {fmt(playhead)}</>}</button>
+    <small className={styles.muted}>{text.length}/{VOICE_TEXT_MAX} ตัวอักษร · เสียงยาวได้ไม่เกิน 2 นาทีต่อครั้ง</small>
+  </div>;
 }
 
 export function TextTab(props: {
@@ -144,7 +193,9 @@ export function TextAdjust({ layer, total, busy, transforms, effects, onChange, 
         {Boolean(layer.boxOpacity) && <><input className={styles.colorInput} type="color" aria-label="สีกล่องพื้นหลัง" disabled={busy} value={(layer.boxColor ?? "#000000").toLowerCase()} onChange={event => onStyle({ boxColor: event.target.value }, "boxColor")} />
           <label className={styles.styleSlider}>ทึบ {Math.round((layer.boxOpacity ?? 0) * 100)}%<input type="range" disabled={busy} min={.05} max={1} step={.05} value={layer.boxOpacity ?? .6} onChange={event => onStyle({ boxOpacity: Number(event.target.value) }, "boxOpacity")} /></label></>}
       </div>
-      <div className={styles.chips} role="group" aria-label="แอนิเมชันข้อความ">{([[undefined, "ไม่มี"], ["fade", "เฟด"], ["slide", "สไลด์ขึ้น"]] as const).map(([value, label]) => <button key={label} disabled={busy} aria-pressed={layer.animation === value} onClick={() => onStyle({ animation: value })}>{label}</button>)}</div>
+      <AccentField layer={layer} busy={busy} onStyle={onStyle} />
+      <div className={styles.chips} role="group" aria-label="แบบอักษร">{([[undefined, "ปกติ"], ["heavy", "หนาพิเศษ"]] as const).map(([value, label]) => <button key={label} disabled={busy} aria-pressed={layer.font === value} onClick={() => onStyle({ font: value })}>{label}</button>)}</div>
+      <div className={styles.chips} role="group" aria-label="แอนิเมชันข้อความ">{([[undefined, "ไม่มี"], ["fade", "เฟด"], ["slide", "สไลด์ขึ้น"], ["pop", "เด้ง"]] as const).map(([value, label]) => <button key={label} disabled={busy} aria-pressed={layer.animation === value} onClick={() => onStyle({ animation: value })}>{label}</button>)}</div>
     </>}
     <small className={styles.muted}>ลากข้อความบนพรีวิวเพื่อย้าย · ลากจุดที่ขอบเพื่อยืดความกว้างหรือความสูง · ปุ่มลูกศรใช้ย้าย และ Shift + ลูกศรใช้ปรับขนาด</small>
     {layer.start >= total && total > 0 && <p className={`${styles.alert} ${styles.warning}`}>ข้อความนี้เริ่มหลังวิดีโอจบ จะไม่ถูกส่งออก</p>}

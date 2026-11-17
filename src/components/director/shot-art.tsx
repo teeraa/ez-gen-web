@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { ImageIcon } from "lucide-react";
 import { mediaUrl } from "@/lib/director-api";
@@ -7,8 +8,11 @@ export function ShotArt({ url, label = "ภาพ", onError }: { url?: string | 
   if (!src) return <span style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", background: "var(--wb-card-2)", color: "var(--wb-muted)" }}><ImageIcon aria-label="ยังไม่มีภาพ" /></span>;
   return <Image unoptimized fill sizes="100vw" src={src} alt={label} style={{ objectFit: "cover" }} onError={onError} />;
 }
-export function ShotVideo({ url, poster, label, onError }: { url?: string | null; poster?: string | null; label: string; onError?: () => void }) {
+export function ShotVideo({ url, poster, label, autoPlay = false, onEnded, onError }: { url?: string | null; poster?: string | null; label: string; autoPlay?: boolean; onEnded?: () => void; onError?: () => void }) {
   const src = mediaUrl(url);
+  const ref = useRef<HTMLVideoElement>(null);
+  // Browsers block unmuted autoplay without a recent user gesture; fall back to muted playback.
+  useEffect(() => { const v = ref.current; if (!autoPlay || !v) return; v.play().catch(() => { v.muted = true; void v.play().catch(() => {}); }); }, [autoPlay, src]);
   if (!src) return null;
-  return <video key={src} src={src} poster={mediaUrl(poster)} controls playsInline preload="metadata" aria-label={label} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", background: "#000" }} onError={onError} />;
+  return <video ref={ref} key={src} src={src} poster={mediaUrl(poster)} controls playsInline preload={autoPlay ? "auto" : "metadata"} aria-label={label} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", background: "#000" }} onEnded={onEnded} onError={onError} />;
 }

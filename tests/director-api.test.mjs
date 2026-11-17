@@ -47,3 +47,30 @@ test('poll backoff: plan pollDelayMs overrides interval',async()=>{
  await new Promise(r=>setTimeout(r,10));
  assert.equal(delays.at(-1),8000);c.dispose();
 });
+test('series endpoints use the fixed wire paths, methods and bodies',async()=>{
+ const s={id:'s1',revision:2,name:'Saga',aspectRatio:'16:9',style:'cinematic',resolution:'1080p',characterAssetIds:[],episodeCount:1,coverImageUrl:null,coverImageExpiresAt:null,createdAt:'2026-11-08T00:00:00Z',updatedAt:'2026-11-08T00:00:00Z'};
+ const ep={...p,id:'e1',seriesId:'s1',episodeNumber:2,episodeTitle:null};
+ const {directorApi,requests}=client([Response.json({data:{items:[s],total:1,page:1,limit:20}}),Response.json({data:s},{status:201}),Response.json({data:{...s,episodes:[{id:'e0',step:'idea',episodeNumber:1}]}}),Response.json({data:{...s,revision:3,name:'New'}}),new Response(null,{status:204}),Response.json({data:ep},{status:201})]);
+ assert.equal((await directorApi.listSeries(2)).items[0].id,'s1');
+ assert.equal(requests[0].url,'/api/proxy/director/series?page=2&limit=20');
+ await directorApi.createSeries({name:'Saga',aspectRatio:'16:9',style:'cinematic',resolution:'1080p',idempotencyKey:'k'});
+ assert.equal(requests[1].url,'/api/proxy/director/series');assert.equal(requests[1].init.method,'POST');assert.deepEqual(JSON.parse(requests[1].init.body),{name:'Saga',aspectRatio:'16:9',style:'cinematic',resolution:'1080p',idempotencyKey:'k'});
+ assert.equal((await directorApi.getSeries('s1')).episodes.length,1);assert.equal(requests[2].url,'/api/proxy/director/series/s1');
+ assert.equal((await directorApi.updateSeries('s1',{revision:2,name:'New'})).revision,3);assert.equal(requests[3].init.method,'PATCH');assert.deepEqual(JSON.parse(requests[3].init.body),{revision:2,name:'New'});
+ await directorApi.removeSeries('s1');assert.equal(requests[4].init.method,'DELETE');assert.equal(requests[4].url,'/api/proxy/director/series/s1');
+ const created=await directorApi.createEpisode('s1',{title:'Pilot',idempotencyKey:'k2'});
+ assert.equal(created.episodeNumber,2);assert.equal(requests[5].url,'/api/proxy/director/series/s1/episodes');assert.deepEqual(JSON.parse(requests[5].init.body),{title:'Pilot',idempotencyKey:'k2'});
+});
+test('malformed series payloads are rejected and SERIES_BUSY has a Thai explanation',async()=>{
+ const {directorApi,errorMessage,episodeLabel}=client([Response.json({data:{items:[{id:'x'}],total:1,page:1,limit:20}}),Response.json({data:{id:'s1'}}),Response.json({code:'SERIES_BUSY',message:'busy',requestId:'r1'},{status:409})]);
+ await assert.rejects(directorApi.listSeries(),error=>error.code==='INVALID_RESPONSE');
+ await assert.rejects(directorApi.getSeries('s1'),error=>error.code==='INVALID_RESPONSE');
+ await assert.rejects(directorApi.removeSeries('s1'),error=>error.status===409&&errorMessage(error).includes('กำลังสร้างงาน')&&errorMessage(error).includes('r1'));
+ assert.equal(episodeLabel({episodeNumber:3,episodeTitle:'Finale',name:'x'}),'ตอนที่ 3: Finale');
+ assert.equal(episodeLabel({episodeNumber:3,episodeTitle:null,name:'x'}),'ตอนที่ 3');
+ assert.equal(episodeLabel({episodeNumber:null,episodeTitle:null,name:'Legacy'}),'Legacy');
+});
+test('EPISODE_LIMIT has a Thai explanation',async()=>{
+ const {directorApi,errorMessage}=client([Response.json({code:'EPISODE_LIMIT',message:'limit',requestId:'r2'},{status:409})]);
+ await assert.rejects(directorApi.createEpisode('s1',{idempotencyKey:'k'}),error=>error.code==='EPISODE_LIMIT'&&errorMessage(error).includes('999 ตอน')&&errorMessage(error).includes('r2'));
+});

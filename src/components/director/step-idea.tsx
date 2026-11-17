@@ -12,7 +12,7 @@ import { definiteRejection, finishSubmission, pendingSubmission, prepareSubmissi
 import type { DirectorMutation } from "@/hooks/use-director-project";
 import { Bar, Counter } from "./director-ui";
 import { ShotArt } from "./shot-art";
-import { CreateModal } from "./director-hub";
+import { CreateModal } from "./modal";
 import d from "./director.module.css";
 import st from "./studio.module.css";
 
@@ -31,7 +31,7 @@ export function StepIdea({ project, capabilities: cap, characters, changeIdea, m
   const coverReady = project.cover?.status === "succeeded";
   const style = cap.styles.find(s => s.value === project.style);
   const storyModel = cap.models.story.find(m => m.id === idea.storyModelId);
-  const checks = [{ label: "ไอเดียอย่างน้อย 10 ตัวอักษร", done: idea.prompt.trim().length >= 10 }, { label: "รูปแบบเนื้อเรื่อง", done: !!idea.genre }, { label: "อารมณ์อย่างน้อย 1 แบบ", done: idea.moods.length > 0 }];
+  const checks = [{ label: "ไอเดียอย่างน้อย 10 ตัวอักษร", done: idea.prompt.trim().length >= 10 }, { label: "รูปแบบเนื้อเรื่อง", done: !!idea.genre }, { label: "อารมณ์อย่างน้อย 1 แบบ", done: idea.moods.length > 0 }, { label: "ตัวละครอ้างอิงอย่างน้อย 1 ตัว", done: idea.characterAssetIds.length > 0 }];
   const ready = checks.every(c => c.done);
   const run = (promise: Promise<unknown>) => { void promise.catch(() => {}); };
   const generate = () => { if (project.story.status !== "idle" && !window.confirm("เขียนเนื้อเรื่องใหม่ทั้งหมด? เนื้อเรื่องและสตอรี่บอร์ดเดิมจะถูกแทนที่")) return; onGenerate(); };
@@ -65,10 +65,12 @@ export function StepIdea({ project, capabilities: cap, characters, changeIdea, m
   </div>;
 }
 function ProjectSettings({ project: p, cap, mutate, saving }: { project: Project; cap: Capabilities; mutate: DirectorMutation; saving: boolean }) {
-  const [name, setName] = useState(p.name);
+  const episode = !!p.seriesId;
+  const saved = episode ? p.episodeTitle ?? "" : p.name;
+  const [name, setName] = useState(saved);
   const frozen = p.storyboard.status !== "idle";
   const save = (value: Record<string, unknown>) => { void mutate("", "PATCH", value).catch(() => {}); };
-  return <details className={st.section}><summary className={st.label}>ตั้งค่าโปรเจกต์</summary><label className={st.label} htmlFor="project-name">ชื่อโปรเจกต์</label><input id="project-name" className={st.select} value={name} maxLength={cap.limits.nameMaxLength} onChange={e => setName(e.target.value)} /><button type="button" className={st.soft} disabled={saving || !name.trim() || name === p.name} onClick={() => save({ name: name.trim() })}>บันทึกชื่อ</button><label className={st.label} htmlFor="project-ratio">ขนาดวิดีโอ</label><select id="project-ratio" className={st.select} disabled={frozen || saving} value={p.aspectRatio} onChange={e => save({ aspectRatio: e.target.value })}>{cap.aspectRatios.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</select><label className={st.label} htmlFor="project-style">สไตล์ภาพ</label><select id="project-style" className={st.select} disabled={frozen || saving} value={p.style} onChange={e => save({ style: e.target.value })}>{cap.styles.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select><label className={st.label} htmlFor="project-resolution">ความคมชัด</label><select id="project-resolution" className={st.select} disabled={frozen || saving} value={p.resolution} onChange={e => save({ resolution: e.target.value })}>{cap.resolutions.map(r => <option key={r.value} value={r.value} disabled={!r.available}>{r.label}</option>)}</select>{frozen && <span className={st.muted}>ขนาด สไตล์ และความคมชัดล็อกหลังเริ่มสตอรี่บอร์ด</span>}</details>;
+  return <details className={st.section}><summary className={st.label}>{episode ? "ตั้งค่าตอน" : "ตั้งค่าโปรเจกต์"}</summary><label className={st.label} htmlFor="project-name">{episode ? "ชื่อตอน (ไม่บังคับ)" : "ชื่อโปรเจกต์"}</label><input id="project-name" className={st.select} value={name} maxLength={episode ? 120 : cap.limits.nameMaxLength} onChange={e => setName(e.target.value)} /><button type="button" className={st.soft} disabled={saving || (!episode && !name.trim()) || name.trim() === saved} onClick={() => save(episode ? { episodeTitle: name.trim() } : { name: name.trim() })}>{episode ? "บันทึกชื่อตอน" : "บันทึกชื่อ"}</button><label className={st.label} htmlFor="project-ratio">ขนาดวิดีโอ</label><select id="project-ratio" className={st.select} disabled={frozen || saving} value={p.aspectRatio} onChange={e => save({ aspectRatio: e.target.value })}>{cap.aspectRatios.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</select><label className={st.label} htmlFor="project-style">สไตล์ภาพ</label><select id="project-style" className={st.select} disabled={frozen || saving} value={p.style} onChange={e => save({ style: e.target.value })}>{cap.styles.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select><label className={st.label} htmlFor="project-resolution">ความคมชัด</label><select id="project-resolution" className={st.select} disabled={frozen || saving} value={p.resolution} onChange={e => save({ resolution: e.target.value })}>{cap.resolutions.map(r => <option key={r.value} value={r.value} disabled={!r.available}>{r.label}</option>)}</select>{frozen && <span className={st.muted}>ขนาด สไตล์ และความคมชัดล็อกหลังเริ่มสตอรี่บอร์ด</span>}</details>;
 }
 function CreateCharacter({ projectId, onClose, onCreate }: { projectId: string; onClose: () => void; onCreate: (c: Character) => void }) {
   const scope = `${projectId}:character`;

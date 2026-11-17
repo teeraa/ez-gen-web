@@ -622,3 +622,17 @@
     position: static;
   }
 }
+
+/* Destructive action (delete) on the Prompt and Skills pages. */
+.danger,
+.danger:hover:not(:disabled) {
+  color: #e5484d;
+}
+
+.spin {
+  animation: wbSpin 0.9s linear infinite;
+}
+
+@keyframes wbSpin {
+  to { transform: rotate(360deg); }
+}

@@ -1,116 +1,176 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Clapperboard, Plus, Search, Trash2, X } from "lucide-react";
+import { Clapperboard, Plus, Search, Trash2, X } from "lucide-react";
 import w from "@/components/workbench/workbench.module.css";
 import { WorkbenchHead } from "@/components/workbench/workbench-ui";
-import { directorApi, DirectorError, errorMessage, statusLabel, type Capabilities, type ProjectList, type ProjectSummary } from "@/lib/director-api";
+import { directorApi, DirectorError, errorMessage, statusLabel, type Capabilities, type ProjectList, type ProjectSummary, type Series, type SeriesList } from "@/lib/director-api";
 import { definiteRejection, finishSubmission, pendingSubmission, prepareSubmission, type Submission } from "@/lib/director-submission";
 import { formatDate, stepIndex } from "./director-data";
+import { CreateModal } from "./modal";
+import { CardActions, SeriesFields, TextDialog, type SeriesDefaults } from "./series-ui";
 import { ShotArt } from "./shot-art";
 import d from "./director.module.css";
+import { useConfirm } from "./use-confirm";
 
 const STEP_LABEL = ["ไอเดีย", "เนื้อเรื่อง", "สตอรี่บอร์ด"];
+const CREATE_SERIES = "create-series";
+// Requests left by the pre-series create flow; still replayed so an uncertain create is never duplicated.
+const LEGACY_CREATE = "create-project";
 const expiresSoon = (iso: string) => Date.parse(iso) - Date.now() < 60000;
+const text = (value: unknown, fallback: string) => typeof value === "string" ? value : fallback;
+const SERIES_NAME_MAX = 120;
+
 export function DirectorHub() {
   const router = useRouter();
+  const [series, setSeries] = useState<SeriesList | null>(null);
   const [data, setData] = useState<ProjectList | null>(null);
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [seriesPage, setSeriesPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
+  const [legacyError, setLegacyError] = useState<string | null>(null);
+  const [capsError, setCapsError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const [ratio, setRatio] = useState("");
-  const [style, setStyle] = useState("");
-  const [resolution, setResolution] = useState("");
+  const [defaults, setDefaults] = useState<SeriesDefaults>({ aspectRatio: "", style: "", resolution: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [reload, setReload] = useState(0);
+  const [seriesReload, setSeriesReload] = useState(0);
+  const [legacyReload, setLegacyReload] = useState(0);
+  const [capsReload, setCapsReload] = useState(0);
+  const reloadSeries = () => setSeriesReload(n => n + 1);
+  const reloadLegacy = () => setLegacyReload(n => n + 1);
+  const [renaming, setRenaming] = useState<Series | null>(null);
   const locked = useRef(false);
   const [pending, setPending] = useState<Submission | null>(null);
+  const [legacyPending, setLegacyPending] = useState<Submission | null>(null);
   const mediaRefresh = useRef(new Set<string>());
-  useEffect(() => { setPending(pendingSubmission("create-project")); }, []);
-  const failedMedia = (id: string) => {
-    const expires = data?.items.find(item => item.id === id)?.coverImageExpiresAt;
+  useEffect(() => { setPending(pendingSubmission(CREATE_SERIES)); setLegacyPending(pendingSubmission(LEGACY_CREATE)); }, []);
+  const failedMedia = (id: string, expires: string | null | undefined, reloadSection: () => void) => {
     // Only an expiring signed URL is fixed by reloading; other load failures would loop forever.
     if (!expires || !expiresSoon(expires)) return;
-    if (mediaRefresh.current.has(id)) return; mediaRefresh.current.add(id); setReload(n => n + 1); setTimeout(() => mediaRefresh.current.delete(id), 15000); };
+    if (mediaRefresh.current.has(id)) return; mediaRefresh.current.add(id); reloadSection(); setTimeout(() => mediaRefresh.current.delete(id), 15000); };
+  // Each section loads on its own so one failing endpoint never hides the others.
+  useEffect(() => {
+    const controller = new AbortController();
+    void directorApi.listSeries(seriesPage, controller.signal).then(list => { setSeries(list); setSeriesError(null); }).catch(cause => { if (!controller.signal.aborted) setSeriesError(errorMessage(cause)); });
+    return () => controller.abort();
+  }, [seriesPage, seriesReload]);
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      void Promise.all([directorApi.list(page, query, controller.signal), directorApi.capabilities(controller.signal)]).then(([list, capabilities]) => { setData(list); setCaps(capabilities); setError(null); }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
+      void directorApi.list(page, query, controller.signal).then(list => { setData(list); setLegacyError(null); }).catch(cause => { if (!controller.signal.aborted) setLegacyError(errorMessage(cause)); });
     }, query ? 300 : 0);
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [page, query, reload]);
+  }, [page, query, legacyReload]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void directorApi.capabilities(controller.signal).then(value => { setCaps(value); setCapsError(null); }).catch(cause => { if (!controller.signal.aborted) setCapsError(errorMessage(cause)); });
+    return () => controller.abort();
+  }, [capsReload]);
   const openCreate = () => {
     if (!caps) return;
-    const saved = pendingSubmission("create-project");
-    setPending(saved); setName(typeof saved?.body.name === "string" ? saved.body.name : ""); setRatio(typeof saved?.body.aspectRatio === "string" ? saved.body.aspectRatio : caps.aspectRatios[0]?.value ?? ""); setStyle(typeof saved?.body.style === "string" ? saved.body.style : caps.styles[0]?.value ?? ""); setResolution(typeof saved?.body.resolution === "string" ? saved.body.resolution : caps.resolutions.find(r => r.available)?.value ?? ""); setCreating(true);
+    const saved = pendingSubmission(CREATE_SERIES);
+    setPending(saved); setName(text(saved?.body.name, ""));
+    setDefaults({ aspectRatio: text(saved?.body.aspectRatio, caps.aspectRatios[0]?.value ?? ""), style: text(saved?.body.style, caps.styles[0]?.value ?? ""), resolution: text(saved?.body.resolution, caps.resolutions.find(r => r.available)?.value ?? "") });
+    setError(null); setCreating(true);
   };
   const create = async () => {
-    if ((!name.trim() && !pendingSubmission("create-project")) || locked.current) return;
+    if ((!name.trim() && !pendingSubmission(CREATE_SERIES)) || locked.current) return;
     locked.current = true; setSubmitting(true);
-    const submission = prepareSubmission("create-project", { name: name.trim(), aspectRatio: ratio, style, resolution });
-    try { const project = await directorApi.create({ ...submission.body, idempotencyKey: submission.key }); finishSubmission("create-project"); setPending(null); router.push(`/studio/director/${project.id}`); }
-    catch (cause) { if (cause instanceof DirectorError && definiteRejection(cause)) finishSubmission("create-project"); setPending(pendingSubmission("create-project")); setError(errorMessage(cause)); }
+    const submission = prepareSubmission(CREATE_SERIES, { name: name.trim(), ...defaults });
+    try {
+      const created = await directorApi.createSeries({ name: text(submission.body.name, ""), aspectRatio: text(submission.body.aspectRatio, ""), style: text(submission.body.style, ""), resolution: text(submission.body.resolution, ""), idempotencyKey: submission.key });
+      finishSubmission(CREATE_SERIES); setPending(null); router.push(`/studio/director/series/${created.id}`);
+    }
+    catch (cause) { if (cause instanceof DirectorError && definiteRejection(cause)) finishSubmission(CREATE_SERIES); setPending(pendingSubmission(CREATE_SERIES)); setError(errorMessage(cause)); }
     finally { locked.current = false; setSubmitting(false); }
   };
-  const remove = async (p: ProjectSummary) => {
-    if (!window.confirm(`ลบโปรเจกต์ “${p.name}” หรือไม่? การลบนี้ย้อนกลับไม่ได้`)) return;
-    try { await directorApi.remove(p.id); if (data?.items.length === 1 && page > 1) setPage(page - 1); else setReload(n => n + 1); }
-    catch (cause) { setError(errorMessage(cause)); }
+  const replayLegacy = async () => {
+    const saved = pendingSubmission(LEGACY_CREATE);
+    if (!saved || locked.current) return;
+    locked.current = true; setSubmitting(true);
+    try { const project = await directorApi.create({ ...saved.body, idempotencyKey: saved.key }); finishSubmission(LEGACY_CREATE); setLegacyPending(null); router.push(`/studio/director/${project.id}`); }
+    catch (cause) { if (cause instanceof DirectorError && definiteRejection(cause)) finishSubmission(LEGACY_CREATE); setLegacyPending(pendingSubmission(LEGACY_CREATE)); setError(errorMessage(cause)); }
+    finally { locked.current = false; setSubmitting(false); }
   };
+  const [confirm, confirmDialog] = useConfirm();
+  const remove = async (p: ProjectSummary) => {
+    if (!await confirm(`ลบโปรเจกต์ “${p.name}”?`, "การลบนี้ย้อนกลับไม่ได้")) return;
+    setNotice(null);
+    try { await directorApi.remove(p.id); if (data?.items.length === 1 && page > 1) setPage(page - 1); else reloadLegacy(); }
+    catch (cause) { setNotice(errorMessage(cause)); }
+  };
+  const removeSeries = async (s: Series) => {
+    if (!await confirm(`ลบโปรเจกต์ “${s.name}” และทุกตอน (${s.episodeCount} ตอน)?`, "การลบนี้ย้อนกลับไม่ได้")) return;
+    setNotice(null);
+    try { await directorApi.removeSeries(s.id); if (series?.items.length === 1 && seriesPage > 1) setSeriesPage(seriesPage - 1); else reloadSeries(); }
+    catch (cause) { setNotice(errorMessage(cause)); }
+  };
+  const showLegacy = !!legacyError || (!!data && (data.total > 0 || !!query));
   return <div className={w.page}>
-    <WorkbenchHead preview={false} icon={<Clapperboard aria-hidden />} title="ผู้กำกับ" description="เล่าเรื่องใน 3 ขั้น: ใส่ไอเดีย → เนื้อเรื่อง → สตอรี่บอร์ด" actions={<button type="button" className={w.primary} disabled={!caps} onClick={openCreate}><Plus aria-hidden />สร้างโปรเจกต์</button>} />
-    <div className={w.toolbar}><label className={w.search}><Search aria-hidden /><input maxLength={80} value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="ค้นหาโปรเจกต์" aria-label="ค้นหาโปรเจกต์" /></label>{data && <span className={w.tag}>{data.total} โปรเจกต์</span>}</div>
-    {pending && <div role="status" className={d.hint}>มีคำขอสร้างโปรเจกต์ “{String(pending.body.name)}” ที่ยังไม่ยืนยันผล ระบบจะใช้ข้อมูลเดิมเพื่อป้องกันการสร้างซ้ำ <button type="button" className={w.primary} disabled={submitting} onClick={() => { void create(); }}>ส่งคำขอเดิมอีกครั้ง</button> <button type="button" className={w.secondary} disabled={submitting} onClick={() => { if (!window.confirm("ทิ้งคำขอเดิม? ถ้าคำขอนั้นสร้างโปรเจกต์ไปแล้ว โปรเจกต์นั้นจะยังอยู่ในรายการ")) return; finishSubmission("create-project"); setPending(null); setError(null); }}>ทิ้งคำขอเดิม</button></div>}
-    {error && <div role="alert" className={d.hint}>{error} <button type="button" className={w.secondary} onClick={() => setReload(n => n + 1)}>ลองโหลดใหม่</button></div>}
+    {confirmDialog}
+    <WorkbenchHead preview={false} icon={<Clapperboard aria-hidden />} title="ผู้กำกับ" description="สร้างโปรเจกต์ แบ่งเป็นตอน แล้วเล่าแต่ละตอนใน 3 ขั้น: ไอเดีย → เนื้อเรื่อง → สตอรี่บอร์ด" actions={<button type="button" className={w.primary} disabled={!caps} onClick={openCreate}><Plus aria-hidden />สร้างโปรเจกต์</button>} />
+    {pending && !creating && <div role="status" className={d.hint}>มีคำขอสร้างโปรเจกต์ “{String(pending.body.name)}” ที่ยังไม่ยืนยันผล ระบบจะใช้ข้อมูลเดิมเพื่อป้องกันการสร้างซ้ำ <button type="button" className={w.primary} disabled={submitting} onClick={() => { void create(); }}>ส่งคำขอเดิมอีกครั้ง</button> <button type="button" className={w.secondary} disabled={submitting} onClick={() => { if (!window.confirm("ทิ้งคำขอเดิม? ถ้าคำขอนั้นสร้างโปรเจกต์ไปแล้ว โปรเจกต์นั้นจะยังอยู่ในรายการ")) return; finishSubmission(CREATE_SERIES); setPending(null); setError(null); }}>ทิ้งคำขอเดิม</button></div>}
+    {legacyPending && <div role="status" className={d.hint}>มีคำขอสร้างโปรเจกต์เดี่ยว “{String(legacyPending.body.name)}” ที่ยังไม่ยืนยันผล <button type="button" className={w.primary} disabled={submitting} onClick={() => { void replayLegacy(); }}>ส่งคำขอเดิมอีกครั้ง</button> <button type="button" className={w.secondary} disabled={submitting} onClick={() => { if (!window.confirm("ทิ้งคำขอเดิม? ถ้าคำขอนั้นสร้างโปรเจกต์ไปแล้ว โปรเจกต์นั้นจะยังอยู่ในรายการ")) return; finishSubmission(LEGACY_CREATE); setLegacyPending(null); setError(null); }}>ทิ้งคำขอเดิม</button></div>}
+    {error && !creating && <div role="alert" className={d.hint}>{error} <button type="button" className={w.secondary} onClick={() => setError(null)}>ปิด</button></div>}
+    {capsError && <div role="alert" className={d.hint}>โหลดตัวเลือกการสร้างไม่สำเร็จ จึงยังสร้างโปรเจกต์ใหม่ไม่ได้ · {capsError} <button type="button" className={w.secondary} onClick={() => setCapsReload(n => n + 1)}>ลองโหลดใหม่</button></div>}
+    {notice && <div role="alert" className={d.hint}>{notice} <button type="button" className={w.secondary} onClick={() => setNotice(null)}>ปิด</button></div>}
     {caps && !caps.enabled && <p role="status">{caps.unavailableReason ?? "ระบบสร้างเนื้อหายังไม่พร้อมใช้งาน"}</p>}
-    {!data && !error ? <p role="status">กำลังโหลดโปรเจกต์…</p> : <div className={d.projects}>
-      {!query && <button type="button" className={d.newProject} disabled={!caps} onClick={openCreate}><span><Plus aria-hidden /></span><span>สร้างโปรเจกต์ใหม่</span><small className={d.hint}>ตั้งชื่อ ขนาด สไตล์ แล้วเริ่มใส่ไอเดีย</small></button>}
-      {data?.items.map(p => <div key={p.id} style={{ position: "relative" }}><Link href={`/studio/director/${p.id}`} className={d.project}>
-        <div className={d.cover}><ShotArt url={p.coverImageUrl} label={`ปก ${p.name}`} onError={() => failedMedia(p.id)} /><div className={d.coverTags}><span>{p.aspectRatio}</span><span>{caps?.styles.find(s => s.value === p.style)?.label ?? p.style}</span><span>{p.resolution}</span></div></div>
-        <div className={d.projectBody}><h3 title={p.name}>{p.name}</h3><div className={d.miniSteps} aria-label={`ขั้นที่ ${stepIndex(p.step) + 1}: ${STEP_LABEL[stepIndex(p.step)]}`}>{STEP_LABEL.map((label, i) => <i key={label} data-on={i <= stepIndex(p.step)} />)}</div><div className={d.projectMeta}><span>{p.storyboardStatus !== "idle" ? `ภาพ ${p.completedImages}/${p.totalShots} · ${statusLabel(p.storyboardStatus)}` : `เนื้อเรื่อง · ${statusLabel(p.storyStatus)}`}</span><span>{formatDate(p.updatedAt)}</span></div></div>
-      </Link><button type="button" className={d.projectMenu} aria-label={`ลบ ${p.name}`} onClick={() => { void remove(p); }}><Trash2 aria-hidden /></button></div>)}
-      {data?.items.length === 0 && <div className={w.empty} style={{ gridColumn: "1 / -1" }}><Search aria-hidden /><h3>{query ? "ไม่พบโปรเจกต์" : "ยังไม่มีโปรเจกต์"}</h3><p>{query ? "ลองค้นหาด้วยชื่ออื่น" : "สร้างโปรเจกต์แรกเพื่อเริ่มเล่าเรื่อง"}</p></div>}
-    </div>}
-    {data && data.total > data.limit && <div className={w.toolbar}><button type="button" className={w.secondary} disabled={page <= 1} onClick={() => setPage(page - 1)}>หน้าก่อน</button><span>หน้า {page} / {Math.ceil(data.total / data.limit)}</span><button type="button" className={w.secondary} disabled={page * data.limit >= data.total} onClick={() => setPage(page + 1)}>หน้าถัดไป</button></div>}
-    {creating && caps && <CreateModal onClose={() => setCreating(false)}>
+
+    <section className={d.section} aria-labelledby="director-series-heading">
+      <div className={d.sectionHead}><h2 id="director-series-heading">โปรเจกต์</h2>{series && <span className={w.tag}>{series.total} โปรเจกต์</span>}</div>
+      {seriesError && <div role="alert" className={d.hint}>โหลดรายการโปรเจกต์ไม่สำเร็จ · {seriesError} <button type="button" className={w.secondary} onClick={reloadSeries}>ลองโหลดใหม่</button></div>}
+      {!series && !seriesError ? <p role="status">กำลังโหลดโปรเจกต์…</p> : series && <div className={d.projects}>
+        <button type="button" className={d.newProject} disabled={!caps} onClick={openCreate}><span><Plus aria-hidden /></span><span>สร้างโปรเจกต์ใหม่</span><small className={d.hint}>ตั้งชื่อ ขนาด สไตล์ แล้วเริ่มสร้างตอนแรก</small></button>
+        {series.items.map(s => <div key={s.id} className={d.cardWrap}><Link href={`/studio/director/series/${s.id}`} className={d.project}>
+          <div className={d.cover}><ShotArt url={s.coverImageUrl} label={`ปก ${s.name}`} onError={() => failedMedia(s.id, s.coverImageExpiresAt, reloadSeries)} /><div className={d.coverTags}><span>{s.aspectRatio}</span><span>{caps?.styles.find(x => x.value === s.style)?.label ?? s.style}</span><span>{s.resolution}</span></div></div>
+          <div className={d.projectBody}><h3 title={s.name}>{s.name}</h3><div className={d.projectMeta}><span>{s.episodeCount > 0 ? `${s.episodeCount} ตอน` : "ยังไม่มีตอน"}</span><span>อัปเดต {formatDate(s.updatedAt)}</span></div></div>
+        </Link><CardActions name={s.name} renameLabel="เปลี่ยนชื่อโปรเจกต์" deleteLabel="ลบโปรเจกต์" onRename={() => setRenaming(s)} onDelete={() => { void removeSeries(s); }} /></div>)}
+        {series.items.length === 0 && <div className={w.empty} style={{ gridColumn: "1 / -1" }}><Clapperboard aria-hidden /><h3>ยังไม่มีโปรเจกต์</h3><p>สร้างโปรเจกต์แรก แล้วเพิ่มตอนเพื่อเริ่มเล่าเรื่อง</p></div>}
+      </div>}
+      {series && series.total > series.limit && <div className={w.toolbar}><button type="button" className={w.secondary} disabled={seriesPage <= 1} onClick={() => setSeriesPage(seriesPage - 1)}>หน้าก่อน</button><span>หน้า {seriesPage} / {Math.ceil(series.total / series.limit)}</span><button type="button" className={w.secondary} disabled={seriesPage * series.limit >= series.total} onClick={() => setSeriesPage(seriesPage + 1)}>หน้าถัดไป</button></div>}
+    </section>
+
+    {showLegacy && <section className={d.section} aria-labelledby="director-legacy-heading">
+      <div className={d.sectionHead}><h2 id="director-legacy-heading">โปรเจกต์เดี่ยว (เดิม)</h2>{data && <span className={w.tag}>{data.total} โปรเจกต์</span>}</div>
+      {legacyError && <div role="alert" className={d.hint}>โหลดโปรเจกต์เดี่ยวไม่สำเร็จ · {legacyError} <button type="button" className={w.secondary} onClick={reloadLegacy}>ลองโหลดใหม่</button></div>}
+      {data && <><div className={w.toolbar}><label className={w.search}><Search aria-hidden /><input maxLength={80} value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="ค้นหาโปรเจกต์เดี่ยว" aria-label="ค้นหาโปรเจกต์เดี่ยว" /></label></div>
+      <div className={d.projects}>
+        {data.items.map(p => <div key={p.id} className={d.cardWrap}><Link href={`/studio/director/${p.id}`} className={d.project}>
+          <div className={d.cover}><ShotArt url={p.coverImageUrl} label={`ปก ${p.name}`} onError={() => failedMedia(p.id, p.coverImageExpiresAt, reloadLegacy)} /><div className={d.coverTags}><span>{p.aspectRatio}</span><span>{caps?.styles.find(s => s.value === p.style)?.label ?? p.style}</span><span>{p.resolution}</span></div></div>
+          <div className={d.projectBody}><h3 title={p.name}>{p.name}</h3><div className={d.miniSteps} aria-label={`ขั้นที่ ${stepIndex(p.step) + 1}: ${STEP_LABEL[stepIndex(p.step)]}`}>{STEP_LABEL.map((label, i) => <i key={label} data-on={i <= stepIndex(p.step)} />)}</div><div className={d.projectMeta}><span>{p.storyboardStatus !== "idle" ? `ภาพ ${p.completedImages}/${p.totalShots} · ${statusLabel(p.storyboardStatus)}` : `เนื้อเรื่อง · ${statusLabel(p.storyStatus)}`}</span><span>{formatDate(p.updatedAt)}</span></div></div>
+        </Link><div className={d.cardActions}><button type="button" className={d.projectMenu} aria-label={`ลบ ${p.name}`} onClick={() => { void remove(p); }}><Trash2 aria-hidden /></button></div></div>)}
+        {data.items.length === 0 && <div className={w.empty} style={{ gridColumn: "1 / -1" }}><Search aria-hidden /><h3>ไม่พบโปรเจกต์</h3><p>ลองค้นหาด้วยชื่ออื่น</p></div>}
+      </div>
+      {data.total > data.limit && <div className={w.toolbar}><button type="button" className={w.secondary} disabled={page <= 1} onClick={() => setPage(page - 1)}>หน้าก่อน</button><span>หน้า {page} / {Math.ceil(data.total / data.limit)}</span><button type="button" className={w.secondary} disabled={page * data.limit >= data.total} onClick={() => setPage(page + 1)}>หน้าถัดไป</button></div>}
+      </>}
+    </section>}
+
+    {creating && caps && <CreateModal onClose={() => { if (!submitting) setCreating(false); }}>
       <form className={d.modal} role="dialog" aria-modal="true" aria-labelledby="new-director-title" onSubmit={e => { e.preventDefault(); void create(); }}>
-        <div className={d.modalHead}><div><h2 id="new-director-title">สร้างโปรเจกต์ใหม่</h2><p>ตั้งค่าพื้นฐานของเรื่อง แก้ไขภายหลังได้</p></div><button type="button" className={w.ghost} aria-label="ปิด" disabled={submitting} onClick={() => setCreating(false)}><X aria-hidden /></button></div>
-        {error && <p role="alert">{error}</p>}
-        <label className={w.field}>ชื่อโปรเจกต์<span className={w.counter}>{name.length}/{caps.limits.nameMaxLength}</span><input required maxLength={caps.limits.nameMaxLength} value={name} disabled={!!pending || submitting} onChange={e => setName(e.target.value)} /></label>
-        <fieldset className={d.group}><legend>ขนาดวิดีโอ</legend><div className={d.options} style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>{caps.aspectRatios.map(r => <button key={r.value} type="button" className={d.option} aria-pressed={ratio === r.value} disabled={!!pending || submitting} onClick={() => setRatio(r.value)}><span className={d.ratioShape} style={{ aspectRatio: r.value.replace(":", " / ") }} aria-hidden />{r.label}<small>{r.hint}</small></button>)}</div></fieldset>
-        <fieldset className={d.group}><legend>สไตล์ภาพ</legend><div className={`${d.options} ${d.styleOptions}`}>{caps.styles.map(s => <button key={s.value} type="button" className={d.option} aria-pressed={style === s.value} disabled={!!pending || submitting} onClick={() => setStyle(s.value)}>{style === s.value && <span className={d.check}><Check aria-hidden /></span>}<span className={d.styleSwatch} style={{ position: "relative" }}><ShotArt url={s.sampleImageUrl} label={s.label} /></span>{s.label}<small>{s.hint}</small></button>)}</div></fieldset>
-        <fieldset className={d.group}><legend>ความคมชัด</legend><div className={d.segment}>{caps.resolutions.map(r => <button key={r.value} type="button" disabled={!r.available || !!pending || submitting} aria-pressed={resolution === r.value} onClick={() => setResolution(r.value)}>{r.label}<small>{r.hint}{!r.available ? " · ยังไม่พร้อม" : ""}</small></button>)}</div></fieldset>
-        <div className={d.modalActions}><button type="button" className={w.secondary} disabled={submitting} onClick={() => setCreating(false)}>ยกเลิก</button><button className={w.primary} disabled={!name.trim() || !ratio || !style || !resolution || submitting}><Plus aria-hidden />{submitting ? "กำลังสร้าง…" : pending ? "ส่งคำขอเดิมอีกครั้ง" : "สร้างและเริ่มใส่ไอเดีย"}</button></div>
+        <div className={d.modalHead}><div><h2 id="new-director-title">สร้างโปรเจกต์ใหม่</h2><p>ตั้งค่าพื้นฐานที่ทุกตอนจะใช้เป็นค่าเริ่มต้น แก้ไขภายหลังได้</p></div><button type="button" className={w.ghost} aria-label="ปิด" disabled={submitting} onClick={() => setCreating(false)}><X aria-hidden /></button></div>
+        {error && <p role="alert" className={d.formError}>{error}</p>}
+        {pending && <p role="status" className={d.hint}>กำลังใช้ข้อมูลจากคำขอเดิมที่ยังไม่ยืนยันผล เพื่อป้องกันการสร้างซ้ำ</p>}
+        <label className={w.field}><span className={w.fieldRow}>ชื่อโปรเจกต์<span className={w.counter}>{name.length}/{SERIES_NAME_MAX}</span></span><input required maxLength={SERIES_NAME_MAX} value={name} disabled={!!pending || submitting} onChange={e => setName(e.target.value)} /></label>
+        <SeriesFields caps={caps} value={defaults} onChange={setDefaults} disabled={!!pending || submitting} />
+        <div className={d.modalActions}><button type="button" className={w.secondary} disabled={submitting} onClick={() => setCreating(false)}>ยกเลิก</button><button className={w.primary} disabled={!name.trim() || !defaults.aspectRatio || !defaults.style || !defaults.resolution || submitting}><Plus aria-hidden />{submitting ? "กำลังสร้าง…" : pending ? "ส่งคำขอเดิมอีกครั้ง" : "สร้างโปรเจกต์"}</button></div>
       </form>
     </CreateModal>}
+    {renaming && caps && <TextDialog id="rename-series" title="เปลี่ยนชื่อโปรเจกต์" label="ชื่อโปรเจกต์" initial={renaming.name} maxLength={SERIES_NAME_MAX} required submitLabel="บันทึกชื่อ"
+      onClose={() => setRenaming(null)}
+      onSubmit={async value => {
+        try { await directorApi.updateSeries(renaming.id, { revision: renaming.revision, name: value }); }
+        catch (cause) {
+          // Keep the dialog open on the latest revision so a deliberate retry can succeed.
+          if (cause instanceof DirectorError && cause.code === "REVISION_CONFLICT") { reloadSeries(); await directorApi.getSeries(renaming.id).then(setRenaming, () => {}); }
+          throw cause;
+        }
+        reloadSeries();
+      }} />}
   </div>;
-}
-// `portal` renders at document.body: full-screen players must escape the studio layout's
-// stacking context, or the app navbar covers their header and close button.
-export function CreateModal({ onClose, children, portal = false }: { onClose: () => void; children: React.ReactNode; portal?: boolean }) {
-  const root = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  useEffect(() => { closeRef.current = onClose; }, [onClose]);
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
-      if (event.key !== "Tab") return;
-      const nodes = Array.from(root.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href]') ?? []);
-      const first = nodes[0], last = nodes[nodes.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    };
-    const initial = root.current?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled])') ?? root.current?.querySelector<HTMLElement>('button:not([disabled])');
-    initial?.focus();
-    window.addEventListener("keydown", key);
-    return () => { window.removeEventListener("keydown", key); previous?.focus(); };
-  }, []);
-  const modal = <div ref={root} className={d.scrim} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>{children}</div>;
-  return portal ? createPortal(modal, document.body) : modal;
 }

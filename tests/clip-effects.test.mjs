@@ -103,21 +103,55 @@ test('text style keeps server rules and previews like the export',async()=>{
   const {styleTextLayer,textStylePreview,textAnimationAt,normaliseTextLayers,saveRequestBody,newTextLayer}=await import('../src/components/ai-editor/tracks.ts');
   const base=newTextLayer('t',0,10);
   assert.deepEqual(styleTextLayer(base,{outlineWidth:0,outlineColor:'#000000'}),base,'zero outline drops its colour');
-  const styled=styleTextLayer(base,{outlineWidth:25,outlineColor:'#abcdef',boxOpacity:.555,boxColor:'#000000',animation:'slide'});
+  const styled=styleTextLayer(base,{outlineWidth:25,outlineColor:'#abcdef',boxOpacity:.555,boxColor:'#000000',animation:'slide',font:'heavy'});
   assert.deepEqual([styled.outlineWidth,styled.outlineColor,styled.boxOpacity,styled.animation],[20,'#ABCDEF',.555,'slide']);
   assert.equal(styleTextLayer(base,{animation:'spin'}).animation,undefined);
   const css=textStylePreview({fontSize:100,outlineWidth:4,outlineColor:'#000000',boxOpacity:.5,boxColor:'#FF0000'},720);
   // font 67 px → pad round(67·0.3)=20 + outline round(4·720/1080)=3; matches drawtext boxborderw 23.
   assert.equal(css.boxShadow,'0 0 0 23px #FF000080');assert.equal(css.WebkitTextStroke,'6px #000000');
-  assert.deepEqual(textAnimationAt({start:1,end:3,animation:'fade'},1),{opacity:0,rise:0});
-  assert.deepEqual(textAnimationAt({start:1,end:3,animation:'fade'},2),{opacity:1,rise:0});
+  assert.deepEqual(textAnimationAt({start:1,end:3,animation:'fade'},1),{opacity:0,rise:0,scale:1});
+  assert.deepEqual(textAnimationAt({start:1,end:3,animation:'fade'},2),{opacity:1,rise:0,scale:1});
   const slide=textAnimationAt({start:1,end:3,animation:'slide'},1.15);
   assert.ok(Math.abs(slide.opacity-.5)<1e-9&&Math.abs(slide.rise-.02)<1e-9);
   assert.equal(normaliseTextLayers([{...base,boxOpacity:2,boxColor:'#000000',animation:'x'}])[0].boxOpacity,1);
   const snapshot={title:'t',ratio:'9/16',segments:[],audioClips:[],textLayers:[styled]};
   assert.equal(saveRequestBody(snapshot,1,true,false).textLayers[0].animation,undefined,'old backends get no style');
+  assert.equal(saveRequestBody(snapshot,1,true,true,false,true).textLayers[0].font,'heavy','font is saved with styles');
+  assert.equal(saveRequestBody(snapshot,1,true,false).textLayers[0].font,undefined);
   assert.equal(saveRequestBody(snapshot,1,true,true).textLayers[0].boxColor,undefined,'styles need clipStyles, not only clipEffects');
   assert.equal(saveRequestBody(snapshot,1,true,true,false,true).textLayers[0].boxColor,'#000000');
+});
+
+test('pop text and animated zoom follow the export curves',async()=>{
+  const {textAnimationAt,styleTextLayer,newTextLayer}=await import('../src/components/ai-editor/tracks.ts');
+  const {frameRect,lookZoomAt,patchLook,hasFrame,TRANSITIONS,transitionFrame,fitTransitions}=await import('../src/components/ai-editor/clip-effects.ts');
+  assert.equal(styleTextLayer(newTextLayer('t',0,4),{animation:'pop'}).animation,'pop');
+  assert.equal(styleTextLayer(newTextLayer('t',0,4),{font:'heavy'}).font,'heavy');
+  assert.equal(styleTextLayer(newTextLayer('t',0,4),{font:'comic'}).font,undefined,'only the bundled heavy font');
+  const two={...newTextLayer('t',0,4),text:'5 วินาทีแรก\nต้องหยุดคนให้ได้'};
+  const accented=styleTextLayer(two,{accentText:' ต้องหยุดคนให้ได้ ',accentColor:'#ffc400'});
+  assert.deepEqual([accented.accentText,accented.accentColor],['ต้องหยุดคนให้ได้','#FFC400']);
+  assert.equal(styleTextLayer(two,{accentText:'ไม่มี',accentColor:'#FFC400'}).accentText,undefined,'phrase must be in the text');
+  assert.equal(styleTextLayer(two,{accentText:'แรก\nต้อง',accentColor:'#FFC400'}).accentText,undefined,'one line only');
+  const {accentRuns,textStylePreview:preview}=await import('../src/components/ai-editor/tracks.ts');
+  assert.deepEqual(accentRuns('a GG b GG','GG').map(run=>[run.text,run.accent]),[['a ',false],['GG',true],[' b ',false],['GG',true]]);
+  assert.equal(preview({fontSize:100,boxOpacity:1,boxColor:'#FFC400'},1080).borderRadius,'30px','outer radius 0.6 × font px');
+  assert.ok(Math.abs(textAnimationAt({start:1,end:4,animation:'pop'},1).scale-.6)<1e-9,'starts at 60%');
+  assert.ok(Math.abs(textAnimationAt({start:1,end:4,animation:'pop'},1.15).scale-(.8+.18))<1e-9,'overshoots mid-way');
+  assert.equal(textAnimationAt({start:1,end:4,animation:'pop'},2).scale,1);
+  assert.equal(lookZoomAt({zoom:1.2},.5),1.2);
+  assert.equal(lookZoomAt({zoomTo:1.5},0),1);assert.equal(lookZoomAt({zoomTo:1.5},1),1.5);
+  assert.ok(Math.abs(lookZoomAt({zoomTo:2},.5)-1.5)<1e-9,'smoothstep midpoint');
+  assert.equal(frameRect({fit:'cover',zoomTo:2},{width:1920,height:1080},{width:540,height:960},1).height,1920);
+  assert.ok(hasFrame({zoomTo:1.2}));
+  assert.equal(patchLook({id:'a',zoom:1.5},{zoomTo:1.5}).zoomTo,undefined,'same as zoom is no animation');
+  assert.equal(patchLook({id:'a'},{zoomTo:4}).zoomTo,3);assert.equal(patchLook({id:'a',zoomTo:2},{zoomTo:0}).zoomTo,undefined);
+  for(const id of ['zoomin','hblur','smoothleft','smoothright','slideup','slidedown','pixelize','fadegrays','radial']){
+    assert.ok(TRANSITIONS.some(item=>item.id===id),id);
+    for(const p of [0,.5,1]) assert.ok(transitionFrame(id,p).from,`${id} ${p}`);
+  }
+  assert.equal(transitionFrame('radial',1).to.clipPath,'none');
+  assert.equal(fitTransitions([{id:'a'},{id:'b',transition:'zoomin',transitionDuration:.5}],()=>4)[1].transition,'zoomin');
 });
 
 test('transitions overlap clips on the timeline',async()=>{

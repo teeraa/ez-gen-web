@@ -5,7 +5,8 @@ import { directorApi, DirectorError, errorMessage, hasWork, type Idea, type Proj
 import { definiteRejection, finishSubmission, pendingSubmission, prepareSubmission } from "@/lib/director-submission";
 import { notifyPointsChanged } from "@/lib/points-client";
 
-const MAX_POLL_DELAY_MS = 15000;
+// One request returns every task of the project (story, plan, each shot image/video, export).
+const POLL_INTERVAL_MS = 3000;
 const mediaExpiries = (p: Project) => [p.cover?.expiresAt, p.coverImageExpiresAt, p.export?.expiresAt, ...p.scenes.flatMap(s => s.shots.flatMap(x => [x.image.expiresAt, x.video?.expiresAt]))].flatMap(v => v && Number.isFinite(Date.parse(v)) ? [Date.parse(v)] : []);
 // A failed media load is only fixed by new signed URLs; refreshing for any other cause
 // (missing object, unsupported codec) would poll forever after the work has finished.
@@ -26,25 +27,22 @@ export function useDirectorProject(id: string) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
   const refreshRef = useRef<() => void>(() => {});
-  const unchanged = useRef(0);
   const working = useRef(false);
   const apply = useCallback((p: Project) => { current.current = p; if (alive.current) setServer(p); }, []);
   useEffect(() => { alive.current = true; return () => { alive.current = false; if (timer.current) clearTimeout(timer.current); }; }, []);
   const refresh = useRefreshPolling(id, {
-    intervalMs: 2000,
+    intervalMs: POLL_INTERVAL_MS,
     fetch: async (signal, reason) => {
       const version = epoch.current;
       const p = await directorApi.get(id, signal, reason === "poll");
       return { p, version };
     },
     onData: ({ p, version }) => {
-      // A 304 returns the cached object, so identity means nothing changed on the server.
-      unchanged.current = p === current.current ? unchanged.current + 1 : 0;
       if (version === epoch.current && count.current === 0) { apply(p); if (!actionError.current) setError(null); }
       const busy = hasWork(current.current ?? p);
       if (working.current && !busy) notifyPointsChanged();
       working.current = busy;
-      return { poll: busy, pollDelayMs: Math.min(MAX_POLL_DELAY_MS, 2000 * 2 ** Math.max(0, unchanged.current - 4)), expiresAt: mediaExpiries(p) };
+      return { poll: busy, expiresAt: mediaExpiries(p) };
     },
     onError: setError,
   });
@@ -70,7 +68,6 @@ export function useDirectorProject(id: string) {
     try {
       const result = await directorApi.mutate(id, path, method, submission ? { ...submission.body, idempotencyKey: submission.key } : { ...payload, revision: p.revision });
       if (paid) { finishSubmission(scope); notifyPointsChanged(); }
-      unchanged.current = 0;
       apply(result);
       actionError.current = false;
       if (alive.current) setError(null);

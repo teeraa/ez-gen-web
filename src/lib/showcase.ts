@@ -56,7 +56,10 @@ async function fetchShowcase(apiUrl: string, shape: number): Promise<ShowcaseIte
   // instead of holding the illustrated fallback for the full five minutes.
   // In development, refresh quickly so curated changes (SQL edits, an API restart) show up
   // on the next reload instead of after the five-minute production window.
-  if (items.length === 0 || process.env.NODE_ENV === "development") cacheLife({ stale: 30, revalidate: 30, expire: 600 })
-  else cacheLife({ stale: 60, revalidate: 300, expire: 900 })
+  // `stale` stays at 5 minutes in both cases: Next (16.4.6+) leaves entries with stale < 300s out of
+  // the static shell, which turns this await into "URL data outside <Suspense>" on "/".
+  // `revalidate` is what refreshes the data on the server, so the quick retry still works.
+  if (items.length === 0 || process.env.NODE_ENV === "development") cacheLife({ stale: 300, revalidate: 30, expire: 600 })
+  else cacheLife({ stale: 300, revalidate: 300, expire: 900 })
   return items
 }

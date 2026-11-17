@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useRef, useState} from "react";
 import {EditorApiError, videoEditorApi, type EditorProject} from "@/lib/video-editor-api";
 import {videoEditorAiApi, type AiCapabilities, type AiCreateRequest, type AiDraftSegment, type AiJob} from "@/lib/video-editor-ai-api";
-import {copySegments, isBusy, keyFor, readAiIntents, sameAiDraft, terminal, text, type Intents} from "@/lib/video-editor-ai-state";
+import {copySegments, isBusy, keyFor, readAiIntents, sameAiDraft, staleJobUpdate, terminal, text, type Intents} from "@/lib/video-editor-ai-state";
 import {approvalIdsForApply} from "./ai-composition";
 import type {useEditorProject} from "./use-editor-project";
 
@@ -18,13 +18,15 @@ export function useEditorAi(persistence: EditorPersistence, onApply: (project: E
   const alive = useRef(true), context = useRef({persistence, onApply}), jobRef = useRef<AiJob | null>(null), draftRef = useRef<DraftEdit | null>(null), intentsRef = useRef<Intents | null>(null), actionRef = useRef(false), controllers = useRef(new Set<AbortController>());
   useEffect(() => {context.current = {persistence, onApply};}, [persistence, onApply]);
   const store = useCallback((next: Intents) => {
-    sessionStorage.setItem(keyFor(next.ownerId, next.projectId), JSON.stringify(next));
+    // Storage can be unavailable (private mode, quota); the in-memory intent still keeps the request identity for this page.
+    try {sessionStorage.setItem(keyFor(next.ownerId, next.projectId), JSON.stringify(next));} catch {}
     intentsRef.current = next;setIntents(next);
   }, []);
   const editState = useCallback((next: DraftEdit | null) => {draftRef.current = next;setDraftEdit(next);}, []);
   const receive = useCallback((next: AiJob, forceDraft = false) => {
     if (!alive.current || context.current.persistence.snapshot().project?.id !== next.projectId) return;
     const previous = jobRef.current;
+    if (!forceDraft && staleJobUpdate(previous, next)) return;
     jobRef.current = next;setJob(next);setJobs(items => [next, ...items.filter(item => item.id !== next.id)]);
     if (next.draft && (forceDraft || previous?.id !== next.id || previous.draft?.revision !== next.draft.revision)) {
       const local = draftRef.current;
@@ -55,7 +57,8 @@ export function useEditorAi(persistence: EditorPersistence, onApply: (project: E
         if (projectId) {
           const list = await videoEditorAiApi.jobs(projectId, controller.signal);
           if (controller.signal.aborted) return;
-          const restored = readAiIntents(sessionStorage.getItem(keyFor(owner, projectId)), owner, projectId);store(restored);setJobs(list);
+          let saved: string | null = null;try {saved = sessionStorage.getItem(keyFor(owner, projectId));} catch {}
+          const restored = readAiIntents(saved, owner, projectId);store(restored);setJobs(list);
           const requested = restored.apply?.jobId ?? restored.select?.jobId ?? restored.retry?.jobId ?? restored.localDraft?.jobId;
           let requestedJob = list.find(item => item.id === requested);
           if (requested && !requestedJob) {
@@ -72,13 +75,16 @@ export function useEditorAi(persistence: EditorPersistence, onApply: (project: E
   }, [projectId, receive, store]);
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const id = jobRef.current?.id;if (!id) return;
-    const latest = await videoEditorAiApi.job(id, signal);if (!signal?.aborted) receive(latest);
+    const latest = await videoEditorAiApi.job(id, signal);
+    // The user may have opened another job or started over while this request was in flight.
+    if (!signal?.aborted && jobRef.current?.id === id) receive(latest);
   }, [receive]);
   useEffect(() => {
     if (!projectId) return;
     const activeControllers = controllers.current, controller = new AbortController();activeControllers.add(controller);let inFlight = false, finishedAt = Date.now();
     const tick = async (force = false) => {
-      if (inFlight || controller.signal.aborted || !jobRef.current || (!force && !isBusy(jobRef.current) && Date.now() - finishedAt < 60000)) return;
+      // While an action runs its own response is authoritative; a poll racing it could flag a false draft conflict.
+      if (inFlight || actionRef.current || controller.signal.aborted || !jobRef.current || (!force && !isBusy(jobRef.current) && Date.now() - finishedAt < 60000)) return;
       inFlight = true;
       try {await refresh(controller.signal);} catch (failure) {if (!controller.signal.aborted && alive.current) setError(text(failure));}
       finally {inFlight = false;finishedAt = Date.now();}

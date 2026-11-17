@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, Fragment, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
-import { AudioLines, Blend, ChevronLeft, ImageIcon, CloudCheck, Crop, Download, Film, Gauge, Layers, Magnet, Music, Palette, RotateCcw, Pause, Play, Plus, Redo2, Scan, Scissors, Search, SkipBack, SkipForward, SlidersHorizontal, Sparkles, Trash2, Type, Undo2, Upload, Volume2, VolumeX, X, ZoomIn, ZoomOut } from "lucide-react";
+import { AudioLines, Blend, ChevronLeft, ImageIcon, CloudCheck, Crop, Download, Film, Gauge, Layers, Magnet, MessagesSquare, Music, Palette, RotateCcw, Pause, Play, Plus, Redo2, Scan, Scissors, Search, SkipBack, SkipForward, SlidersHorizontal, Sparkles, Trash2, Type, Undo2, Upload, Volume2, VolumeX, X, ZoomIn, ZoomOut } from "lucide-react";
 import styles from "./ai-editor.module.css";
 import { connectMediaPlayback, playbackTimeline, playbackWindowAt, segmentLength, segmentSpeed } from "./media-playback";
 import { canSplitTimelineItem, splitTimelineItem, type TrimItem, type TrimKind } from "./timeline-editing";
@@ -12,19 +12,24 @@ import { frameAt } from "./video-thumbnails";
 import { useEditorProject, type Asset, type AudioClip, type ImageLayer, type Segment, type TextLayer } from "./use-editor-project";
 import type { EditorProject, EditorResolution } from "@/lib/video-editor-api";
 import { AiAssistantPanel, type EditorTranscripts } from "./ai-assistant-panel";
+import { AiChatPanel } from "@/components/ai-chat/ai-chat-panel";
 import { TRACK_LIMITS, adjustAudioClip, adjustImageLayer, adjustTextLayer, audioClipRange, newImageLayer, newTextLayer, styleTextLayer, type TrackTextLayer, type TrackTextStyle } from "./tracks";
 import { TextOverlay } from "./text-overlay";
+import { AudioWave } from "./audio-wave";
 import { buildSubtitleLayers, hasUsableTranscript, isSubtitleId } from "./subtitles";
-import { useAudioPreview } from "./use-audio-preview";
+import { useAudioPreview, type PreviewAudioClip } from "./use-audio-preview";
+import { createPlaybackClock, useClockTime, type PlaybackClock } from "./playback-clock";
 import { AudioAdjust, AudioTab, FadeFields, NumberField, TextAdjust, TextTab, type TextPreset } from "./track-panels";
-import { LOOK_PRESETS, MIN_TRANSITION, SPEED_PRESETS, TRANSITIONS, clampFades, fitTransitions, maxTransition, transitionFrame, clampSpeed, fadeGain, frameRect, hasColour, hasFrame, lookColour, patchLook, snapShift, type ClipLook } from "./clip-effects";
+import { LOOK_PRESETS, MIN_TRANSITION, SPEED_PRESETS, TRANSITIONS, clampFades, fitTransitions, maxTransition, transitionFrame, clampSpeed, fadeGain, frameRect, hasColour, hasFrame, lookColour, patchLook, snapShift, zoomTransform, type ClipLook } from "./clip-effects";
 import { AUDIO_ASSET_MIME, IMAGE_ASSET_MIME, VIDEO_ASSET_MIME, packLanes } from "./lanes";
 import { ImageAdjust, ImageOverlay, ImageTab } from "./image-layers";
+import { formatClock } from "./ai-edit-rules";
 
-const fmt = (time: number) => `${Math.floor(Math.max(0, time) / 60)}:${(Math.max(0, time) % 60).toFixed(1).padStart(4, "0")}`;
+const fmt = formatClock;
 const durationOf = (segments: Segment[]) => playbackTimeline(segments).at(-1)?.timelineEnd ?? 0;
 const SNAP_PX = 8;
 const speedLabel = (speed: number) => `${Number(speed.toFixed(2))}×`;
+const exportTime = (value: string) => { const at = new Date(value); return Number.isFinite(at.getTime()) ? at.toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "-"; };
 /** Fades must fit their item after any trim, split or speed change: keep the fade-in, shrink the fade-out. */
 function fitFades<T extends { fadeIn?: number; fadeOut?: number }>(item: T, length: number): T {
   const fadeIn = item.fadeIn ?? 0, fadeOut = item.fadeOut ?? 0;
@@ -33,13 +38,15 @@ function fitFades<T extends { fadeIn?: number; fadeOut?: number }>(item: T, leng
   return { ...item, fadeIn: fitted.fadeIn || undefined, fadeOut: fitted.fadeOut || undefined };
 }
 type EditorState = { segments: Segment[]; audioClips: AudioClip[]; textLayers: TextLayer[]; imageLayers: ImageLayer[] };
-type LibraryTab = "media" | "audio" | "text" | "image" | "ai";
+type LibraryTab = "media" | "audio" | "text" | "image" | "ai" | "chat";
 const LIBRARY_TABS: { value: LibraryTab; label: string; title: string; icon: typeof Film }[] = [
   { value: "media", label: "วิดีโอ", title: "คลังวิดีโอ", icon: Film },
   { value: "audio", label: "เสียง", title: "เพลงและเสียง", icon: Music },
   { value: "text", label: "ข้อความ", title: "ข้อความ", icon: Type },
   { value: "image", label: "รูปภาพ", title: "รูปภาพและสติกเกอร์", icon: ImageIcon },
   { value: "ai", label: "AI", title: "ผู้ช่วย AI", icon: Sparkles },
+  // Experimental AI chat editor; the server also gates it with EDITOR_AI_CHAT_ENABLED.
+  ...(process.env.NEXT_PUBLIC_AI_CHAT_EDITOR === "true" ? [{ value: "chat" as const, label: "แชท", title: "แชทตัดต่อด้วย AI (ทดลอง)", icon: MessagesSquare }] : []),
 ];
 const RATIO_OPTIONS = [{ value: "9/16", label: "9:16", hint: "แนวตั้ง" }, { value: "16/9", label: "16:9", hint: "แนวนอน" }, { value: "1/1", label: "1:1", hint: "สี่เหลี่ยม" }];
 // Below this width the library and inspector become drawers over the editor.
@@ -53,7 +60,10 @@ export function AiEditor({ projectId }: { projectId?: string }) {
   const [historyProject, setHistoryProject] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [resolution, setResolution] = useState<EditorResolution>("720p");
+  // `time` re-renders the editor: it moves on seeks, pauses and when the playing window or a
+  // transition starts/ends. The continuous position lives in `clock` (see playback-clock.ts).
   const [time, setPlaybackTime] = useState(0);
+  const [clock] = useState(() => createPlaybackClock());
   const [seekRevision, setSeekRevision] = useState(0);
   const setTime = useCallback((value: React.SetStateAction<number>) => { setPlaybackTime(value); setSeekRevision(revision => revision + 1); }, []);
   const [playing, setPlaying] = useState(false);
@@ -70,7 +80,8 @@ export function AiEditor({ projectId }: { projectId?: string }) {
   const [snapping, setSnapping] = useState(true);
   // Ripple: deleting a video clip pulls later audio/text left with the picture, like a magnetic main track.
   const [ripple, setRipple] = useState(true);
-  const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
+  // Intrinsic size per media URL: the two preview videos can hold different assets.
+  const [videoSizes, setVideoSizes] = useState<Record<string, { width: number; height: number }>>({});
   const [snapGuide, setSnapGuide] = useState<number | null>(null);
   const fadeRef = useRef<HTMLDivElement>(null);
   const outgoingRef = useRef<HTMLVideoElement>(null);
@@ -127,7 +138,12 @@ export function AiEditor({ projectId }: { projectId?: string }) {
 
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(""), 3000); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => () => { cleanups.current.forEach(cleanup => cleanup()); }, []);
-  useEffect(() => { playbackPosition.current = { time, seekRevision }; }, [time, seekRevision]);
+  useEffect(() => { playbackPosition.current = { time, seekRevision }; clock.set(time); }, [time, seekRevision, clock]);
+  // Pausing settles the editor on the exact position the clock reached.
+  useEffect(() => { if (!playing) setPlaybackTime(playbackPosition.current.time); }, [playing]);
+  const timelineRef = useRef(timeline);
+  timelineRef.current = timeline;
+  const structureKey = useRef("");
   const currentId = current?.id;
   const currentStart = current?.start ?? 0;
   const currentEnd = current?.end ?? 0;
@@ -144,30 +160,35 @@ export function AiEditor({ projectId }: { projectId?: string }) {
     const identity = `${currentId}:${currentUrl}:${currentStart}:${currentEnd}:${currentAt}:${currentSpeed}:${seekRevision}`;
     const seek = playbackIdentity.current !== identity;
     playbackIdentity.current = identity;
-    let lastClockUpdate = 0;
     return connectMediaPlayback(video, { start: currentStart, end: currentEnd, at: currentAt, timelineEnd: currentTimelineEnd, speed: currentSpeed }, playbackPosition.current.time, playing, seek,
       value => {
         playbackPosition.current.time = value;
-        // Fades and transitions run on the decoder clock like the playhead, so they stay smooth between 10 Hz renders.
+        // Fades, transitions and zooms run on the decoder clock like the playhead.
         frameWork.current(value);
         if (playheadRef.current) playheadRef.current.style.left = `${value * zoom}px`;
-        const now = performance.now();
-        // Keep decoder-paced motion outside the expensive editor tree.
-        if (!playing || value >= currentTimelineEnd || now - lastClockUpdate >= 100) {
-          lastClockUpdate = now;
+        clock.set(value);
+        // The editor tree re-renders only when what plays changes (window or transition phase).
+        const key = playbackStructure(timelineRef.current, value);
+        if (!playing || value >= currentTimelineEnd || key !== structureKey.current) {
+          structureKey.current = key;
           setPlaybackTime(value);
         }
       },
       () => { if (currentTimelineEnd >= total) setPlaying(false); },
       () => { setPlaying(false); notify("เล่นคลิปไม่ได้ กรุณาลองอีกครั้งหรือตรวจสอบไฟล์สื่อ"); });
-  }, [currentId, currentUrl, currentStart, currentEnd, currentAt, currentTimelineEnd, currentSpeed, currentFadeIn, currentFadeOut, currentVolume, playing, seekRevision, total, notify, zoom]);
+  }, [currentId, currentUrl, currentStart, currentEnd, currentAt, currentTimelineEnd, currentSpeed, currentFadeIn, currentFadeOut, currentVolume, playing, seekRevision, total, notify, zoom, clock]);
   const previewGain = fadeGain(time - currentAt, currentTimelineEnd - currentAt, { fadeIn: currentFadeIn, fadeOut: currentFadeOut });
-  // The clip blending out of the current one (or about to, within 2 s) plays in a second video above it.
+  // Two video slots alternate by clip index: the current clip plays in its slot while the other
+  // slot holds the previous clip during a transition into the current one, or otherwise the next
+  // clip, loaded and parked at its first frame, so a cut or transition never waits for a load.
   const currentIndex = timeline.findIndex(item => item.id === currentId);
-  const nextWindow = timeline[currentIndex + 1];
-  const blend = current?.transition && currentIndex > 0 && time < current.at + (current.transitionDuration ?? 0) ? { from: timeline[currentIndex - 1], to: current, active: true }
-    : nextWindow?.transition && time >= nextWindow.at - 2 && current ? { from: current, to: nextWindow, active: false } : undefined;
-  const blendAsset = blend ? assets.find(asset => asset.id === blend.from.asset) : undefined;
+  const mainSlot = Math.max(0, currentIndex) % 2;
+  const blendActive = Boolean(current?.transition && currentIndex > 0 && time < current.at + (current.transitionDuration ?? 0));
+  const blend = blendActive && current ? { from: timeline[currentIndex - 1], to: current, active: true } : undefined;
+  const other = blendActive ? timeline[currentIndex - 1] : currentIndex >= 0 ? timeline[currentIndex + 1] : undefined;
+  const otherAsset = other ? assets.find(asset => asset.id === other.asset) : undefined;
+  const sizeOf = (url?: string) => (url && videoSizes[url]) || { width: 0, height: 0 };
+  const videoSize = sizeOf(currentAsset?.url);
   useEffect(() => {
     frameWork.current = value => {
       const main = videoRef.current, outgoing = outgoingRef.current, cover = coverRef.current;
@@ -177,27 +198,40 @@ export function AiEditor({ projectId }: { projectId?: string }) {
       const progress = active && blend ? (value - blend.to.at) / (blend.to.transitionDuration ?? 1) : 1;
       const frame = active && blend?.to.transition ? transitionFrame(blend.to.transition, progress) : undefined;
       if (main) {
+        const zoom = current ? zoomTransform(current, videoSize, frameSize, (value - current.at) / Math.max(.001, current.timelineEnd - current.at)) : "";
         main.volume = Math.max(0, Math.min(1, currentVolume * gain * (active ? progress : 1)));
-        main.style.transform = frame?.to.transform ?? ""; main.style.clipPath = frame?.to.clipPath ?? ""; main.style.zIndex = frame?.to.zIndex ? String(frame.to.zIndex) : "";
+        setStyle(main, "transform", `${frame?.to.transform ?? ""} ${zoom}`.trim()); setStyle(main, "transformOrigin", zoom ? "0 0" : "");
+        setStyle(main, "clipPath", frame?.to.clipPath ?? ""); setStyle(main, "filter", frame?.to.filter ?? (current && hasColour(current) ? `url(#${lookFilterId})` : "")); setStyle(main, "zIndex", frame?.to.zIndex ? String(frame.to.zIndex) : "");
+        setStyle(main, "visibility", ""); setStyle(main, "opacity", "");
       }
-      if (cover) { cover.style.opacity = String(frame?.cover?.opacity ?? 0); cover.style.background = frame?.cover?.color ?? "transparent"; }
-      if (outgoing && blend) {
-        const expected = blend.from.start + (value - blend.from.at) * segmentSpeed(blend.from);
-        if (outgoing.readyState >= 1 && Math.abs(outgoing.currentTime - expected) > .3) outgoing.currentTime = Math.max(blend.from.start, Math.min(blend.from.end, expected));
-        if (outgoing.playbackRate !== segmentSpeed(blend.from)) outgoing.playbackRate = segmentSpeed(blend.from);
-        if (playing && outgoing.paused) void outgoing.play().catch(() => {});
-        if (!playing && !outgoing.paused) outgoing.pause();
-        outgoing.volume = active ? Math.max(0, Math.min(1, blend.from.volume * (1 - progress))) : 0;
-        outgoing.style.visibility = active ? "visible" : "hidden";
-        outgoing.style.opacity = frame?.from.opacity === undefined ? "" : String(frame.from.opacity);
-        outgoing.style.transform = frame?.from.transform ?? ""; outgoing.style.clipPath = frame?.from.clipPath ?? ""; outgoing.style.zIndex = String(frame?.from.zIndex ?? 1);
+      if (cover) { setStyle(cover, "opacity", String(frame?.cover?.opacity ?? 0)); setStyle(cover, "background", frame?.cover?.color ?? "transparent"); }
+      if (!outgoing || !other) return;
+      if (blend) {
+        // The previous clip keeps playing under/over the incoming one for the transition.
+        const from = blend.from, speed = segmentSpeed(from);
+        const expected = from.start + (value - from.at) * speed;
+        if (outgoing.readyState >= 1 && Math.abs(outgoing.currentTime - expected) > .3) outgoing.currentTime = Math.max(from.start, Math.min(from.end, expected));
+        if (outgoing.playbackRate !== speed) outgoing.playbackRate = speed;
+        if (playing && active && outgoing.paused) void outgoing.play().catch(() => {});
+        if ((!playing || !active) && !outgoing.paused) outgoing.pause();
+        const zoom = zoomTransform(from, sizeOf(otherAsset?.url), frameSize, (value - from.at) / Math.max(.001, from.timelineEnd - from.at));
+        outgoing.volume = active ? Math.max(0, Math.min(1, from.volume * (1 - progress))) : 0;
+        setStyle(outgoing, "visibility", active ? "visible" : "hidden");
+        setStyle(outgoing, "opacity", frame?.from.opacity === undefined ? "" : String(frame.from.opacity));
+        setStyle(outgoing, "transform", `${frame?.from.transform ?? ""} ${zoom}`.trim()); setStyle(outgoing, "transformOrigin", zoom ? "0 0" : "");
+        setStyle(outgoing, "clipPath", frame?.from.clipPath ?? ""); setStyle(outgoing, "filter", frame?.from.filter ?? ""); setStyle(outgoing, "zIndex", String(frame?.from.zIndex ?? 1));
+      } else {
+        // The next clip waits, hidden and silent, on its first frame.
+        if (!outgoing.paused) outgoing.pause();
+        outgoing.volume = 0;
+        if (outgoing.readyState >= 1 && !outgoing.seeking && Math.abs(outgoing.currentTime - other.start) > .05) outgoing.currentTime = other.start;
+        setStyle(outgoing, "visibility", "hidden");
       }
     };
     frameWork.current(playbackPosition.current.time);
   });
   const previewAudio = useMemo(() => audioClips.map(clip => ({ ...clip, url: assets.find(asset => asset.id === clip.assetId && asset.status === "ready")?.url })), [audioClips, assets]);
   const audioBlocked = useCallback(() => notify("เบราว์เซอร์ไม่ยอมเล่นเสียงประกอบ กดเล่นอีกครั้ง หรือตรวจไฟล์เสียง"), [notify]);
-  useAudioPreview(previewAudio, playing, time, seekRevision, total, audioBlocked);
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -205,7 +239,6 @@ export function AiEditor({ projectId }: { projectId?: string }) {
     observer.observe(frame);
     return () => observer.disconnect();
   }, []);
-  const activeText = textLayers.filter(layer => total > 0 && time >= layer.start && time < Math.min(layer.end, total));
 
   const historyIsCurrent = historyProject === (project?.id ?? null);
   // One history entry covers all three tracks; `key` coalesces rapid edits of one field (typing, sliders).
@@ -265,7 +298,8 @@ export function AiEditor({ projectId }: { projectId?: string }) {
     if (!drawer) return;
     const panel = drawerRef.current;
     const trigger = drawerTriggerRef.current;
-    const focusable = () => Array.from(panel?.querySelectorAll<HTMLElement>("button:not([disabled]),input,textarea,select,a[href],[tabindex='0']") ?? []);
+    // Hidden tab content (e.g. the AI panel kept mounted behind another tab) must not become the trap's first/last stop.
+    const focusable = () => Array.from(panel?.querySelectorAll<HTMLElement>("button,input,textarea,select,a[href],[tabindex='0']") ?? []).filter(element => !element.matches(":disabled") && !element.closest("[hidden]") && element.getClientRects().length > 0);
     focusable()[0]?.focus();
     const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") setDrawer(null); if (event.key !== "Tab") return; const list = focusable(); const first = list[0]; const last = list[list.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); } };
     document.addEventListener("keydown", keydown); return () => { document.removeEventListener("keydown", keydown); trigger?.focus(); };
@@ -543,21 +577,22 @@ export function AiEditor({ projectId }: { projectId?: string }) {
   const imageLanes = useMemo(() => { const lanes = packLanes(imageLayers, layer => layer.start, layer => layer.end); return lanes.length || !persistence.imagesSupported ? lanes : [[]]; }, [imageLayers, persistence.imagesSupported]);
   const textLanes = useMemo(() => { const lanes = packLanes(textLayers, layer => layer.start, layer => layer.end); return lanes.length ? lanes : [[]]; }, [textLayers]);
   const busy = loading || saving;
+  const laneSkeleton = <div className={styles.laneSkeleton} aria-hidden="true"><span className={styles.skeleton} style={{ width: "26%" }} /></div>;
   const videoTrack = <div className={styles.track} data-kind="video" data-drop={dropLane === "video" || undefined} aria-label="แทร็กวิดีโอ" onDragOver={event => laneDragOver(event, "video")} onDragLeave={() => setDropLane(null)} onDrop={event => laneDrop(event, "video")}>
     {loading && !segments.length && <div className={styles.laneSkeleton} aria-hidden="true">{[38, 22, 30].map((width, index) => <span key={index} className={styles.skeleton} style={{ width: `${width}%` }} />)}</div>}
     {!loading && !segments.length && <button className={styles.lanePlaceholder} onClick={event => openLibrary("media", event.currentTarget)}><Plus />ลากวิดีโอจากคลังมาวางที่นี่ หรือคลิกเพื่อเลือกคลิป</button>}
     {displayTimeline.map(segment => { const asset = assets.find(item => item.id === segment.asset); const count = Math.max(1, Math.min(80, Math.ceil(segmentLength(segment) * zoom / 56))); return <Fragment key={segment.id}><button data-video-clip={segment.id} draggable onDragStart={event => event.dataTransfer.setData("text/plain", segment.id)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const id = event.dataTransfer.getData("text/plain"); const source = segments.find(item => item.id === id); if (!source || source.id === segment.id) return; const next = segments.filter(item => item.id !== id); next.splice(next.findIndex(item => item.id === segment.id), 0, source); commit(next); }} className={styles.clip} aria-pressed={selected === segment.id} aria-label={`${asset?.name} ${fmt(segmentLength(segment))}${segmentSpeed(segment) !== 1 ? ` ความเร็ว ${speedLabel(segmentSpeed(segment))}` : ""}${segment.volume === 0 ? " ปิดเสียง" : ""}`} style={{ left: segment.at * zoom, width: segmentLength(segment) * zoom }} onClick={() => { setSelected(segment.id); setTime(segment.at); }}><span className={styles.filmstrip} aria-hidden="true">{Array.from({ length: count }, (_, index) => { const sourceTime = segment.start + (segment.end - segment.start) * index / count; const frame = frameAt(asset?.frames ?? [], sourceTime, segment.start, segment.end); return <span key={index} className={styles.filmstripFrame} data-source-time={sourceTime.toFixed(3)} data-frame-time={frame?.time.toFixed(3)} style={{ backgroundImage: frame ? `url("${frame.url}")` : undefined }} />; })}</span>{(segment.fadeIn ?? 0) > 0 && <span className={styles.fadeMark} data-edge="in" style={{ width: (segment.fadeIn ?? 0) * zoom }} aria-hidden="true" />}{(segment.fadeOut ?? 0) > 0 && <span className={styles.fadeMark} data-edge="out" style={{ width: (segment.fadeOut ?? 0) * zoom }} aria-hidden="true" />}<span className={styles.clipLabel}>{segment.volume === 0 && <VolumeX className={styles.inlineIcon} />}{asset?.name}<small>{fmt(segmentLength(segment))}{segmentSpeed(segment) !== 1 && <b className={styles.speedBadge}>{speedLabel(segmentSpeed(segment))}</b>}</small></span></button>{trimHandles("video", segments.find(item => item.id === segment.id) ?? segment, segment.at, asset?.duration ?? segment.end)}</Fragment>; })}
     {persistence.clipStyles && displayTimeline.slice(1).map(segment => <button key={`join:${segment.id}`} className={styles.junction} data-set={segment.transition ? true : undefined} style={{ left: (segment.at + (segment.transitionDuration ?? 0) / 2) * zoom }} title={segment.transition ? `ทรานซิชัน ${TRANSITIONS.find(item => item.id === segment.transition)?.label ?? ""} ${segment.transitionDuration?.toFixed(1)} วิ` : "เพิ่มทรานซิชัน"} aria-label={segment.transition ? "แก้ทรานซิชัน" : "เพิ่มทรานซิชัน"} onClick={() => { setSelected(segment.id); setPlaying(false); }}><Blend /></button>)}
   </div>;
-  const renderAudio = (clip: AudioClip) => { const asset = assets.find(item => item.id === clip.assetId); const shown = trimDraft?.kind === "audio" && trimDraft.id === clip.id ? { ...clip, ...trimDraft.value } : clip; const at = trackDrag?.id === clip.id ? trackDrag.value : shown.at; const length = shown.end - shown.start; return <Fragment key={clip.id}><button data-audio-clip={clip.id} className={`${styles.clip} ${styles.audioClip}`} data-beyond={at + length > total + .05 || undefined} aria-pressed={selected === clip.id} aria-label={`เสียง ${asset?.name ?? ""} เริ่ม ${fmt(clip.at)} ยาว ${fmt(length)} ระดับเสียง ${Math.round(clip.volume * 100)}%`} style={{ left: at * zoom, width: Math.max(6, length * zoom) }} onPointerDown={event => startTrackDrag(event, clip.id, "audio", clip.at)} onPointerMove={moveTrackDrag} onPointerUp={event => endTrackDrag(event, true)} onPointerCancel={event => endTrackDrag(event, false)} onClick={() => { if (dragClick.current) { dragClick.current = false; return; } setSelected(clip.id); }}>{(clip.fadeIn ?? 0) > 0 && <span className={styles.fadeMark} data-edge="in" style={{ width: (clip.fadeIn ?? 0) * zoom }} aria-hidden="true" />}{(clip.fadeOut ?? 0) > 0 && <span className={styles.fadeMark} data-edge="out" style={{ width: (clip.fadeOut ?? 0) * zoom }} aria-hidden="true" />}<span className={styles.wave} aria-hidden="true" /><span className={styles.clipLabel}><Music className={styles.inlineIcon} />{asset?.name ?? "ไฟล์เสียง"}<small>{fmt(length)} · {Math.round(clip.volume * 100)}%</small></span></button>{trimHandles("audio", clip, at, asset?.duration ?? clip.end)}</Fragment>; };
+  const renderAudio = (clip: AudioClip) => { const asset = assets.find(item => item.id === clip.assetId); const shown = trimDraft?.kind === "audio" && trimDraft.id === clip.id ? { ...clip, ...trimDraft.value } : clip; const at = trackDrag?.id === clip.id ? trackDrag.value : shown.at; const length = shown.end - shown.start; return <Fragment key={clip.id}><button data-audio-clip={clip.id} className={`${styles.clip} ${styles.audioClip}`} data-beyond={at + length > total + .05 || undefined} aria-pressed={selected === clip.id} aria-label={`เสียง ${asset?.name ?? ""} เริ่ม ${fmt(clip.at)} ยาว ${fmt(length)} ระดับเสียง ${Math.round(clip.volume * 100)}%`} style={{ left: at * zoom, width: Math.max(6, length * zoom) }} onPointerDown={event => startTrackDrag(event, clip.id, "audio", clip.at)} onPointerMove={moveTrackDrag} onPointerUp={event => endTrackDrag(event, true)} onPointerCancel={event => endTrackDrag(event, false)} onClick={() => { if (dragClick.current) { dragClick.current = false; return; } setSelected(clip.id); }}>{(clip.fadeIn ?? 0) > 0 && <span className={styles.fadeMark} data-edge="in" style={{ width: (clip.fadeIn ?? 0) * zoom }} aria-hidden="true" />}{(clip.fadeOut ?? 0) > 0 && <span className={styles.fadeMark} data-edge="out" style={{ width: (clip.fadeOut ?? 0) * zoom }} aria-hidden="true" />}<AudioWave url={asset?.url} start={shown.start} end={shown.end} volume={clip.volume} fadeIn={clip.fadeIn} fadeOut={clip.fadeOut} width={Math.max(6, length * zoom)} fallbackClass={styles.wave} className={styles.waveCanvas} /><span className={styles.clipLabel}><Music className={styles.inlineIcon} />{asset?.name ?? "ไฟล์เสียง"}<small>{fmt(length)} · {Math.round(clip.volume * 100)}%</small></span></button>{trimHandles("audio", clip, at, asset?.duration ?? clip.end)}</Fragment>; };
   const renderText = (layer: TextLayer) => { const shown = trimDraft?.kind === "text" && trimDraft.id === layer.id ? { ...layer, ...trimDraft.value } : layer; const start = trackDrag?.id === layer.id ? trackDrag.value : shown.start; const length = shown.end - shown.start; return <Fragment key={layer.id}><button data-text-clip={layer.id} className={`${styles.clip} ${styles.textClip}`} data-beyond={start >= total || undefined} aria-pressed={selected === layer.id} aria-label={`ข้อความ ${layer.text.split("\n")[0]} ${fmt(layer.start)}–${fmt(layer.end)}`} style={{ left: start * zoom, width: Math.max(6, length * zoom) }} onPointerDown={event => startTrackDrag(event, layer.id, "text", layer.start)} onPointerMove={moveTrackDrag} onPointerUp={event => endTrackDrag(event, true)} onPointerCancel={event => endTrackDrag(event, false)} onClick={() => { if (dragClick.current) { dragClick.current = false; return; } setSelected(layer.id); if (total) setTime(Math.min(layer.start, total)); }}><span className={styles.clipLabel}><Type className={styles.inlineIcon} />{layer.text.split("\n")[0] || "(ว่าง)"}<small>{fmt(length)}</small></span></button>{trimHandles("text", layer, start, maxDuration)}</Fragment>; };
   const renderImage = (layer: ImageLayer) => { const asset = assets.find(item => item.id === layer.assetId); const shown = trimDraft?.kind === "image" && trimDraft.id === layer.id ? { ...layer, ...trimDraft.value } : layer; const start = trackDrag?.id === layer.id ? trackDrag.value : shown.start; const length = shown.end - shown.start; const picture = asset?.url ?? asset?.frames[0]?.url; return <Fragment key={layer.id}><button data-image-clip={layer.id} className={`${styles.clip} ${styles.imageClip}`} data-beyond={start >= total || undefined} aria-pressed={selected === layer.id} aria-label={`รูป ${asset?.name ?? ""} ${fmt(layer.start)}–${fmt(layer.end)}`} style={{ left: start * zoom, width: Math.max(6, length * zoom) }} onPointerDown={event => startTrackDrag(event, layer.id, "image", layer.start)} onPointerMove={moveTrackDrag} onPointerUp={event => endTrackDrag(event, true)} onPointerCancel={event => endTrackDrag(event, false)} onClick={() => { if (dragClick.current) { dragClick.current = false; return; } setSelected(layer.id); if (total) setTime(Math.min(layer.start, total)); }}>{picture && <span className={styles.imageClipThumb} style={{ backgroundImage: `url("${picture}")` }} aria-hidden="true" />}<span className={styles.clipLabel}><ImageIcon className={styles.inlineIcon} />{asset?.name ?? "รูปภาพ"}<small>{fmt(length)}</small></span></button>{trimHandles("image", layer, start, maxDuration)}</Fragment>; };
-  const activeImages = imageLayers.filter(layer => total > 0 && time >= layer.start && time < Math.min(layer.end, total));
   const libraryTitle = LIBRARY_TABS.find(item => item.value === libraryTab)?.title;
   const lookFilterId = "ez-editor-look";
-  const outgoingRect = blend && hasFrame(blend.from) ? frameRect(blend.from, videoSize, frameSize) : undefined;
+  const outgoingRect = other && hasFrame(other) ? frameRect(other, sizeOf(otherAsset?.url), frameSize) : undefined;
   const outgoingStyle: CSSProperties = outgoingRect ? { left: outgoingRect.left, top: outgoingRect.top, width: outgoingRect.width, height: outgoingRect.height, objectFit: "fill" } : {};
   const previewColour = lookColour(current ?? {});
+  // Laid out at the clip's start zoom; an animated zoom is a per-frame transform (frameWork).
   const previewRect = current && hasFrame(current) ? frameRect(current, videoSize, frameSize) : undefined;
   const previewStyle: CSSProperties | undefined = current && (previewRect || hasColour(current)) ? {
     ...(previewRect ? { position: "absolute", left: previewRect.left, top: previewRect.top, width: previewRect.width, height: previewRect.height, maxWidth: "none", objectFit: "fill" } : {}),
@@ -586,14 +621,14 @@ export function AiEditor({ projectId }: { projectId?: string }) {
         <div className={styles.panelHead}><b>{libraryTitle}</b><button className={styles.closeDrawer} aria-label="ปิดแผง" onClick={() => { setDrawer(null); setLibraryOpen(false); }}><X /></button></div>
         <div className={styles.panelBody}>
           {dragOver && <div className={styles.dropOverlay} aria-hidden="true"><Upload />วางไฟล์เพื่ออัปโหลด</div>}
-          {libraryTab === "audio" ? <AudioTab assets={audioAssets} clips={audioClips} maxClips={maxAudioClips} formats={persistence.audioFormats} supported={persistence.tracksSupported} busy={busy} loading={loading} unavailable={persistence.capabilities?.available === false} playhead={time} canAdd={asset => Boolean(audioClipRange(time, asset.duration, audioClips.length, maxAudioClips, TRACK_LIMITS.maxTimeline))} onImport={files => void persistence.importFiles(files, "audio")} onRetry={persistence.retryUpload} onAdd={asset => addAudio(asset)} onEdit={id => { const clip = audioClips.find(item => item.id === id); editTrack(id, clip?.at); }} />
+          {libraryTab === "audio" ? <AudioTab assets={audioAssets} clips={audioClips} maxClips={maxAudioClips} formats={persistence.audioFormats} supported={persistence.tracksSupported} busy={busy} loading={loading} unavailable={persistence.capabilities?.available === false} playhead={time} canAdd={asset => Boolean(audioClipRange(time, asset.duration, audioClips.length, maxAudioClips, TRACK_LIMITS.maxTimeline))} onImport={files => void persistence.importFiles(files, "audio")} onRetry={persistence.retryUpload} onAdd={asset => addAudio(asset)} onVoice={persistence.voiceSupported ? async (text, voice, rate) => { const asset = await persistence.generateVoice(text, voice, rate); if (asset) addAudio(asset); } : undefined} onEdit={id => { const clip = audioClips.find(item => item.id === id); editTrack(id, clip?.at); }} />
           : libraryTab === "image" ? <ImageTab assets={imageAssets} layers={imageLayers} maxLayers={maxImageLayers} supported={persistence.imagesSupported} busy={busy} loading={loading} onImport={files => void persistence.importFiles(files, "image")} onRetry={persistence.retryUpload} onAdd={asset => addImage(asset)} />
           : libraryTab === "text" ? <TextTab layers={textLayers} maxLayers={maxTextLayers} supported={persistence.tracksSupported} busy={busy} textOverlays={persistence.textOverlays} canSubtitle={canSubtitle} subtitleHint={subtitleHint} playhead={time} effects={persistence.clipStyles} onAdd={addText} onSubtitles={generateSubtitles} onEdit={id => { const layer = textLayers.find(item => item.id === id); editTrack(id, layer?.start); }} />
           : libraryTab === "media" ? <>
             <input ref={inputRef} type="file" accept="video/*,.mov,.mp4" multiple hidden onChange={event => { if (event.target.files) void persistence.importFiles(event.target.files); event.target.value = ""; }} />
-            <button className={styles.importButton} disabled={busy || persistence.capabilities?.available === false} onClick={() => inputRef.current?.click()}><Upload /><span><b>นำเข้าวิดีโอ</b><small>MP4, MOV, WebM · ไม่เกิน 50 MB</small></span></button>
+            <button className={styles.importButton} disabled={busy || persistence.capabilities?.available === false} onClick={() => inputRef.current?.click()}><Upload /><span><b>นำเข้าวิดีโอ</b><small>MP4, MOV, WebM · ไม่เกิน {persistence.capabilities?.chunkedUploads ? `${Math.round((persistence.capabilities.maxSourceBytes ?? 52428800) / 1048576)} MB (เกิน 50 MB จะถูกบีบอัด)` : "50 MB"}</small></span></button>
             {videoAssets.length > 3 && <label className={styles.search}><Search /><input placeholder="ค้นหาคลิป" aria-label="ค้นหาสื่อ" value={query} onChange={event => setQuery(event.target.value)} /></label>}
-            <div className={styles.mediaGrid}>
+            <div className={styles.mediaGrid} aria-busy={loading && !videoAssets.length || undefined}>
               {loading && !videoAssets.length && Array.from({ length: 6 }, (_, index) => <div key={index} className={styles.mediaCard} aria-hidden="true"><span className={`${styles.mediaThumb} ${styles.skeleton}`} /><span className={`${styles.skeleton} ${styles.skLine}`} /></div>)}
               {visibleAssets.map(asset => { const ready = asset.status === "ready"; const canAdd = ready && !busy && Boolean(manualTimelineRange(asset.duration, segments.length, total, maxSegments, maxDuration)); return <div className={styles.mediaCard} key={asset.id} data-status={asset.status} draggable={ready} onDragStart={event => { event.dataTransfer.setData(VIDEO_ASSET_MIME, asset.id); event.dataTransfer.effectAllowed = "copy"; }} onDoubleClick={() => { if (canAdd) addVideo(asset); }} title={ready ? "ลากลง timeline หรือดับเบิลคลิกเพื่อเพิ่ม" : undefined}>
                 <div className={`${styles.mediaThumb} ${ready && asset.thumbnails === "loading" && !asset.frames[0] ? styles.skeleton : ""}`}>
@@ -611,21 +646,32 @@ export function AiEditor({ projectId }: { projectId?: string }) {
             {persistence.capabilities?.available === false && <p className={`${styles.alert} ${styles.warning}`}>{persistence.capabilities.unavailableReason || "ระบบประมวลผลสื่อยังไม่พร้อมใช้งาน"}</p>}
           </> : null}
           <div className={styles.aiHost} hidden={libraryTab !== "ai"}><AiAssistantPanel key={project?.id ?? "empty-project"} persistence={persistence} onApply={adoptAiProject} onTranscripts={setTranscripts} onPreviewStart={() => setPlaying(false)} /></div>
+          {LIBRARY_TABS.some(item => item.value === "chat") && <div className={styles.aiHost} style={{ flex: 1, minHeight: 0 }} hidden={libraryTab !== "chat"}><AiChatPanel key={project?.id ?? "empty-project"} persistence={persistence} onApply={adoptAiProject} /></div>}
         </div>
       </aside>
       <section className={styles.stage} aria-label="พรีวิว">
         <div className={styles.view}><div ref={frameRef} className={`${styles.frame} ${loading && !currentAsset ? styles.skeleton : ""}`} style={{ aspectRatio: ratio, "--frame-ratio": ratio === "9/16" ? 9 / 16 : ratio === "16/9" ? 16 / 9 : 1 } as CSSProperties}>
           {current && hasColour(current) && <svg className={styles.filterDefs} aria-hidden="true"><filter id={lookFilterId} colorInterpolationFilters="sRGB"><feComponentTransfer>{(["feFuncR", "feFuncG", "feFuncB"] as const).map(Func => <Func key={Func} type="linear" slope={previewColour.slope} intercept={previewColour.intercept} />)}</feComponentTransfer><feColorMatrix type="saturate" values={String(previewColour.saturate)} /></filter></svg>}
-          {currentAsset?.url ? <video ref={videoRef} key={currentAsset.url} src={currentAsset.url} playsInline preload="auto" onLoadedMetadata={event => setVideoSize({ width: event.currentTarget.videoWidth, height: event.currentTarget.videoHeight })} style={previewStyle} /> : !loading && <div className={styles.fill}><span className={styles.emptyPreview}><Film />ยังไม่มีคลิปบน timeline</span></div>}
-          {blendAsset?.url && blend && <video ref={outgoingRef} key={`${blend.from.id}:${blendAsset.url}`} className={styles.outgoing} src={blendAsset.url} playsInline preload="auto" aria-hidden="true" style={{ ...outgoingStyle, visibility: "hidden" }} onLoadedMetadata={() => frameWork.current(playbackPosition.current.time)} />}
+          {[0, 1].map(slot => {
+            const isMain = slot === mainSlot, item = isMain ? current : other, asset = isMain ? currentAsset : otherAsset;
+            if (!item || !asset?.url) return null;
+            const url = asset.url;
+            return <video key={`slot-${slot}`} ref={isMain ? videoRef : outgoingRef} className={isMain ? undefined : styles.outgoing} src={url} playsInline preload="auto" aria-hidden={!isMain || undefined}
+              style={isMain ? previewStyle : { ...outgoingStyle, visibility: "hidden" }}
+              onLoadedMetadata={event => { const { videoWidth: width, videoHeight: height } = event.currentTarget; setVideoSizes(sizes => sizes[url]?.width === width && sizes[url]?.height === height ? sizes : { ...sizes, [url]: { width, height } }); frameWork.current(playbackPosition.current.time); }} />;
+          })}
+          {!currentAsset?.url && !loading && <div className={styles.fill}><span className={styles.emptyPreview}><Film />ยังไม่มีคลิปบน timeline</span></div>}
           <div ref={coverRef} className={styles.transitionCover} aria-hidden="true" />
-          {activeImages.map(layer => { const url = assets.find(asset => asset.id === layer.assetId && asset.status === "ready")?.url; return url ? <ImageOverlay key={layer.id} layer={layer} url={url} frame={frameSize} selected={selected === layer.id} disabled={busy} onSelect={() => { setSelected(layer.id); setPlaying(false); }} onCommit={geometry => adjustImage(geometry, undefined, layer)} /> : null; })}
-          {activeText.map(layer => <TextOverlay key={layer.id} layer={layer} frame={frameSize} selected={selected === layer.id} disabled={busy} resizable={persistence.capabilities?.textTransforms === true} time={time} onSelect={() => { setSelected(layer.id); setPlaying(false); }} onCommit={geometry => commitState({ textLayers: textLayers.map(item => item.id === layer.id ? { ...item, ...geometry } : item) })} />)}
+          <ClockView clock={clock}>{now => { const live = (layer: { start: number; end: number }) => total > 0 && now >= layer.start && now < Math.min(layer.end, total); return <>
+          {imageLayers.filter(layer => live(layer)).map(layer => { const url = assets.find(asset => asset.id === layer.assetId && asset.status === "ready")?.url; return url ? <ImageOverlay key={layer.id} layer={layer} url={url} frame={frameSize} selected={selected === layer.id} disabled={busy} onSelect={() => { setSelected(layer.id); setPlaying(false); }} onCommit={geometry => adjustImage(geometry, undefined, layer)} /> : null; })}
+          {textLayers.filter(layer => live(layer)).map(layer => <TextOverlay key={layer.id} layer={layer} frame={frameSize} selected={selected === layer.id} disabled={busy} resizable={persistence.capabilities?.textTransforms === true} time={now} onSelect={() => { setSelected(layer.id); setPlaying(false); }} onCommit={geometry => commitState({ textLayers: textLayers.map(item => item.id === layer.id ? { ...item, ...geometry } : item) })} />)}
+          </>; }}</ClockView>
+          <AudioPreview clock={clock} clips={previewAudio} playing={playing} seekRevision={seekRevision} total={total} onBlocked={audioBlocked} />
           <div ref={fadeRef} className={styles.fadeOverlay} style={{ opacity: 1 - previewGain }} aria-hidden="true" />
           {safeArea && <div className={styles.safe} />}
         </div></div>
         <div className={styles.controls}>
-          <span className={styles.time}><b>{fmt(time)}</b> / {fmt(total)}</span>
+          <span className={styles.time}><b><ClockView clock={clock}>{now => fmt(now)}</ClockView></b> / {fmt(total)}</span>
           <div className={styles.transport}>
             <button className={styles.iconButton} onClick={() => setTime(0)} aria-label="ไปต้นคลิป" disabled={!total}><SkipBack /></button>
             <button className={styles.playButton} aria-label={playing && time < total ? "หยุด" : "เล่น"} disabled={!total} onClick={toggle}>{playing && time < total ? <Pause /> : <Play />}</button>
@@ -636,7 +682,7 @@ export function AiEditor({ projectId }: { projectId?: string }) {
       </section>
       <aside ref={element => { if (drawer === "inspector") drawerRef.current = element; }} className={`${styles.panel} ${styles.assistant} ${drawer === "inspector" ? styles.open : ""}`} role={drawer === "inspector" ? "dialog" : undefined} aria-modal={drawer === "inspector" || undefined} aria-label="ปรับแต่ง">
         <div className={styles.panelHead}><b>{selected ? `ปรับแต่ง${selectionKind}` : "ตั้งค่าโปรเจกต์"}</b><button className={styles.closeDrawer} aria-label="ปิดแผงปรับแต่ง" onClick={() => setDrawer(null)}><X /></button></div>
-        <div className={styles.panelBody}>
+        <div className={styles.panelBody} aria-busy={loading && !project || undefined}>
           {loading && !project ? <div className={styles.skeletonStack} aria-hidden="true"><span className={`${styles.skeleton} ${styles.skLine}`} /><span className={`${styles.skeleton} ${styles.skBlock}`} /><span className={`${styles.skeleton} ${styles.skRow}`} /><span className={`${styles.skeleton} ${styles.skRow}`} /></div>
           : selectedSegment && selectedAsset ? <>
             <b className={styles.inspectorName}><Film className={styles.inlineIcon} />{selectedAsset.name}</b>
@@ -660,11 +706,12 @@ export function AiEditor({ projectId }: { projectId?: string }) {
               <span className={styles.sectionLabel}><Crop className={styles.inlineIcon} />จัดเฟรม</span>
               <div className={styles.row2} role="group" aria-label="การวางภาพในกรอบ"><button disabled={busy} aria-pressed={selectedSegment.fit !== "cover"} onClick={() => adjustLook({ fit: undefined })}>พอดีกรอบ</button><button disabled={busy} aria-pressed={selectedSegment.fit === "cover"} onClick={() => adjustLook({ fit: "cover" })}>เต็มกรอบ</button></div>
               <label>ซูม {Math.round((selectedSegment.zoom ?? 1) * 100)}%<input type="range" disabled={busy} min={1} max={3} step={.01} value={selectedSegment.zoom ?? 1} onChange={event => adjustLook({ zoom: Number(event.target.value) }, "zoom")} /></label>
+              <label>ซูมเคลื่อนไปที่ {selectedSegment.zoomTo ? `${Math.round(selectedSegment.zoomTo * 100)}%` : "ปิด"}<input type="range" disabled={busy} min={1} max={3} step={.01} value={selectedSegment.zoomTo ?? selectedSegment.zoom ?? 1} onChange={event => adjustLook({ zoomTo: Number(event.target.value) }, "zoomTo")} /></label>
               {hasFrame(selectedSegment) && <div className={styles.row2}>
                 <label>เลื่อนซ้าย–ขวา<input type="range" disabled={busy} min={-1} max={1} step={.01} value={selectedSegment.panX ?? 0} onChange={event => adjustLook({ panX: Number(event.target.value) }, "panX")} /></label>
                 <label>เลื่อนบน–ล่าง<input type="range" disabled={busy} min={-1} max={1} step={.01} value={selectedSegment.panY ?? 0} onChange={event => adjustLook({ panY: Number(event.target.value) }, "panY")} /></label>
               </div>}
-              {(hasColour(selectedSegment) || hasFrame(selectedSegment) || selectedSegment.panX || selectedSegment.panY) && <button disabled={busy} onClick={() => adjustLook({ brightness: 0, contrast: 0, saturation: 0, fit: undefined, zoom: 1, panX: 0, panY: 0 })}><RotateCcw />รีเซ็ตสีและเฟรม</button>}
+              {(hasColour(selectedSegment) || hasFrame(selectedSegment) || selectedSegment.panX || selectedSegment.panY) && <button disabled={busy} onClick={() => adjustLook({ brightness: 0, contrast: 0, saturation: 0, fit: undefined, zoom: 1, panX: 0, panY: 0, zoomTo: 0 })}><RotateCcw />รีเซ็ตสีและเฟรม</button>}
             </>}
             {persistence.clipStyles && selectedIndex > 0 && <>
               <span className={styles.sectionLabel}><Blend className={styles.inlineIcon} />ทรานซิชันจากคลิปก่อนหน้า</span>
@@ -683,7 +730,7 @@ export function AiEditor({ projectId }: { projectId?: string }) {
             <span className={styles.sectionLabel}>สัดส่วนวิดีโอ</span>
             <div className={styles.ratioGrid} role="group" aria-label="สัดส่วน">{RATIO_OPTIONS.map(option => <button key={option.value} aria-pressed={ratio === option.value} disabled={busy} onClick={() => { setRatio(option.value); setDirty(true); }}><span className={styles.ratioShape} data-ratio={option.value} /><b>{option.label}</b><small>{option.hint}</small></button>)}</div>
             <span className={styles.sectionLabel}>ภาพรวม</span>
-            <dl className={styles.stats}><div><dt>ความยาว</dt><dd>{fmt(total)}</dd></div><div><dt>คลิปวิดีโอ</dt><dd>{segments.length}/{maxSegments}</dd></div><div><dt>เสียง</dt><dd>{audioClips.length} คลิป · {audioLanes.filter(lane => lane.length).length} เลเยอร์</dd></div><div><dt>ข้อความ</dt><dd>{textLayers.length} ชั้น · {textLanes.filter(lane => lane.length).length} เลเยอร์</dd></div>{project && <div><dt>ฉบับที่</dt><dd>{project.revision}</dd></div>}</dl>
+            <dl className={styles.stats}><div><dt>ความยาว</dt><dd>{fmt(total)}</dd></div><div><dt>คลิปวิดีโอ</dt><dd>{segments.length}/{maxSegments}</dd></div><div><dt>เสียง</dt><dd>{audioClips.length} คลิป · {audioLanes.filter(lane => lane.length).length} เลเยอร์</dd></div><div><dt>ข้อความ</dt><dd>{textLayers.length} ชั้น · {textLanes.filter(lane => lane.length).length} เลเยอร์</dd></div></dl>
             <p className={styles.hint}>คลิกคลิป เสียง หรือข้อความบน timeline เพื่อปรับแต่ง</p>
           </>}
         </div>
@@ -701,7 +748,7 @@ export function AiEditor({ projectId }: { projectId?: string }) {
             <button role="menuitem" onClick={event => openLibrary("media", event.currentTarget)}><Film />วิดีโอ<small>จากคลังสื่อ</small></button>
             <button role="menuitem" onClick={event => openLibrary("audio", event.currentTarget)}><Music />เพลง / เสียง<small>วางเป็นเลเยอร์เสียง</small></button>
             <button role="menuitem" disabled={!persistence.tracksSupported} onClick={() => { setLayerMenu(false); addText(); }}><Type />ข้อความ<small>ที่ตำแหน่งเล่น {fmt(time)}</small></button>
-            <button role="menuitem" disabled={!persistence.imagesSupported} onClick={event => openLibrary("image", event.currentTarget)}><ImageIcon />รูป / สติกเกอร์ / โลโก้<small>{persistence.imagesSupported ? "จากคลังรูปภาพ" : "รอ migration 028"}</small></button>
+            <button role="menuitem" disabled={!persistence.imagesSupported} onClick={event => openLibrary("image", event.currentTarget)}><ImageIcon />รูป / สติกเกอร์ / โลโก้<small>{persistence.imagesSupported ? "จากคลังรูปภาพ" : "ยังไม่พร้อมใช้งาน"}</small></button>
           </div>}
         </div>
         <button aria-pressed={snapping} title="ดูดติดขอบคลิปและตำแหน่งเล่นเวลาลาก" onClick={() => setSnapping(value => !value)}><Magnet /><span>Snap</span></button>
@@ -718,12 +765,12 @@ export function AiEditor({ projectId }: { projectId?: string }) {
           <div data-kind="video"><Film />วิดีโอหลัก</div>
           {audioLanes.map((_, index) => <div key={`a${index}`} data-kind="audio"><Music />เสียง {index + 1}</div>)}
         </div>
-        <div ref={lanesRef} className={styles.lanes} style={{ width: Math.max((laneEnd + 10) * zoom, 600), "--px": `${zoom}px` } as CSSProperties}>
+        <div ref={lanesRef} className={styles.lanes} aria-busy={loading || undefined} style={{ width: Math.max((laneEnd + 10) * zoom, 600), "--px": `${zoom}px` } as CSSProperties}>
           <div className={styles.ruler} onPointerDown={startScrub} onPointerMove={moveScrub} onPointerUp={endScrub} onPointerCancel={endScrub} onLostPointerCapture={endScrub}>{rulerTicks}</div>
-          {[...imageLanes].reverse().map((lane, index) => <div key={`i${index}`} className={styles.track} data-kind="image" data-drop={dropLane === "image" || undefined} aria-label={`แทร็กรูป ${imageLanes.length - index}`} onDragOver={event => laneDragOver(event, "image")} onDragLeave={() => setDropLane(null)} onDrop={event => laneDrop(event, "image")}>{lane.map(renderImage)}{!lane.length && !loading && <button className={styles.lanePlaceholder} onClick={event => openLibrary("image", event.currentTarget)}><Plus />เพิ่มรูป / โลโก้</button>}</div>)}
-          {[...textLanes].reverse().map((lane, index) => <div key={`t${index}`} className={styles.track} data-kind="text" aria-label={`แทร็กข้อความ ${textLanes.length - index}`}>{lane.map(renderText)}{!lane.length && !loading && <button className={styles.lanePlaceholder} disabled={busy || !persistence.tracksSupported} onClick={() => addText()}><Plus />เพิ่มข้อความ</button>}</div>)}
+          {[...imageLanes].reverse().map((lane, index) => <div key={`i${index}`} className={styles.track} data-kind="image" data-drop={dropLane === "image" || undefined} aria-label={`แทร็กรูป ${imageLanes.length - index}`} onDragOver={event => laneDragOver(event, "image")} onDragLeave={() => setDropLane(null)} onDrop={event => laneDrop(event, "image")}>{lane.map(renderImage)}{!lane.length && loading && laneSkeleton}{!lane.length && !loading && <button className={styles.lanePlaceholder} onClick={event => openLibrary("image", event.currentTarget)}><Plus />เพิ่มรูป / โลโก้</button>}</div>)}
+          {[...textLanes].reverse().map((lane, index) => <div key={`t${index}`} className={styles.track} data-kind="text" aria-label={`แทร็กข้อความ ${textLanes.length - index}`}>{lane.map(renderText)}{!lane.length && loading && laneSkeleton}{!lane.length && !loading && <button className={styles.lanePlaceholder} disabled={busy || !persistence.tracksSupported} onClick={() => addText()}><Plus />เพิ่มข้อความ</button>}</div>)}
           {videoTrack}
-          {audioLanes.map((lane, index) => <div key={`a${index}`} className={styles.track} data-kind="audio" data-drop={dropLane === "audio" || undefined} aria-label={`แทร็กเสียง ${index + 1}`} onDragOver={event => laneDragOver(event, "audio")} onDragLeave={() => setDropLane(null)} onDrop={event => laneDrop(event, "audio")}>{lane.map(renderAudio)}{!lane.length && !loading && <button className={styles.lanePlaceholder} onClick={event => openLibrary("audio", event.currentTarget)}><Plus />เพิ่มเพลงหรือเสียง</button>}</div>)}
+          {audioLanes.map((lane, index) => <div key={`a${index}`} className={styles.track} data-kind="audio" data-drop={dropLane === "audio" || undefined} aria-label={`แทร็กเสียง ${index + 1}`} onDragOver={event => laneDragOver(event, "audio")} onDragLeave={() => setDropLane(null)} onDrop={event => laneDrop(event, "audio")}>{lane.map(renderAudio)}{!lane.length && loading && laneSkeleton}{!lane.length && !loading && <button className={styles.lanePlaceholder} onClick={event => openLibrary("audio", event.currentTarget)}><Plus />เพิ่มเพลงหรือเสียง</button>}</div>)}
           {snapGuide !== null && <div className={styles.snapGuide} style={{ left: snapGuide * zoom }} aria-hidden="true" />}
           <div ref={playheadRef} className={styles.playhead} style={{ left: time * zoom }} role="slider" tabIndex={total ? 0 : -1} aria-label="ตำแหน่งเล่น" aria-valuemin={0} aria-valuemax={total} aria-valuenow={Number(time.toFixed(2))} aria-valuetext={fmt(time)} aria-disabled={!total} aria-orientation="horizontal" onPointerDown={startScrub} onPointerMove={moveScrub} onPointerUp={endScrub} onPointerCancel={endScrub} onLostPointerCapture={endScrub} onKeyDown={event => {
             if (!total || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -734,7 +781,29 @@ export function AiEditor({ projectId }: { projectId?: string }) {
         </div>
       </div>
     </section>
-    <dialog ref={dialogRef} className={styles.dialog} aria-labelledby="ai-editor-export-title"><div className={styles.dialogHead}><h2 id="ai-editor-export-title">ส่งออก MP4</h2><button className={styles.iconButton} aria-label="ปิด" onClick={() => dialogRef.current?.close()}><X /></button></div><p className={styles.muted}>ความยาว {fmt(total)} · อัตราส่วน {ratio.replace("/", ":")} · ส่งออกจากฉบับที่บันทึกแล้ว</p><label>ความละเอียด<select value={resolution} onChange={event => setResolution(event.target.value as EditorResolution)} disabled={persistence.exporting}>{(persistence.capabilities?.resolutions ?? ["720p", "1080p"]).map(value => <option key={value}>{value}</option>)}</select></label>{textLayers.length > 0 && persistence.textOverlays === false && <p role="status" className={`${styles.alert} ${styles.warning}`}>ระบบส่งออกยังใส่ข้อความลงวิดีโอไม่ได้ ลบข้อความทั้งหมดเพื่อส่งออก หรือรอระบบพร้อม</p>}{(audioClips.length > 0 || textLayers.length > 0) && <p className={styles.muted}>รวมเสียง {audioClips.length} คลิป · ข้อความ {textLayers.length} ชั้น (ส่วนที่เกินความยาววิดีโอจะถูกตัด)</p>}<button className={styles.primary} disabled={!total || busy || uploadCount > 0 || persistence.exporting || persistence.conflict || persistence.capabilities?.available === false || (textLayers.length > 0 && persistence.textOverlays === false)} onClick={() => void persistence.startExport(resolution)}><Download />{persistence.exporting ? "กำลังเตรียมส่งออก…" : "เริ่มส่งออก"}</button>{persistence.error && <p role="alert" className={styles.uploadError}>{persistence.error}</p>}<div className={styles.exportList}>{persistence.exports.map(item => <div className={styles.exportItem} key={item.id}><b>{item.resolution} · ฉบับที่ {item.revision}</b><span role="status" className={`${styles.status} ${item.status === "completed" ? styles.success : item.status === "failed" ? styles.error : styles.warning}`}>{{ queued: "รอส่งออก", processing: "กำลังส่งออก", completed: "ส่งออกสำเร็จ", failed: "ส่งออกไม่สำเร็จ" }[item.status]}</span><small>{fmt(item.duration)} · {item.aspectRatio}</small>{item.failureMessage && <small className={styles.uploadError}>{item.failureMessage}</small>}{item.status === "completed" && <button onClick={() => void persistence.download(item.id)}><Download />ดาวน์โหลด MP4</button>}{item.status === "failed" && item.canRetry && <button onClick={() => void persistence.retryExport(item.id)}>ลองส่งออกอีกครั้ง</button>}</div>)}</div></dialog>
+    <dialog ref={dialogRef} className={styles.dialog} aria-labelledby="ai-editor-export-title"><div className={styles.dialogHead}><h2 id="ai-editor-export-title">ส่งออก MP4</h2><button className={styles.iconButton} aria-label="ปิด" onClick={() => dialogRef.current?.close()}><X /></button></div><p className={styles.muted}>ความยาว {fmt(total)} · อัตราส่วน {ratio.replace("/", ":")} · ส่งออกจากฉบับที่บันทึกแล้ว</p><label>ความละเอียด<select value={resolution} onChange={event => setResolution(event.target.value as EditorResolution)} disabled={persistence.exporting}>{(persistence.capabilities?.resolutions ?? ["720p", "1080p"]).map(value => <option key={value}>{value}</option>)}</select></label>{textLayers.length > 0 && persistence.textOverlays === false && <p role="status" className={`${styles.alert} ${styles.warning}`}>ระบบส่งออกยังใส่ข้อความลงวิดีโอไม่ได้ ลบข้อความทั้งหมดเพื่อส่งออก หรือรอระบบพร้อม</p>}{(audioClips.length > 0 || textLayers.length > 0) && <p className={styles.muted}>รวมเสียง {audioClips.length} คลิป · ข้อความ {textLayers.length} ชั้น (ส่วนที่เกินความยาววิดีโอจะถูกตัด)</p>}<button className={styles.primary} disabled={!total || busy || uploadCount > 0 || persistence.exporting || persistence.conflict || persistence.capabilities?.available === false || (textLayers.length > 0 && persistence.textOverlays === false)} onClick={() => void persistence.startExport(resolution)}><Download />{persistence.exporting ? "กำลังเตรียมส่งออก…" : "เริ่มส่งออก"}</button>{persistence.error && <p role="alert" className={styles.uploadError}>{persistence.error}</p>}<div className={styles.exportList} aria-busy={loading || undefined} aria-label="รายการส่งออก">{loading && !persistence.exports.length && <div className={styles.exportSkeleton} aria-hidden="true">{[0, 1].map(index => <span key={index} className={`${styles.skeleton} ${styles.skRow}`} />)}</div>}{persistence.exports.map(item => <div className={styles.exportItem} key={item.id}><b>{item.resolution} · ส่งออกเมื่อ {exportTime(item.createdAt)}</b><span role="status" className={`${styles.status} ${item.status === "completed" ? styles.success : item.status === "failed" ? styles.error : styles.warning}`}>{{ queued: "รอส่งออก", processing: "กำลังส่งออก", completed: "ส่งออกสำเร็จ", failed: "ส่งออกไม่สำเร็จ" }[item.status]}</span><small>{fmt(item.duration)} · {item.aspectRatio}</small>{item.failureMessage && <small className={styles.uploadError}>{item.failureMessage}</small>}{item.status === "completed" && <button onClick={() => void persistence.download(item.id)}><Download />ดาวน์โหลด MP4</button>}{item.status === "failed" && item.canRetry && <button onClick={() => void persistence.retryExport(item.id)}>ลองส่งออกอีกครั้ง</button>}</div>)}</div></dialog>
     {toast && <div className={styles.toast} role="status">{toast}</div>}
   </div>;
+}
+
+/** Re-renders its children with the playback clock, without re-rendering the editor. */
+function ClockView({ clock, children }: { clock: PlaybackClock; children: (time: number) => React.ReactNode }) {
+  return <>{children(useClockTime(clock))}</>;
+}
+
+/** Background music/voice preview, synced to the clock 10×/s like before. */
+function AudioPreview({ clock, clips, playing, seekRevision, total, onBlocked }: { clock: PlaybackClock; clips: PreviewAudioClip[]; playing: boolean; seekRevision: number; total: number; onBlocked: () => void }) {
+  useAudioPreview(clips, playing, useClockTime(clock, 100), seekRevision, total, onBlocked);
+  return null;
+}
+
+/** What is playing at `time`: the window and whether a transition into it is still running. */
+function playbackStructure(timeline: (Segment & { at: number; timelineEnd: number })[], time: number) {
+  const window = playbackWindowAt(timeline, time);
+  return window ? `${window.id}:${window.transition && time < window.at + (window.transitionDuration ?? 0) ? 1 : 0}` : "";
+}
+
+/** Writes a style only when it changes, so per-frame updates do not touch the DOM needlessly. */
+function setStyle(element: HTMLElement, property: "transform" | "transformOrigin" | "clipPath" | "filter" | "zIndex" | "visibility" | "opacity" | "background", value: string) {
+  if (element.style[property] !== value) element.style[property] = value;
 }

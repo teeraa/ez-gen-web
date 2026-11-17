@@ -1,6 +1,7 @@
 import {
   AudioLines,
   Clapperboard,
+  Film,
   House,
   Images,
   ListChecks,
@@ -11,6 +12,7 @@ import {
   Settings,
   ShoppingBag,
   Sparkles,
+  Store,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
@@ -40,6 +42,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/studio", label: "สร้างวิดีโอ", icon: Sparkles, exact: true },
       { href: "/studio/images", label: "ภาพ / สินค้า", icon: ShoppingBag },
       { href: "/studio/director", label: "ผู้กำกับ", icon: Clapperboard },
+      { href: "/studio/film", label: "สร้างหนัง", icon: Film },
       { href: "/studio/ai-editor", label: "AI ตัดต่อ", icon: Scissors },
       { href: "/studio/voice", label: "เสียง", icon: AudioLines },
     ],
@@ -52,6 +55,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/studio/prompts", label: "Prompt", icon: ScrollText },
       { href: "/studio/mcp", label: "MCP", icon: Plug, disabled: true },
     ],
+  },
+  {
+    label: "ขายของ",
+    items: [{ href: "/studio/marketplace", label: "Marketplace", icon: Store }],
   },
   {
     label: "ผลงาน",
