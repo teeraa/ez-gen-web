@@ -1,5 +1,6 @@
-// Client for the สร้างหนัง API (/open/v1/film). Mirrors the backend film DTOs.
+// Client for the สร้างหนัง API (/api/v1/film). Mirrors the backend film DTOs.
 
+import { parseEnvelope } from "./api-envelope.ts";
 export type ElementKind = "character" | "location" | "prop";
 export type WorkStatus = "idle" | "queued" | "processing" | "succeeded" | "failed";
 
@@ -61,8 +62,6 @@ export class FilmError extends Error {
   }
 }
 
-const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
@@ -72,13 +71,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new FilmError("เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่", 0, "NETWORK_ERROR");
   }
   if (response.status === 204) return undefined as T;
-  let payload: unknown;
-  try { payload = await response.json(); } catch { throw new FilmError("ได้รับข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", response.status, "INVALID_RESPONSE"); }
+  let body: ReturnType<typeof parseEnvelope>;
+  try { body = parseEnvelope(await response.json()); } catch { throw new FilmError("ได้รับข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", response.status, "INVALID_RESPONSE"); }
   if (!response.ok) {
-    throw new FilmError(object(payload) && typeof payload.message === "string" ? payload.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่", response.status, object(payload) && typeof payload.code === "string" ? payload.code : "UNKNOWN", object(payload) ? payload.details : undefined);
+    throw new FilmError(body.message ?? "ดำเนินการไม่สำเร็จ กรุณาลองใหม่", response.status, body.errorCode ?? "UNKNOWN", body.details);
   }
-  if (!object(payload) || !("data" in payload)) throw new FilmError("ข้อมูลตอบกลับไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
-  return payload.data as T;
+  if (!body.hasPayload) throw new FilmError("ข้อมูลตอบกลับไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
+  return body.data as T;
 }
 
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });

@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import ts from 'typescript';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {requireEnvelope} from './envelope-module.mjs';
 const source=ts.transpileModule(fs.readFileSync('src/lib/creative-api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
-const context={exports:{}};vm.runInNewContext(source,context);
+const context={exports:{},require:requireEnvelope};vm.runInNewContext(source,context);
 const {imageAssetFromJob}=context.exports;
 test('saving follows completed job category and raw prompt rather than current composer mode or compiled instructions',()=>{
  const product=imageAssetFromJob({jobId:'product-job',imageCategory:'product',rawPrompt:'Glass perfume bottle',compiledPrompt:'Internal '+ 'x'.repeat(6000)},' Bottle ');

@@ -5,15 +5,15 @@ const originalFetch=globalThis.fetch;
 const originalXhr=globalThis.XMLHttpRequest;
 test('save keeps distinct segment identities when one source is used twice',async()=>{
  let observed;
- globalThis.fetch=async(url,options)=>{observed={url,...options};return Response.json({data:{revision:3}});};
+ globalThis.fetch=async(url,options)=>{observed={url,...options};return Response.json({success:true,payload:{revision:3}});};
  try{const segments=[{id:'first',assetId:'source',start:0,end:2,volume:0},{id:'second',assetId:'source',start:4,end:6,volume:1}];await videoEditorApi.save('project',{revision:2,title:'Saved',aspectRatio:'9:16',segments});assert.equal(observed.url,'/api/proxy/video-editor/projects/project');assert.deepEqual(JSON.parse(observed.body),{revision:2,title:'Saved',aspectRatio:'9:16',segments});assert.equal(observed.cache,'no-store');}finally{globalThis.fetch=originalFetch;}
 });
 test('revision conflicts remain actionable and are not converted to success',async()=>{
- globalThis.fetch=async()=>Response.json({code:'REVISION_CONFLICT',message:'A newer revision exists'},{status:409});
+ globalThis.fetch=async()=>Response.json({success:false,message:'A newer revision exists',payload:{errorCode:'REVISION_CONFLICT'}},{status:409});
  try{await assert.rejects(videoEditorApi.save('project',{revision:1,title:'Saved',aspectRatio:'1:1',segments:[]}),error=>error instanceof EditorApiError&&error.status===409&&error.code==='REVISION_CONFLICT');}finally{globalThis.fetch=originalFetch;}
 });
 test('retrying an export can preserve original request identity and revision',async()=>{
- const bodies=[];globalThis.fetch=async(url,options)=>{bodies.push(JSON.parse(options.body));return Response.json({data:{id:'existing-export'}});};
+ const bodies=[];globalThis.fetch=async(url,options)=>{bodies.push(JSON.parse(options.body));return Response.json({success:true,payload:{id:'existing-export'}});};
  try{await videoEditorApi.export('project','stable-id',7,'720p');await videoEditorApi.export('project','stable-id',7,'720p');assert.deepEqual(bodies,[{requestId:'stable-id',revision:7,resolution:'720p'},{requestId:'stable-id',revision:7,resolution:'720p'}]);}finally{globalThis.fetch=originalFetch;}
 });
 test('upload sends file and original retry ID, reports progress, and aborts in-flight transport',async()=>{

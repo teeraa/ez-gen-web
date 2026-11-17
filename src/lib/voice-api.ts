@@ -1,5 +1,6 @@
-// Client for the Voice menu (/open/v1/voice): text-to-speech with BytePlus seed-audio-1.0 and a saved history.
+// Client for the Voice menu (/api/v1/voice): text-to-speech with BytePlus seed-audio-1.0 and a saved history.
 
+import { parseEnvelope } from "./api-envelope.ts";
 export interface VoicePreset { id: string; name: string; description: string; color: string }
 export interface VoiceCapabilities {
   available: boolean; model: string; maxChars: number; voices: VoicePreset[]; emotions: string[];
@@ -31,10 +32,10 @@ async function request<T>(path: string, method = "GET", body?: unknown, signal?:
   // FormData goes as multipart (the browser sets the boundary); everything else as JSON.
   const init: RequestInit = body instanceof FormData ? { body } : { headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) };
   const response = await fetch(`${base}${path}`, { method, signal, cache: "no-store", ...init });
-  let payload: { data?: T; code?: string; message?: string } | null = null;
-  try { payload = await response.json(); } catch { throw new VoiceApiError("ไม่สามารถอ่านคำตอบจากระบบได้ กรุณาลองใหม่", response.status, "INVALID_RESPONSE"); }
-  if (!response.ok) throw new VoiceApiError(payload?.message || "ดำเนินการไม่สำเร็จ กรุณาลองใหม่", response.status, payload?.code || "REQUEST_FAILED");
-  if (!payload || !("data" in payload)) throw new VoiceApiError("ระบบส่งข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", response.status, "INVALID_RESPONSE");
+  let payload: ReturnType<typeof parseEnvelope>;
+  try { payload = parseEnvelope(await response.json()); } catch { throw new VoiceApiError("ไม่สามารถอ่านคำตอบจากระบบได้ กรุณาลองใหม่", response.status, "INVALID_RESPONSE"); }
+  if (!response.ok) throw new VoiceApiError(payload.message || "ดำเนินการไม่สำเร็จ กรุณาลองใหม่", response.status, payload.errorCode || "REQUEST_FAILED");
+  if (!payload.hasPayload) throw new VoiceApiError("ระบบส่งข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", response.status, "INVALID_RESPONSE");
   return payload.data as T;
 }
 

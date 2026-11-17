@@ -6,7 +6,7 @@ const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'
 const base=process.env.BASE_URL||'http://127.0.0.1:13014';
 const artifacts=process.env.ARTIFACT_DIR||'/private/tmp/ez-gen-thai-dialogue-browser';
 fs.mkdirSync(artifacts,{recursive:true});
-const auth=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:req.url.endsWith('/auth/login')?{accessToken:'local-dialogue-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
+const auth=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:req.url.endsWith('/auth/login')?{accessToken:'local-dialogue-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
 const long='“วันนี้เราจะพาคุณมารู้จักผลิตภัณฑ์ใหม่ที่ออกแบบมาเพื่อทุกคน\nพร้อมเล่ารายละเอียดวิธีใช้งานและคุณสมบัติที่น่าสนใจ”';
 let browser;
 const observations=[];

@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'/Users/mac/.npm/_npx/420ff84f11983ee5/node_modules/playwright');
 const base=process.env.BASE_URL||'http://127.0.0.1:13014',artifacts=process.env.ARTIFACT_DIR||'/private/tmp/ez-gen-studio-writing-browser';
 fs.mkdirSync(artifacts,{recursive:true});
-const auth=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:req.url.endsWith('/auth/login')?{accessToken:'local-writing-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
+const auth=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:req.url.endsWith('/auth/login')?{accessToken:'local-writing-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
 const sceneText=Array.from({length:40},(_,i)=>`ฉากที่ ${i+1} เดินผ่านสวนยามเช้า`).join('\n'),dialogueText='สวัสดีค่ะ วันนี้ขอแนะนำเรื่องราวของเรา\n'.repeat(10);
 let browser;
 const observations=[];
@@ -17,7 +17,7 @@ try{
   page.on('pageerror',e=>errors.push(e.message));
   await context.route('**/api/proxy/**',async route=>{
    const request=route.request(),path=new URL(request.url()).pathname.replace('/api/proxy/','');let data;
-   if(request.method()!=='GET'){posts.push(path);return route.fulfill({status:500,json:{code:'UNEXPECTED_MUTATION'}});}
+   if(request.method()!=='GET'){posts.push(path);return route.fulfill({status:500,json:{success:false,payload:{errorCode:'UNEXPECTED_MUTATION'}}});}
    if(path==='studio-pipeline-capabilities')data={...capability,models:[{...capability,id:'violet-motion-2',label:'Seedance 2.5',supportsDraft:true}]};
    else if(path==='studio-pipelines')data={items:[],total:0,page:1,limit:20};else if(path==='assets')data={items:[],total:0,page:1,limit:20};else throw new Error(`Unexpected fixture path ${path}`);
    await route.fulfill({json:{data}});

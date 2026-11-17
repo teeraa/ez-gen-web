@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { createRequire } from 'node:module';
+import {requireEnvelope} from './envelope-module.mjs';
 
 const require = createRequire(import.meta.url);
 const { NextRequest, NextResponse } = require('next/server');
@@ -18,6 +19,7 @@ function harness(upstream, token = 'test-session') {
       if (name === 'next/server') return { NextResponse };
       if (name === 'next/headers') return { cookies: async () => ({ get: () => token ? { value: token } : undefined }) };
       if (name === '@/lib/auth/session') return { SESSION_COOKIE: 'ezgen_session' };
+      if (name === '@/lib/api-envelope') return requireEnvelope(name);
       throw new Error(`Unexpected module ${name}`);
     },
     fetch: async (url, options) => { calls.push({ url, ...options }); return upstream(); },

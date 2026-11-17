@@ -2,7 +2,7 @@ import type { AspectRatio, ModelId } from "@/types/api"
 
 // Every model currently resolves to Seedance 1.0 Pro on the backend (ARK_DEFAULT_MODEL), so
 // all entries share its limits; anything outside them is rejected with 422 MODEL_NOT_SUPPORTED.
-// Shaped like the proposed GET /open/v1/models response so this table can be swapped for a fetch
+// Shaped like the proposed GET /api/v1/models response so this table can be swapped for a fetch
 // once that endpoint exists — until then it must be updated whenever ARK_DEFAULT_MODEL changes.
 export interface ModelCapabilities {
   id: ModelId

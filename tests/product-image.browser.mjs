@@ -11,7 +11,7 @@ fs.mkdirSync(artifacts,{recursive:true});
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 const fixture=http.createServer((req,res)=>{
  res.setHeader('Content-Type','application/json');
- res.end(JSON.stringify({data:req.url.endsWith('/auth/login')?{accessToken:'local-product-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture user',email:'fixture@example.invalid',plan:'fixture'}}));
+ res.end(JSON.stringify({success:true,payload:req.url.endsWith('/auth/login')?{accessToken:'local-product-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture user',email:'fixture@example.invalid',plan:'fixture'}}));
 });
 const observations=[];
 let browser,activePage,lastSaves;

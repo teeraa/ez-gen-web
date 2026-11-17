@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import ts from 'typescript';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {requireEnvelope} from './envelope-module.mjs';
 const source=ts.transpileModule(fs.readFileSync('src/lib/production-api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2017}}).outputText;
-const context={exports:{},fetch:()=>{throw new Error('not called')}};
+const context={exports:{},require:requireEnvelope,fetch:()=>{throw new Error('not called')}};
 vm.runInNewContext(source,context);
 const {validTrim}=context.exports;
 test('trim validation rejects invalid or out of source bounds, accepts full-duration sentinel',()=>{

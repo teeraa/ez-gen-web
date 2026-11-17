@@ -8,7 +8,7 @@ const base=process.env.BASE_URL || 'http://127.0.0.1:13003';
 const artifacts=process.env.ARTIFACT_DIR || '/private/tmp/ezgen-polling-web';fs.mkdirSync(artifacts,{recursive:true});
 const clip=fs.readFileSync(process.env.FIXTURE_MP4 || '../ez-gen-api/apps/tests/testdata/video.mp4');
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
-const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:{id:'fixture',displayName:'Fixture user',email:'fixture@example.invalid',plan:'fixture'}}));});
+const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:{id:'fixture',displayName:'Fixture user',email:'fixture@example.invalid',plan:'fixture'}}));});
 let browser,page;
 const observations=[];
 try{

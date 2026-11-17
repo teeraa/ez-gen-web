@@ -1,3 +1,4 @@
+import { parseEnvelope } from "./api-envelope.ts";
 import { EditorApiError } from "./video-editor-api";
 
 export interface AiUsageTotals { replies: number; steps: number; inputTokens: number; outputTokens: number; costUsd: number | null }
@@ -12,7 +13,7 @@ export async function fetchAiChatUsage(days: number, signal?: AbortSignal): Prom
   catch (error) { if (error instanceof DOMException && error.name === "AbortError") throw error; throw new EditorApiError("การเชื่อมต่อขาดหาย กรุณาลองใหม่", 0, "NETWORK_ERROR"); }
   let payload: unknown;
   try { payload = await response.json(); } catch { throw new EditorApiError("อ่านคำตอบของระบบไม่ได้", response.status, "INVALID_RESPONSE"); }
-  const body = payload as { data?: AiUsage; message?: string; code?: string } | null;
-  if (!response.ok || !body?.data) throw new EditorApiError(body?.message || "โหลดข้อมูลการใช้งานไม่สำเร็จ", response.status, body?.code || "REQUEST_FAILED");
-  return body.data;
+  const body = parseEnvelope(payload);
+  if (!response.ok || !body.data) throw new EditorApiError(body.message || "โหลดข้อมูลการใช้งานไม่สำเร็จ", response.status, body.errorCode || "REQUEST_FAILED");
+  return body.data as AiUsage;
 }

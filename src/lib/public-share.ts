@@ -13,11 +13,11 @@ export async function getPublicShare(token: string): Promise<PublicShareDTO | nu
   cacheLife({ stale: 60, revalidate: 60, expire: 300 })
 
   if (!TOKEN_RE.test(token)) return null
-  const res = await fetch(`${API_URL}/public/v1/shares/${token}`, { headers: { Accept: "application/json" } })
+  const res = await fetch(`${API_URL}/api/v1/public/shares/${token}`, { headers: { Accept: "application/json" } })
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`share lookup failed: ${res.status}`)
-  const json = (await res.json()) as { data: PublicShareDTO }
-  return json.data
+  const json = (await res.json()) as { payload: PublicShareDTO }
+  return json.payload
 }
 
 const VIDEO_SIZE: Record<AspectRatio, { width: number; height: number }> = {

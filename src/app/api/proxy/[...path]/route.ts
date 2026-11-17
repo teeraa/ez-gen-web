@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { SESSION_COOKIE } from "@/lib/auth/session"
+import { errorEnvelope } from "@/lib/api-envelope"
 
 const API_URL = process.env.API_URL ?? "http://localhost:8080"
 
@@ -8,7 +9,7 @@ type Params = { path: string[] }
 
 async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value
-  if (!token) return NextResponse.json({code:"UNAUTHORIZED",message:"กรุณาเข้าสู่ระบบเพื่อดำเนินการต่อ"},{status:401})
+  if (!token) return NextResponse.json(errorEnvelope(401,"UNAUTHORIZED","กรุณาเข้าสู่ระบบเพื่อดำเนินการต่อ"),{status:401})
   if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
     const origin = req.headers.get("origin")
     if (origin) {
@@ -18,11 +19,11 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
       if (host && /^[a-zA-Z0-9.[\]:_-]+$/.test(host)) {
         try { expectedOrigin = new URL(`${req.nextUrl.protocol}//${host}`).origin } catch { /* Reject invalid authorities. */ }
       }
-      if (origin !== expectedOrigin) return NextResponse.json({code:"FORBIDDEN",message:"ไม่สามารถยืนยันที่มาของคำขอ"},{status:403})
+      if (origin !== expectedOrigin) return NextResponse.json(errorEnvelope(403,"FORBIDDEN","ไม่สามารถยืนยันที่มาของคำขอ"),{status:403})
     }
   }
   const path = params.path.join("/")
-  const targetUrl = new URL(`/open/v1/${path}`, API_URL)
+  const targetUrl = new URL(`/api/v1/${path}`, API_URL)
 
   req.nextUrl.searchParams.forEach((v, k) => targetUrl.searchParams.set(k, v))
 
@@ -41,17 +42,17 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
   let body: BodyInit | undefined
   if (isUploadChunk) {
     const maxChunk = 6 * 1024 * 1024
-    if (Number(req.headers.get("content-length")) > maxChunk) return NextResponse.json({code:"FILE_TOO_LARGE",message:"ส่วนของไฟล์ใหญ่เกินกำหนด"},{status:413})
+    if (Number(req.headers.get("content-length")) > maxChunk) return NextResponse.json(errorEnvelope(413,"FILE_TOO_LARGE","ส่วนของไฟล์ใหญ่เกินกำหนด"),{status:413})
     const bytes = await req.arrayBuffer()
-    if (bytes.byteLength > maxChunk) return NextResponse.json({code:"FILE_TOO_LARGE",message:"ส่วนของไฟล์ใหญ่เกินกำหนด"},{status:413})
+    if (bytes.byteLength > maxChunk) return NextResponse.json(errorEnvelope(413,"FILE_TOO_LARGE","ส่วนของไฟล์ใหญ่เกินกำหนด"),{status:413})
     body = bytes
     headers["Content-Type"] = "application/octet-stream"
   } else if (isEditorUpload) {
     const maxBody = 55 * 1024 * 1024
-    if (!isMultipart) return NextResponse.json({code:"INVALID_FILE_TYPE",message:"กรุณาส่งไฟล์วิดีโอ"},{status:422})
-    if (Number(req.headers.get("content-length")) > maxBody) return NextResponse.json({code:"FILE_TOO_LARGE",message:"ไฟล์มีขนาดใหญ่เกินกำหนด"},{status:413})
+    if (!isMultipart) return NextResponse.json(errorEnvelope(422,"INVALID_FILE_TYPE","กรุณาส่งไฟล์วิดีโอ"),{status:422})
+    if (Number(req.headers.get("content-length")) > maxBody) return NextResponse.json(errorEnvelope(413,"FILE_TOO_LARGE","ไฟล์มีขนาดใหญ่เกินกำหนด"),{status:413})
     const reader = req.body?.getReader()
-    if (!reader) return NextResponse.json({code:"VALIDATION_ERROR",message:"ไม่พบไฟล์วิดีโอ"},{status:422})
+    if (!reader) return NextResponse.json(errorEnvelope(422,"VALIDATION_ERROR","ไม่พบไฟล์วิดีโอ"),{status:422})
     const chunks: Uint8Array[] = []
     let bytes = 0
     try {
@@ -59,10 +60,10 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
         const chunk = await reader.read()
         if (chunk.done) break
         bytes += chunk.value.byteLength
-        if (bytes > maxBody) { await reader.cancel(); return NextResponse.json({code:"FILE_TOO_LARGE",message:"ไฟล์มีขนาดใหญ่เกินกำหนด"},{status:413}) }
+        if (bytes > maxBody) { await reader.cancel(); return NextResponse.json(errorEnvelope(413,"FILE_TOO_LARGE","ไฟล์มีขนาดใหญ่เกินกำหนด"),{status:413}) }
         chunks.push(chunk.value)
       }
-    } catch { return NextResponse.json({code:"INVALID_UPLOAD",message:"รับไฟล์ไม่ครบ กรุณาลองใหม่"},{status:400}) }
+    } catch { return NextResponse.json(errorEnvelope(400,"INVALID_UPLOAD","รับไฟล์ไม่ครบ กรุณาลองใหม่"),{status:400}) }
     finally { reader.releaseLock() }
     const combined = new Uint8Array(bytes)
     let offset = 0
@@ -104,15 +105,15 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
 
     const text = await upstream.text()
     let json: unknown
-    try { json = JSON.parse(text) } catch { json = { message: text } }
+    try { json = JSON.parse(text) } catch { json = errorEnvelope(upstream.status, upstream.ok ? "INVALID_RESPONSE" : "UPSTREAM_ERROR", text) }
 
     if (req.method === "GET" && ["image-capabilities", "video-capabilities"].includes(path) && upstream.ok &&
-      typeof json === "object" && json !== null && "data" in json &&
-      typeof json.data === "object" && json.data !== null) {
+      typeof json === "object" && json !== null && "payload" in json &&
+      typeof json.payload === "object" && json.payload !== null) {
       json = {
         ...json,
-        data: {
-          ...json.data,
+        payload: {
+          ...json.payload,
           connectionMode: process.env.STUDIO_CONNECTION_MODE === "fixture" ? "fixture" : "configured",
         },
       }
@@ -121,7 +122,7 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
     return NextResponse.json(json, { status: upstream.status, headers: responseHeaders })
   } catch {
     return NextResponse.json(
-      { code: "UPSTREAM_UNAVAILABLE", message: "ไม่สามารถเชื่อมต่อระบบได้ กรุณาลองใหม่" },
+      errorEnvelope(503, "UPSTREAM_UNAVAILABLE", "ไม่สามารถเชื่อมต่อระบบได้ กรุณาลองใหม่"),
       { status: 503 }
     )
   }

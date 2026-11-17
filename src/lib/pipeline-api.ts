@@ -1,3 +1,4 @@
+import { parseEnvelope } from "./api-envelope.ts";
 import type { PaginatedData } from '@/types/api';
 export interface PipelineRequest { referenceImageId?:string; characterAssetId?:string; characterPrompt:string; scenePrompt:string; dialogue?:string; visualStyle:string; aspectRatio:string; durationSeconds:number; modelId:string; quality:string; draft?:boolean; idempotencyKey:string }
 export interface Pipeline { isDraft?:boolean; modelId?:string; modelLabel?:string; aspectRatio?:string; durationSeconds?:number; quality?:string; canCreateFinal?:boolean; sourceDraftId?:string|null; draftExpiresAt?:string|null; finalUnavailableReason?:string|null; sourceMode?:'upload'|'text'|'library'; id:string; characterPrompt:string; scenePrompt:string; dialogue:string; status:'queued'|'processing'|'succeeded'|'failed'|'needs_attention'; stage:'image'|'save_character'|'video'|'save_video'|'done'; canRetry:boolean; failureCode:string|null; failureMessage:string|null; characterAssetId:string|null; videoAssetId:string|null; characterMediaUrl:string|null; videoMediaUrl:string|null; characterMediaUrlExpiresAt:string|null; videoMediaUrlExpiresAt:string|null; createdAt:string; updatedAt:string }
@@ -48,9 +49,9 @@ function safeValidationDetails(status:number,code:string,payload:unknown):Pipeli
 export class PipelineApiError extends Error { constructor(public readonly status:number, public readonly code:string,public readonly details:readonly PipelineValidationDetail[]=[]){super('คำขอไม่สำเร็จ');} }
 async function request<T>(path:string,body?:unknown):Promise<T> {
  const response=await fetch(`/api/proxy/${path}`,{method:body===undefined?'GET':'POST',cache:'no-store',headers:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
- const json=await response.json();
- if(!response.ok){const code=typeof json?.code==='string'?json.code:'UNKNOWN';throw new PipelineApiError(response.status,code,safeValidationDetails(response.status,code,json?.details));}
- if(!json || typeof json!=='object' || !('data' in json)) throw new Error('ข้อมูลตอบกลับไม่สมบูรณ์');
+ const json=parseEnvelope(await response.json());
+ if(!response.ok){const code=json.errorCode??'UNKNOWN';throw new PipelineApiError(response.status,code,safeValidationDetails(response.status,code,json.details));}
+ if(!json.hasPayload) throw new Error('ข้อมูลตอบกลับไม่สมบูรณ์');
  return json.data as T;
 }
 /** Server-side dry run of a create request: exact limits, model support and prompt budget. */

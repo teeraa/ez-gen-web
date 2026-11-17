@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'/Users/mac/.npm/_npx/420ff84f11983ee5/node_modules/playwright');
 const base=process.env.BASE_URL||'http://127.0.0.1:13016';
 const dir=process.env.ARTIFACT_DIR||'/tmp/character-sources-web';fs.mkdirSync(dir,{recursive:true});
-const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'free'}}));});
+const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'free'}}));});
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
 const character={id:'library-character',name:'ตัวละครหลัก',assetType:'character',jobId:'completed-image',uploadId:null,status:'ready',mediaUrl:'data:image/png;base64,'+png.toString('base64')};
 let browser;const observations=[];
@@ -20,7 +20,7 @@ try{
    if(path==='studio-pipeline-capabilities')data={enabled:true,textEnabled:true,libraryEnabled:true,supportsDialogue:true,aspectRatios:['9:16','16:9'],durations:[5,10],libraryAspectRatios:['9:16'],libraryDurations:[5]};
    else if(path==='assets'){
     assetRequests++;if(assetsMode==='loading')await new Promise(resolve=>setTimeout(resolve,700));
-    if(assetsMode==='error')return route.fulfill({status:503,json:{code:'UNAVAILABLE'}});
+    if(assetsMode==='error')return route.fulfill({status:503,json:{success:false,payload:{errorCode:'UNAVAILABLE'}}});
     const pageNumber=Number(url.searchParams.get('page'));data={items:assetsMode==='empty'?[]:[{...character,id:pageNumber===1?'library-character':'library-character-2',name:pageNumber===1?'ตัวละครหลัก':'ตัวละครหน้าสอง'},{...character,id:'uploaded',jobId:null,uploadId:'upload'},{...character,id:'pending',status:'pending'}],total:assetsMode==='empty'?0:21,page:pageNumber,limit:20};
    }else if(path==='uploads'){await new Promise(resolve=>{uploadDone=resolve;setTimeout(resolve,500)});data={uploadId:'reference-upload'};}
    else if(path==='studio-pipelines'&&request.method()==='POST'){

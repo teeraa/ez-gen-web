@@ -11,7 +11,7 @@
 ## Design Principles
 
 1. The browser never calls BytePlus or `ez-gen-api` directly — everything goes through the
-   Next.js proxy `src/app/api/proxy/[...path]/route.ts` (`/api/proxy/<path>` → `${API_URL}/open/v1/<path>`).
+   Next.js proxy `src/app/api/proxy/[...path]/route.ts` (`/api/proxy/<path>` → `${API_URL}/api/v1/<path>`).
 2. Job IDs are application UUIDs, never BytePlus task IDs.
 3. Errors carry a machine-readable `code` and a human-readable `message`.
 4. Timestamps are ISO 8601 UTC strings.
@@ -42,7 +42,7 @@ User-facing text for known codes lives in `src/lib/api-errors.ts`.
 
 ## Jobs
 
-### `GET /open/v1/jobs/:jobId`
+### `GET /api/v1/jobs/:jobId`
 
 ```typescript
 {
@@ -116,17 +116,17 @@ so this tail can take a while.
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| `POST` | `/open/v1/jobs/:jobId/shares` | ✅ | Create or return the job's share link (201 new / 200 existing) |
-| `DELETE` | `/open/v1/shares/:shareId` | ✅ | Revoke (204, no body); the link may keep working ≤ 60 s; re-sharing mints a new URL |
-| `GET` | `/open/v1/jobs/:jobId/download` | ✅ | Signed URL that forces a save |
-| `GET` | `/public/v1/shares/:token` | ❌ | Data for the public share page |
+| `POST` | `/api/v1/jobs/:jobId/shares` | ✅ | Create or return the job's share link (201 new / 200 existing) |
+| `DELETE` | `/api/v1/shares/:shareId` | ✅ | Revoke (204, no body); the link may keep working ≤ 60 s; re-sharing mints a new URL |
+| `GET` | `/api/v1/jobs/:jobId/download` | ✅ | Signed URL that forces a save |
+| `GET` | `/api/v1/public/shares/:token` | ❌ | Data for the public share page |
 
 ```typescript
 // POST /jobs/:jobId/shares
 { shareId: string; jobId: string; url: string; viewCount: number; createdAt: string }
 // GET /jobs/:jobId/download
 { url: string; filename: string; expiresAt: string | null }   // filename e.g. violet-studio-1a2b3c4d.mp4
-// GET /public/v1/shares/:token  (omits prompt, owner, job ID)
+// GET /api/v1/public/shares/:token  (omits prompt, owner, job ID)
 { mediaUrl: string; thumbnailUrl: string | null; downloadUrl: string; mediaType: "video" | "image";
   aspectRatio: AspectRatio; duration: number; expiresAt: string | null; createdAt: string }
 ```
@@ -144,7 +144,7 @@ Safari rejects it otherwise). If the `fetch()` of the signed URL fails (e.g. COR
 sharing is hidden — **CORS against the real Supabase origin still needs a check in production**.
 
 **Public page** `src/app/s/[token]/page.tsx` (no login; `/s` is outside the auth proxy matcher):
-- Fetches `GET {API_URL}/public/v1/shares/:token` server-side through a `"use cache"` function
+- Fetches `GET {API_URL}/api/v1/public/shares/:token` server-side through a `"use cache"` function
   (`cacheLife` 60 s) — the backend rate-limits per IP and every request comes from this server.
   Malformed tokens never reach the backend.
 - `generateMetadata` emits `og:type=video.other`, `og:url`, title/description, `og:image`
@@ -178,7 +178,7 @@ these limits return `422 MODEL_NOT_SUPPORTED`.
 | Audio | none — audio tags hidden |
 
 These live in `src/lib/model-capabilities.ts` and must be updated whenever `ARK_DEFAULT_MODEL`
-changes. **Requested:** `GET /open/v1/models` returning per-model ratios, min/max duration and
+changes. **Requested:** `GET /api/v1/models` returning per-model ratios, min/max duration and
 audio/image support, so the UI can read limits instead of hardcoding them (the file is already
 shaped like that response).
 
@@ -195,7 +195,7 @@ characters: Array<{ id: string; name: string; sortOrder: number }>;  // always a
 characterProfileId: string | null;   // deprecated — equals characters[0]
 ```
 
-Requests (`POST /open/v1/dna/scenes`, `PUT /open/v1/dna/scenes/:id`):
+Requests (`POST /api/v1/dna/scenes`, `PUT /api/v1/dna/scenes/:id`):
 
 ```typescript
 characterProfileIds?: string[];      // ordered, unique, max 3
@@ -233,16 +233,16 @@ early video frame when it is null; a muted looping `<video>` is mounted only for
 refetch). The list is refetched (silently, throttled to once per 30 s) on media `onError` and when
 the tab regains focus after any `expiresAt`. No per-scene `GET /jobs/:id` calls.
 
-### `POST /open/v1/dna/scenes/:id/generate`
+### `POST /api/v1/dna/scenes/:id/generate`
 
 Uses all of the scene's characters — the UI sends no characters. Send `characterProfileIds` only
 to override the set for that one job (the scene is unchanged).
 
-### `PUT /open/v1/dna/scenes/:id/select-output/:jobId`
+### `PUT /api/v1/dna/scenes/:id/select-output/:jobId`
 
 Marks a succeeded job as the scene's output. Called once per job.
 
-### `POST /open/v1/dna/scenes/:id/continue`
+### `POST /api/v1/dna/scenes/:id/continue`
 
 - `useLastFrame: true` uses the last frame of the previous scene's selected output as the first
   frame. Requires that the previous scene has a selected output whose job succeeded; otherwise the
@@ -261,11 +261,11 @@ audio and burned-in text. Asynchronous: create → poll → download. Full basel
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| `POST` | `/open/v1/uploads` | ✅ | Upload audio/image (multipart `file`) → `{ uploadId, mimeType, sizeBytes, expiresAt }` |
-| `POST` | `/open/v1/exports` | ✅ | Queue a merge → `{ exportId, status: "queued", ... }` |
-| `GET`  | `/open/v1/exports/:id` | ✅ | Poll `{ status: "queued"\|"processing"\|"succeeded"\|"failed", error, ... }` |
-| `GET`  | `/open/v1/exports?page&limit` | ✅ | Paginated export history |
-| `GET`  | `/open/v1/exports/:id/download` | ✅ | Signed URL (≈1 h) forcing `export-<id>.mp4` |
+| `POST` | `/api/v1/uploads` | ✅ | Upload audio/image (multipart `file`) → `{ uploadId, mimeType, sizeBytes, expiresAt }` |
+| `POST` | `/api/v1/exports` | ✅ | Queue a merge → `{ exportId, status: "queued", ... }` |
+| `GET`  | `/api/v1/exports/:id` | ✅ | Poll `{ status: "queued"\|"processing"\|"succeeded"\|"failed", error, ... }` |
+| `GET`  | `/api/v1/exports?page&limit` | ✅ | Paginated export history |
+| `GET`  | `/api/v1/exports/:id/download` | ✅ | Signed URL (≈1 h) forcing `export-<id>.mp4` |
 
 Implemented in `src/lib/api.ts` (`exportsApi`, `uploadsApi`), `src/hooks/use-export-polling.ts`
 (poll ≥ 3 s, stop on `succeeded`/`failed`), and the quick-merge dialog
@@ -273,7 +273,7 @@ Implemented in `src/lib/api.ts` (`exportsApi`, `uploadsApi`), `src/hooks/use-exp
 succeeded job stored as video (`SceneDTO.selectedJobId` + `preview.mediaType === "video"`);
 otherwise `POST /exports` returns `422 SCENE_HAS_NO_OUTPUT`.
 
-### Baseline `POST /open/v1/exports` body
+### Baseline `POST /api/v1/exports` body
 
 ```typescript
 {
@@ -308,7 +308,7 @@ otherwise `POST /exports` returns `422 SCENE_HAS_NO_OUTPUT`.
 > `sceneIds` plus a derived `position` so the request stays valid for the baseline path — `clips`
 > wins when both are present. **Backend wins** — if units or field names drift, reconcile here.
 
-Superset of the baseline `POST /open/v1/exports` body:
+Superset of the baseline `POST /api/v1/exports` body:
 
 ```typescript
 {
@@ -365,7 +365,7 @@ listing, and credit balance. Confirm them before building on them.
 The additive production contract in the sibling API repository,
 `docs/engineering/video-production-api-contract.md`, governs projects, scene versions,
 library references, capabilities and persisted editing/export. Current auth uses backend
-`/open/v1/auth/login`, `/register` and `/me` with an httpOnly session cookie; the historical
+`/api/v1/auth/login`, `/register` and `/me` with an httpOnly session cookie; the historical
 mock-auth note above is superseded.
 
 `PUT /dna/scenes/:id/select-output/:jobId` returns `{sceneId, selectedJobId}`,
@@ -501,7 +501,7 @@ Browser fixture coverage in `tests/story-flow.browser.mjs` uses no paid generati
 
 ## Video editor phase 1
 
-The authoritative [video editor API contract](../../../ez-gen-api/docs/engineering/video-editor-api-contract.md) defines the independent `/open/v1/video-editor` domain. Browser access is only through `/api/proxy/video-editor` with the existing httpOnly session and same-origin mutation checks.
+The authoritative [video editor API contract](../../../ez-gen-api/docs/engineering/video-editor-api-contract.md) defines the independent `/api/v1/video-editor` domain. Browser access is only through `/api/proxy/video-editor` with the existing httpOnly session and same-origin mutation checks.
 
 The editor uses persisted project/media IDs. Timeline segments have unique IDs and may reference the same uploaded asset repeatedly. Saves carry a revision and never silently overwrite a `REVISION_CONFLICT`; local recovery JSON can be downloaded before loading the latest server draft. Import supports MP4/MOV/WebM up to 50 MiB/file, with actual XHR byte progress followed by server processing. Upload retries retain the original `clientUploadId` and File; ambiguous responses reconcile against the owned media list. Sources/thumbnails are server-owned signed URLs refreshed through the assets endpoint, never persisted URL values in the saved draft.
 
@@ -511,7 +511,7 @@ Client/types: `src/lib/video-editor-api.ts`; editor persistence and async state:
 
 ## Video editor phase 2
 
-AI planning extends `/open/v1/video-editor`, through the same authenticated Next proxy. The authoritative [AI editor contract](../../../ez-gen-api/docs/engineering/video-editor-ai-api-contract.md) and workspace task record define the job state machine. Client/types: `src/lib/video-editor-ai-api.ts`; state and review UI: `src/components/ai-editor/use-editor-ai.ts` and `ai-assistant-panel.tsx`.
+AI planning extends `/api/v1/video-editor`, through the same authenticated Next proxy. The authoritative [AI editor contract](../../../ez-gen-api/docs/engineering/video-editor-ai-api-contract.md) and workspace task record define the job state machine. Client/types: `src/lib/video-editor-ai-api.ts`; state and review UI: `src/components/ai-editor/use-editor-ai.ts` and `ai-assistant-panel.tsx`.
 
 The user selects at most eight ready owned assets (600 seconds of source), supplies a brief and target duration, and explicitly consents to sampled images/transcribed text being processed externally. `ai-capabilities` supplies availability, limits, provider notice and supported options. Missing provider configuration disables new analysis; it does not disable the manual editor or existing draft review/apply. Test provider mode is visibly marked only when the server explicitly returns `connectionMode: fixture`. No music, subtitle, filler or shake-detection output is fabricated.
 
@@ -635,7 +635,7 @@ Capability `clipEffects: true` (absent on older backends) gates every field belo
 ### Director API handoff (2026-11-04)
 
 Backend authority: [Director v1 contract](../../../ez-gen-api/docs/engineering/director-api-contract.md).
-The API domain is `/open/v1/director`; browser calls use
+The API domain is `/api/v1/director`; browser calls use
 `/api/proxy/director/*`. The follow-up Web integration task replaces the
 localStorage prototype in `src/components/director/*` with typed server data.
 Model IDs, choices, limits and prices come from capabilities and project estimates;
@@ -684,7 +684,7 @@ Task record: coordinator workspace `tasks/2026-11-08-director-series-episodes.md
 A Director "project" in the UI (โปรเจกต์) is now a **series**; each existing
 `director_projects` row is one **episode** and keeps every existing project endpoint.
 
-All paths are under `/open/v1/director` (browser: `/api/proxy/director/*`), JWT,
+All paths are under `/api/v1/director` (browser: `/api/proxy/director/*`), JWT,
 user-scoped (another user's id → 404 with the same not-found code as projects),
 camelCase, envelope `{data, requestId}`, errors `{code, message, requestId}`.
 
@@ -737,4 +737,4 @@ The hub loads series, standalone projects and capabilities independently, each w
 
 #### สร้างหนัง episode workspace (2026-11-12, phase 2)
 
-`/studio/film/<seriesId>/<episodeId>` uses `src/lib/film-api.ts` against `/open/v1/film/*` (backend contract: `ez-gen-api/docs/engineering/film-api-contract.md`). Elements tab: list/create (optional library asset)/edit/delete, `POST /elements/:id/image` with `generate` or, for realistic/cinematic characters, `prepare` (faceless reference). Shots tab: local drafts saved with `PUT /episodes/:id/shots` (revision), per-shot `POST .../shots/:shot/video` with the selected model; video buttons are disabled while drafts are unsaved, the shot lacks an action, or a referenced element is not `prepared`. Paid POSTs keep their idempotency key via `director-submission` scopes `film-video:<shotId>`, `film-image:<elementId>`, `film-element:<seriesId>:<kind>`. The page polls `GET /episodes/:id` every 4 s while an image or video is queued/processing. The chat column is a static guide until phase 3; `film-studio.tsx`/`film-data.ts` (concept mock) are no longer routed.
+`/studio/film/<seriesId>/<episodeId>` uses `src/lib/film-api.ts` against `/api/v1/film/*` (backend contract: `ez-gen-api/docs/engineering/film-api-contract.md`). Elements tab: list/create (optional library asset)/edit/delete, `POST /elements/:id/image` with `generate` or, for realistic/cinematic characters, `prepare` (faceless reference). Shots tab: local drafts saved with `PUT /episodes/:id/shots` (revision), per-shot `POST .../shots/:shot/video` with the selected model; video buttons are disabled while drafts are unsaved, the shot lacks an action, or a referenced element is not `prepared`. Paid POSTs keep their idempotency key via `director-submission` scopes `film-video:<shotId>`, `film-image:<elementId>`, `film-element:<seriesId>:<kind>`. The page polls `GET /episodes/:id` every 4 s while an image or video is queued/processing. The chat column is a static guide until phase 3; `film-studio.tsx`/`film-data.ts` (concept mock) are no longer routed.

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'/Users/mac/.npm/_npx/420ff84f11983ee5/node_modules/playwright');
 const base=process.env.BASE_URL||'http://127.0.0.1:13016',dir=process.env.ARTIFACT_DIR||'/tmp/pipeline-validation-web';fs.mkdirSync(dir,{recursive:true});
-const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'free'}}));});
+const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'free'}}));});
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
 const copy='รายละเอียดฉากและบทพูดรวมกันยาวเกินขีดจำกัด กรุณาย่อฉากหรือบทพูดแล้วลองอีกครั้ง';
 let browser;
@@ -17,7 +17,7 @@ try{
   else if(path==='uploads')data={uploadId:'12345678-1234-4234-8234-123456789abc'};
   else if(path==='studio-pipelines'&&request.method()==='POST'){
    const body=request.postDataJSON();posts.push(body);
-   if(responseMode!=='success')return route.fulfill({status:responseMode==='validation'?400:500,json:{code:responseMode==='validation'?'VALIDATION_ERROR':'INTERNAL_ERROR',message:'raw-provider-private',details:[{field:'scenePrompt',reason:'prompt_budget',message:'<script>raw-provider-private</script>'}]}});
+   if(responseMode!=='success')return route.fulfill({status:responseMode==='validation'?400:500,json:{success:false,message:'raw-provider-private',payload:{errorCode:responseMode==='validation'?'VALIDATION_ERROR':'INTERNAL_ERROR',details:[{field:'scenePrompt',reason:'prompt_budget',message:'<script>raw-provider-private</script>'}]}}});
    data={...body,id:'fixture-job',sourceMode:'upload',status:'succeeded',stage:'done',canRetry:false,characterAssetId:null,videoAssetId:null,createdAt:'2026-10-26T01:00:00Z'};
   }else if(path==='studio-pipelines')data={items:[],total:0,page:1,limit:20};else throw new Error('Unexpected fixture '+path);
   return route.fulfill({json:{data}});

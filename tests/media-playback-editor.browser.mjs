@@ -4,7 +4,7 @@ const require=createRequire(import.meta.url);const {chromium}=require('/Users/ma
 const base=process.env.BASE_URL||'http://127.0.0.1:13298',artifact=process.env.ARTIFACT_DIR||'/private/tmp/ezgen-playback-stutter';fs.mkdirSync(artifact,{recursive:true});
 const count=Number(process.env.SEGMENT_COUNT||200),width=Number(process.env.VIEWPORT_WIDTH||1440);
 const media=fs.readFileSync(process.env.FIXTURE_VIDEO||'/tmp/ai-editor-revision/changing-frames.mp4');
-const api=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:{id:'fixture',displayName:'Fixture',email:'fixture@example.invalid'}}));});await new Promise(r=>api.listen(Number(process.env.AUTH_PORT||18298),'127.0.0.1',r));
+const api=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:{id:'fixture',displayName:'Fixture',email:'fixture@example.invalid'}}));});await new Promise(r=>api.listen(Number(process.env.AUTH_PORT||18298),'127.0.0.1',r));
 const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});
 try{const page=await browser.newPage({viewport:{width,height:1000}});await page.context().addCookies([{name:'ezgen_session',value:'local-fixture',url:base}]);
 const asset={id:'a1',projectId:'p1',clientUploadId:'u1',name:'Fixture.mp4',status:'ready',duration:6,width:320,height:180,hasAudio:false,sizeBytes:media.length,previewUrl:'/fixture.mp4',frames:Array.from({length:48},(_,i)=>({time:i/8,url:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg"/%3E'}))};

@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'/Users/mac/.npm/_npx/420ff84f11983ee5/node_modules/playwright');
 const base=process.env.BASE_URL||'http://127.0.0.1:13014',artifacts=process.env.ARTIFACT_DIR||'/private/tmp/ez-gen-pipeline-failure-browser';
 fs.mkdirSync(artifacts,{recursive:true});
-const auth=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:req.url.endsWith('/auth/login')?{accessToken:'local-failure-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
+const auth=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:req.url.endsWith('/auth/login')?{accessToken:'local-failure-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
 let browser;
 const observations=[];
 try{
@@ -18,7 +18,7 @@ try{
   page.on('pageerror',e=>errors.push(e.message));
   await context.route('**/api/proxy/**',async route=>{
    const request=route.request(),path=new URL(request.url()).pathname.replace('/api/proxy/','');let data;
-   if(request.method()==='POST'){posts.push(path);return route.fulfill({status:500,json:{code:'UNEXPECTED_MUTATION'}});}
+   if(request.method()==='POST'){posts.push(path);return route.fulfill({status:500,json:{success:false,payload:{errorCode:'UNEXPECTED_MUTATION'}}});}
    if(path==='studio-pipeline-capabilities')data={enabled:true,textEnabled:true,libraryEnabled:true,supportsDialogue:true,aspectRatios:['9:16'],durations:[5],unavailableReason:null};
    else if(path==='studio-pipelines')data={items:[job()],total:1,page:1,limit:20};
    else if(path.startsWith('studio-pipelines/'))data=job();else throw new Error(`unexpected ${path}`);

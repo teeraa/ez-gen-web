@@ -7,7 +7,7 @@ const base=process.env.BASE_URL||'http://127.0.0.1:13014';
 const artifacts=process.env.ARTIFACT_DIR||'/private/tmp/ez-gen-draft-web-browser';
 fs.mkdirSync(artifacts,{recursive:true});
 let authOwner='fixture-user';
-const auth=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:req.url.endsWith('/auth/login')?{accessToken:'local-draft-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:authOwner,displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
+const auth=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:req.url.endsWith('/auth/login')?{accessToken:'local-draft-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:authOwner,displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
 const ids={draft:'12345678-1234-4234-8234-123456789abc',final:'22345678-1234-4234-8234-123456789abc',normal:'32345678-1234-4234-8234-123456789abc'};
 let browser;
 const observations=[];
@@ -34,17 +34,17 @@ try{
     const body=request.postDataJSON();creates.push(body);const id=body.draft?ids.draft:ids.normal;
     data={...body,id,isDraft:body.draft===true,modelLabel:models().find(m=>m.id===body.modelId).label,status:'succeeded',stage:'done',canRetry:false,canCreateFinal:body.draft===true,sourceDraftId:null,draftExpiresAt:body.draft?'2099-01-01T00:00:00Z':null,finalUnavailableReason:null,failureCode:null,failureMessage:null,characterAssetId:'saved-character',videoAssetId:'saved-video',characterMediaUrl:null,videoMediaUrl:'/media/studio-landscape.mp4',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};jobs.set(id,data);
    }else if(path==='studio-pipelines'){
-    if(listFail)return route.fulfill({status:503,json:{code:'UNAVAILABLE'}});
+    if(listFail)return route.fulfill({status:503,json:{success:false,payload:{errorCode:'UNAVAILABLE'}}});
     data={items:[...jobs.values()].reverse(),total:jobs.size,page:1,limit:20};
    }else if(path.endsWith('/finalize')){
     const body=request.postDataJSON();finals.push({path,body});assert.deepEqual(Object.keys(body),['idempotencyKey']);
-    if(expired){Object.assign(jobs.get(ids.draft),{canCreateFinal:false,draftExpiresAt:'2020-01-01T00:00:00Z',finalUnavailableReason:'ฉบับร่างหมดอายุสำหรับสร้างฉบับสมบูรณ์ กรุณาสร้างวิดีโอใหม่'});return route.fulfill({status:409,json:{code:'DRAFT_EXPIRED',message:'untrusted private provider text'}});}
+    if(expired){Object.assign(jobs.get(ids.draft),{canCreateFinal:false,draftExpiresAt:'2020-01-01T00:00:00Z',finalUnavailableReason:'ฉบับร่างหมดอายุสำหรับสร้างฉบับสมบูรณ์ กรุณาสร้างวิดีโอใหม่'});return route.fulfill({status:409,json:{success:false,message:'untrusted private provider text',payload:{errorCode:'DRAFT_EXPIRED'}}});}
     if(!jobs.has(ids.final))jobs.set(ids.final,{...jobs.get(ids.draft),id:ids.final,isDraft:false,quality:'high',canCreateFinal:false,sourceDraftId:ids.draft,status:'processing',stage:'video',videoAssetId:null,videoMediaUrl:null});
     if(dropFinal){dropFinal=false;await new Promise(r=>setTimeout(r,150));return route.abort('failed');}
     data=jobs.get(ids.final);
    }else if(path.startsWith('studio-pipelines/'))data=jobs.get(path.split('/')[1]);
    else if(path==='assets')data={items:[],total:0,page:1,limit:20};
-   else{unexpected.push(`${request.method()} ${path}`);return route.fulfill({status:500,json:{code:'UNEXPECTED'}});}
+   else{unexpected.push(`${request.method()} ${path}`);return route.fulfill({status:500,json:{success:false,payload:{errorCode:'UNEXPECTED'}}});}
    await route.fulfill({json:{data}});
   });
   await page.goto(base+'/signin');await page.getByRole('textbox',{name:'อีเมล',exact:true}).fill('fixture@example.invalid');await page.getByLabel('รหัสผ่าน',{exact:true}).fill('fixture-password');await page.getByRole('button',{name:'เข้าสู่ระบบ',exact:true}).click();await page.waitForURL('**/studio');

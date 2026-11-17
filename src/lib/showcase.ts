@@ -2,7 +2,7 @@ import { cacheLife } from "next/cache"
 
 const API_URL = process.env.API_URL ?? "http://localhost:8080"
 
-/** Mirrors dto_open_api.ShowcaseItemDTO from GET /public/v1/showcase. */
+/** Mirrors dto_open_api.ShowcaseItemDTO from GET /api/v1/public/showcase. */
 export interface ShowcaseItem {
   id: string
   title: string
@@ -40,13 +40,13 @@ async function fetchShowcase(apiUrl: string, shape: number): Promise<ShowcaseIte
 
   let items: ShowcaseItem[] = []
   try {
-    const res = await fetch(`${apiUrl}/public/v1/showcase`, {
+    const res = await fetch(`${apiUrl}/api/v1/public/showcase`, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(4000),
     })
     if (res.ok) {
-      const json = (await res.json()) as { data?: { items?: ShowcaseItem[] } }
-      items = (json.data?.items ?? []).filter((item) => typeof item.mediaUrl === "string" && /^https?:\/\//.test(item.mediaUrl))
+      const json = (await res.json()) as { payload?: { items?: ShowcaseItem[] } }
+      items = (json.payload?.items ?? []).filter((item) => typeof item.mediaUrl === "string" && /^https?:\/\//.test(item.mediaUrl))
     }
   } catch {
     // API down or not migrated yet: the landing page falls back to illustrated cards.

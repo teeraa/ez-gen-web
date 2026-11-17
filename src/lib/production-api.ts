@@ -1,3 +1,4 @@
+import { parseEnvelope } from "./api-envelope.ts";
 import type { Asset } from "./creative-api";
 import type { SceneDTO, JobDTO, TextLayer, PaginatedData } from "@/types/api";
 export interface VideoSettings {
@@ -104,12 +105,12 @@ async function request<T>(
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (res.status === 204) return undefined as T;
-  const payload = await res.json();
+  const payload = parseEnvelope(await res.json());
   if (!res.ok)
     throw new ProductionError(
       payload.message ?? "ดำเนินการไม่สำเร็จ กรุณาลองใหม่",
       res.status,
-      payload.code,
+      payload.errorCode,
     );
   return payload.data as T;
 }

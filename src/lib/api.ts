@@ -1,5 +1,5 @@
+import { parseEnvelope } from "./api-envelope.ts"
 import type {
-  ApiResponse,
   PaginatedData,
   TagDTO,
   TagCategory,
@@ -38,23 +38,23 @@ async function apiFetch<T>(
   })
   // DELETE endpoints answer 204 with an empty body.
   if (res.status === 204) return undefined as T
-  const json = (await res.json()) as ApiResponse<T> & { code?: string; message?: string; details?: unknown[] }
+  const json = parseEnvelope(await res.json())
   if (!res.ok) {
     const err = new Error(json.message ?? "Request failed") as Error & { code: string; details: unknown[] }
-    err.code = json.code ?? "UNKNOWN"
-    err.details = (json.details as unknown[]) ?? []
+    err.code = json.errorCode ?? "UNKNOWN"
+    err.details = Array.isArray(json.details) ? json.details : []
     throw err
   }
-  return (json as ApiResponse<T>).data
+  return json.data as T
 }
 
 async function apiFormData<T>(path: string, formData: FormData): Promise<T> {
   const res = await fetch(`${BASE}/${path}`, { method: "POST", body: formData })
-  const json = (await res.json()) as ApiResponse<T> & { code?: string; message?: string }
+  const json = parseEnvelope(await res.json())
   if (!res.ok) {
     throw new Error(json.message ?? "Upload failed")
   }
-  return (json as ApiResponse<T>).data
+  return json.data as T
 }
 
 // ── Tags ──────────────────────────────────────────────────────────────────────

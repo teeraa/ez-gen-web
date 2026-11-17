@@ -10,7 +10,7 @@ import {readAiIntents,sameAiDraft,staleJobUpdate} from '../src/lib/video-editor-
 const originalFetch=globalThis.fetch;
 const source=fs.readFileSync(new URL('../src/lib/video-editor-ai-api.ts',import.meta.url),'utf8');
 const dependency=pathToFileURL(path.resolve('src/lib/video-editor-api.ts')).href;
-const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace('from "./video-editor-api"',`from "${dependency}"`);
+const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace('from "./video-editor-api"',`from "${dependency}"`).replace('from "./api-envelope.ts"',`from "${pathToFileURL(path.resolve('src/lib/api-envelope.ts')).href}"`);
 const {videoEditorAiApi,parseAiEditPreview}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
 
 const base={id:'s1',assetId:'a1',start:0,end:4,volume:1,title:'เปิดเรื่อง',reason:'model reason',evidenceId:'w1'};
@@ -109,7 +109,7 @@ test('an older poll response cannot roll back the shown job',()=>{
 });
 
 test('instruction preview client posts the contract body and validates the proposal',async()=>{
-  const calls=[];globalThis.fetch=async(url,options)=>{calls.push({url,method:options.method,body:JSON.parse(options.body)});return Response.json({data:preview});};
+  const calls=[];globalThis.fetch=async(url,options)=>{calls.push({url,method:options.method,body:JSON.parse(options.body)});return Response.json({success:true,payload:preview});};
   try{
     const result=await videoEditorAiApi.previewEdit('p/1',{instruction:'เร่งฉากแรก',revision:7});
     assert.deepEqual(calls,[{url:'/api/proxy/video-editor/projects/p%2F1/ai-edits/preview',method:'POST',body:{instruction:'เร่งฉากแรก',revision:7}}]);
@@ -121,7 +121,7 @@ test('instruction preview client posts the contract body and validates the propo
 
 test('instruction preview errors keep status and code for the UI',async()=>{
   for(const [status,code] of [[422,'AI_EDIT_NO_CHANGES'],[429,'AI_DAILY_LIMIT'],[503,'AI_PROVIDER_UNAVAILABLE'],[503,'AI_UNAVAILABLE'],[409,'REVISION_CONFLICT']]){
-    globalThis.fetch=async()=>Response.json({code,message:'x'},{status});
+    globalThis.fetch=async()=>Response.json({success:false,message:'x',payload:{errorCode:code}},{status});
     try{await assert.rejects(videoEditorAiApi.previewEdit('p',{instruction:'ก',revision:1}),error=>error.status===status&&error.code===code);}finally{globalThis.fetch=originalFetch;}
   }
 });
@@ -129,7 +129,7 @@ test('instruction preview errors keep status and code for the UI',async()=>{
 test('capabilities reject a non-boolean instructionEdits flag and accept its absence',async()=>{
   const caps={available:true,unavailableReason:'',connectionMode:'configured',supportedOptions:{}};
   for(const [value,ok] of [[undefined,true],[true,true],['yes',false]]){
-    globalThis.fetch=async()=>Response.json({data:{...caps,...(value===undefined?{}:{instructionEdits:value})}});
+    globalThis.fetch=async()=>Response.json({success:true,payload:{...caps,...(value===undefined?{}:{instructionEdits:value})}});
     try{if(ok)assert.equal((await videoEditorAiApi.capabilities()).instructionEdits,value);else await assert.rejects(videoEditorAiApi.capabilities(),error=>error.code==='INVALID_RESPONSE');}finally{globalThis.fetch=originalFetch;}
   }
 });

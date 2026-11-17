@@ -9,8 +9,8 @@ export async function fetchPointsBalance(signal?: AbortSignal): Promise<number |
   try {
     const response = await fetch("/api/proxy/director/points", { cache: "no-store", signal })
     if (!response.ok) return null
-    const payload = (await response.json()) as { data?: { balance?: unknown } }
-    return typeof payload.data?.balance === "number" ? payload.data.balance : null
+    const body = (await response.json()) as { payload?: { balance?: unknown } }
+    return typeof body.payload?.balance === "number" ? body.payload.balance : null
   } catch {
     return null
   }

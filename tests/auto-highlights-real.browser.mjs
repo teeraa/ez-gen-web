@@ -1,6 +1,6 @@
 import {createRequire} from 'node:module';import fs from 'node:fs';import assert from 'node:assert/strict';
 const require=createRequire(import.meta.url),{chromium}=require('/Users/mac/.npm/_npx/420ff84f11983ee5/node_modules/playwright');
-const api='http://127.0.0.1:18158/open/v1/video-editor',base='http://ai-highlights.localhost:13323',out='/private/tmp/ai-editor-auto-highlights';
+const api='http://127.0.0.1:18158/api/v1/video-editor',base='http://ai-highlights.localhost:13323',out='/private/tmp/ai-editor-auto-highlights';
 const auth={Authorization:'Bearer video-editor-fixture'};
 async function request(path,method='GET',body){const response=await fetch(api+path,{method,headers:{...auth,...(body instanceof FormData?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:body instanceof FormData?body:JSON.stringify(body)})});const payload=await response.json();assert(response.ok,JSON.stringify(payload));return payload.data;}
 const saved=JSON.parse(fs.readFileSync(`${out}/real-test-project.json`,'utf8'));const projectId=saved.projectId,manualTextId=saved.manualTextId;const project=await request(`/projects/${projectId}`);

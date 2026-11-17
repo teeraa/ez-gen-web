@@ -3,6 +3,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   OUTPUT_EXPIRED: "บันทึกวิดีโอไม่ทัน กรุณาสร้างใหม่",
   MODEL_NOT_SUPPORTED: "ความยาวหรือสัดส่วนนี้ไม่รองรับในโมเดลปัจจุบัน",
   JOB_NOT_SHAREABLE: "วิดีโอยังบันทึกไม่เสร็จ ลองใหม่อีกสักครู่",
+  INSUFFICIENT_POINTS: "พอยต์ไม่เพียงพอ กรุณาเติมพอยต์ก่อนลองใหม่",
 }
 
 export function messageForCode(code: string | undefined, fallback: string): string {

@@ -13,11 +13,11 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   if (!token) return null;
   try {
     const response = await fetch(
-      `${process.env.API_URL ?? "http://localhost:8080"}/open/v1/auth/me`,
+      `${process.env.API_URL ?? "http://localhost:8080"}/api/v1/auth/me`,
       { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
     );
     if (!response.ok) return null;
-    const { data } = await response.json();
+    const { payload: data } = await response.json();
     return { ...data, name: data.displayName ?? data.name ?? data.email };
   } catch {
     return null;

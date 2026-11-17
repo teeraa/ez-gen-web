@@ -1,3 +1,4 @@
+import { parseEnvelope } from "./api-envelope.ts";
 import type { CharacterDesignOptions, ImageCategory } from "./character-design";
 import type {
   PaginatedData,
@@ -53,12 +54,12 @@ async function request<T>(
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (response.status === 204) return undefined as T;
-  const payload = await response.json();
+  const payload = parseEnvelope(await response.json());
   if (!response.ok)
     throw new CreativeApiError(
       payload.message ?? "ดำเนินการไม่สำเร็จ กรุณาลองใหม่",
       response.status,
-      payload.code,
+      payload.errorCode,
     );
   return payload.data as T;
 }

@@ -3,10 +3,15 @@ import assert from 'node:assert/strict';
 import ts from 'typescript';
 import fs from 'node:fs';
 import vm from 'node:vm';
-const compiled=ts.transpileModule(fs.readFileSync('src/lib/pipeline-api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+import {requireEnvelope} from './envelope-module.mjs';
+const transpile=file=>ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const compiled=transpile('src/lib/pipeline-api.ts');
+const require=requireEnvelope;
+// Error bodies below are written in the short form {code,message,details}; wrap them in the API envelope.
+const envelope=body=>({success:false,message:body.message,payload:{errorCode:body.code,details:body.details}});
 const input={characterPrompt:'ตัวละคร',scenePrompt:'ฉาก',visualStyle:'cinematic_realistic',aspectRatio:'9:16',durationSeconds:5,modelId:'violet-motion-2',quality:'standard',idempotencyKey:'fixed-key'};
 async function failure(status,payload){
- const requests=[];const context={exports:{},fetch:async(url,options)=>{requests.push({url,options});return {ok:false,status,json:async()=>payload};}};vm.runInNewContext(compiled,context);
+ const requests=[];const context={exports:{},require,fetch:async(url,options)=>{requests.push({url,options});return {ok:false,status,json:async()=>envelope(payload)};}};vm.runInNewContext(compiled,context);
  try{await context.exports.pipelineApi.create(input);assert.fail('expected request rejection');}catch(error){assert(error instanceof context.exports.PipelineApiError);assert.equal(requests.length,1);assert.equal(requests[0].url,'/api/proxy/studio-pipelines');assert.deepEqual(JSON.parse(requests[0].options.body),input);return error;}
 }
 const detail={field:'scenePrompt',reason:'prompt_budget',message:'รายละเอียดฉากและบทพูดรวมกันยาวเกินขีดจำกัด กรุณาย่อฉากหรือบทพูดแล้วลองอีกครั้ง'};
@@ -31,7 +36,7 @@ test('compiler invalid scene option is recognized without displaying backend int
 
 
 test('finalization uses the proxy and sends only its immutable key',async()=>{
- const requests=[];const context={exports:{},fetch:async(url,options)=>{requests.push({url,options});return {ok:true,json:async()=>({data:{id:'final'}})};}};vm.runInNewContext(compiled,context);
+ const requests=[];const context={exports:{},require,fetch:async(url,options)=>{requests.push({url,options});return {ok:true,json:async()=>({success:true,payload:{id:'final'}})};}};vm.runInNewContext(compiled,context);
  const response=await context.exports.pipelineApi.finalize('draft/source','immutable-final-key');assert.equal(response.id,'final');assert.equal(requests[0].url,'/api/proxy/studio-pipelines/draft%2Fsource/finalize');assert.deepEqual(JSON.parse(requests[0].options.body),{idempotencyKey:'immutable-final-key'});
 });
 

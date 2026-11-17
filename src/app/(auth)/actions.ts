@@ -93,7 +93,7 @@ async function authenticate(
   body: Record<string, string>,
 ): Promise<{ accessToken: string; expiresAt: string }> {
   const response = await fetch(
-    `${process.env.API_URL ?? "http://localhost:8080"}/open/v1/auth/${endpoint}`,
+    `${process.env.API_URL ?? "http://localhost:8080"}/api/v1/auth/${endpoint}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,5 +103,5 @@ async function authenticate(
   );
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message ?? "ยืนยันตัวตนไม่สำเร็จ");
-  return payload.data;
+  return payload.payload;
 }

@@ -1,6 +1,7 @@
-// Client for the Marketplace menu (/open/v1/marketplace). Manual phase: nothing here talks to
+// Client for the Marketplace menu (/api/v1/marketplace). Manual phase: nothing here talks to
 // TikTok Shop, Shopee or Lazada; posts and sales are logged by the user.
 
+import { parseEnvelope, type ParsedResponse } from "./api-envelope.ts";
 export type Platform = "tiktok_shop" | "shopee" | "lazada";
 export type ShopStatus = "active" | "inactive";
 export type ProductStatus = "active" | "draft" | "archived";
@@ -88,10 +89,10 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     throw new MarketplaceApiError("การเชื่อมต่อขาดหาย กรุณาลองใหม่", 0, "NETWORK_ERROR");
   }
   if (res.status === 204) return undefined as T;
-  let body: { data?: T; code?: string; message?: string } | null = null;
-  try { body = await res.json(); } catch { /* handled below */ }
+  let body: ParsedResponse | null = null;
+  try { body = parseEnvelope(await res.json()); } catch { /* handled below */ }
   if (!res.ok || !body) {
-    const code = body?.code ?? "REQUEST_FAILED";
+    const code = body?.errorCode ?? "REQUEST_FAILED";
     // Marketplace-specific server messages are already Thai; generic ones are English.
     const message = MESSAGES[code] ?? (body?.message && /[฀-๿]/.test(body.message) ? body.message : "ทำรายการไม่สำเร็จ กรุณาลองใหม่");
     throw new MarketplaceApiError(message, res.status, code);

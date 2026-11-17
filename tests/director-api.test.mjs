@@ -3,24 +3,25 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import {requireEnvelope} from './envelope-module.mjs';
 const compiled=ts.transpileModule(fs.readFileSync('src/lib/director-api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-function client(responses){const requests=[];const context={exports:{},URL,Response,location:{origin:'http://localhost:3000'},fetch:async(url,init)=>{requests.push({url,init});return responses.shift()}};vm.runInNewContext(compiled,context);return {...context.exports,requests}}
+function client(responses){const requests=[];const context={exports:{},require:requireEnvelope,URL,Response,location:{origin:'http://localhost:3000'},fetch:async(url,init)=>{requests.push({url,init});return responses.shift()}};vm.runInNewContext(compiled,context);return {...context.exports,requests}}
 const p={id:'project',revision:1,name:'Film',step:'idea',idea:{prompt:'idea',characterAssetIds:[]},story:{status:'idle'},storyboard:{status:'idle'},estimates:{},scenes:[]};
 test('normal conditional poll accepts304; media refresh omitsIfNoneMatch and obtains freshURLs',async()=>{
  const old={...p,coverImageUrl:'https://owned.test/old'};const fresh={...p,coverImageUrl:'https://owned.test/new'};
- const {directorApi,requests}=client([Response.json({data:old},{headers:{ETag:'W/"1-1"'}}),new Response(null,{status:304}),Response.json({data:fresh},{headers:{ETag:'W/"1-1"'}})]);
+ const {directorApi,requests}=client([Response.json({success:true,payload:old},{headers:{ETag:'W/"1-1"'}}),new Response(null,{status:304}),Response.json({success:true,payload:fresh},{headers:{ETag:'W/"1-1"'}})]);
  assert.equal((await directorApi.get('project')).coverImageUrl,old.coverImageUrl);
  assert.equal((await directorApi.get('project',undefined,true)).coverImageUrl,old.coverImageUrl);
  assert.equal(requests[1].init.headers['If-None-Match'],'W/"1-1"');
  assert.equal((await directorApi.get('project')).coverImageUrl,fresh.coverImageUrl);assert.equal(requests[2].init.headers['If-None-Match'],undefined);
 });
 test('points andrate errors retain actionable details requestID and RetryAfter',async()=>{
- const {directorApi,errorMessage}=client([Response.json({code:'INSUFFICIENT_POINTS',message:'พอยต์ไม่พอ',details:{required:3,balance:1},requestId:'safe-id'},{status:402}),Response.json({code:'RATE_LIMITED',message:'รอสักครู่'},{status:429,headers:{'Retry-After':'60'}})]);
+ const {directorApi,errorMessage}=client([Response.json({success:false,message:'พอยต์ไม่พอ',transactionCode:'safe-id',payload:{errorCode:'INSUFFICIENT_POINTS',details:{required:3,balance:1}}},{status:402}),Response.json({success:false,message:'รอสักครู่',payload:{errorCode:'RATE_LIMITED'}},{status:429,headers:{'Retry-After':'60'}})]);
  await assert.rejects(directorApi.mutate('project','/cover','POST',{}),error=>error.status===402&&errorMessage(error).includes('3 pt')&&errorMessage(error).includes('safe-id'));
  await assert.rejects(directorApi.mutate('project','/cover','POST',{}),error=>error.retryAfter==='60'&&errorMessage(error).includes('60'));
 });
 test('untrustedmedia schemes and malformed project envelope are rejected',async()=>{
- const {directorApi,mediaUrl}=client([Response.json({data:{id:'x'}})]);
+ const {directorApi,mediaUrl}=client([Response.json({success:true,payload:{id:'x'}})]);
  assert.equal(mediaUrl('javascript:alert(1)'),undefined);assert.equal(mediaUrl('data:image/svg+xml,bad'),undefined);assert.equal(mediaUrl('https://owned.test/media'),'https://owned.test/media');
  await assert.rejects(directorApi.get('project'),error=>error.code==='INVALID_RESPONSE');
 });
@@ -50,7 +51,7 @@ test('poll backoff: plan pollDelayMs overrides interval',async()=>{
 test('series endpoints use the fixed wire paths, methods and bodies',async()=>{
  const s={id:'s1',revision:2,name:'Saga',aspectRatio:'16:9',style:'cinematic',resolution:'1080p',characterAssetIds:[],episodeCount:1,coverImageUrl:null,coverImageExpiresAt:null,createdAt:'2026-11-08T00:00:00Z',updatedAt:'2026-11-08T00:00:00Z'};
  const ep={...p,id:'e1',seriesId:'s1',episodeNumber:2,episodeTitle:null};
- const {directorApi,requests}=client([Response.json({data:{items:[s],total:1,page:1,limit:20}}),Response.json({data:s},{status:201}),Response.json({data:{...s,episodes:[{id:'e0',step:'idea',episodeNumber:1}]}}),Response.json({data:{...s,revision:3,name:'New'}}),new Response(null,{status:204}),Response.json({data:ep},{status:201})]);
+ const {directorApi,requests}=client([Response.json({success:true,payload:{items:[s],total:1,page:1,limit:20}}),Response.json({success:true,payload:s},{status:201}),Response.json({success:true,payload:{...s,episodes:[{id:'e0',step:'idea',episodeNumber:1}]}}),Response.json({success:true,payload:{...s,revision:3,name:'New'}}),new Response(null,{status:204}),Response.json({success:true,payload:ep},{status:201})]);
  assert.equal((await directorApi.listSeries(2)).items[0].id,'s1');
  assert.equal(requests[0].url,'/api/proxy/director/series?page=2&limit=20');
  await directorApi.createSeries({name:'Saga',aspectRatio:'16:9',style:'cinematic',resolution:'1080p',idempotencyKey:'k'});
@@ -62,7 +63,7 @@ test('series endpoints use the fixed wire paths, methods and bodies',async()=>{
  assert.equal(created.episodeNumber,2);assert.equal(requests[5].url,'/api/proxy/director/series/s1/episodes');assert.deepEqual(JSON.parse(requests[5].init.body),{title:'Pilot',idempotencyKey:'k2'});
 });
 test('malformed series payloads are rejected and SERIES_BUSY has a Thai explanation',async()=>{
- const {directorApi,errorMessage,episodeLabel}=client([Response.json({data:{items:[{id:'x'}],total:1,page:1,limit:20}}),Response.json({data:{id:'s1'}}),Response.json({code:'SERIES_BUSY',message:'busy',requestId:'r1'},{status:409})]);
+ const {directorApi,errorMessage,episodeLabel}=client([Response.json({success:true,payload:{items:[{id:'x'}],total:1,page:1,limit:20}}),Response.json({success:true,payload:{id:'s1'}}),Response.json({success:false,message:'busy',transactionCode:'r1',payload:{errorCode:'SERIES_BUSY'}},{status:409})]);
  await assert.rejects(directorApi.listSeries(),error=>error.code==='INVALID_RESPONSE');
  await assert.rejects(directorApi.getSeries('s1'),error=>error.code==='INVALID_RESPONSE');
  await assert.rejects(directorApi.removeSeries('s1'),error=>error.status===409&&errorMessage(error).includes('กำลังสร้างงาน')&&errorMessage(error).includes('r1'));
@@ -71,6 +72,6 @@ test('malformed series payloads are rejected and SERIES_BUSY has a Thai explanat
  assert.equal(episodeLabel({episodeNumber:null,episodeTitle:null,name:'Legacy'}),'Legacy');
 });
 test('EPISODE_LIMIT has a Thai explanation',async()=>{
- const {directorApi,errorMessage}=client([Response.json({code:'EPISODE_LIMIT',message:'limit',requestId:'r2'},{status:409})]);
+ const {directorApi,errorMessage}=client([Response.json({success:false,message:'limit',transactionCode:'r2',payload:{errorCode:'EPISODE_LIMIT'}},{status:409})]);
  await assert.rejects(directorApi.createEpisode('s1',{idempotencyKey:'k'}),error=>error.code==='EPISODE_LIMIT'&&errorMessage(error).includes('999 ตอน')&&errorMessage(error).includes('r2'));
 });

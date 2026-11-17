@@ -7,7 +7,7 @@ const base=process.env.BASE_URL || 'http://127.0.0.1:13012';
 const artifacts=process.env.ARTIFACT_DIR || '/private/tmp/synth-img2img-fe';
 fs.mkdirSync(artifacts,{recursive:true});
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
-const fixture=http.createServer((req,res)=>res.end(JSON.stringify({data:req.url.endsWith('/auth/login')?{accessToken:'local-character-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid'}})));
+const fixture=http.createServer((req,res)=>res.end(JSON.stringify({success:true,payload:req.url.endsWith('/auth/login')?{accessToken:'local-character-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid'}})));
 let browser;
 const observations=[];
 try {
@@ -24,8 +24,8 @@ try {
    if(path==='image-jobs'){
     const body=req.postDataJSON();posts.push(body);
     if(behavior==='network'){behavior='success';return route.abort('failed');}
-    if(behavior==='unavailable'){behavior='success';return route.fulfill({status:503,json:{code:'CHARACTER_REFERENCE_UNAVAILABLE',message:'การสร้างตัวละครจากภาพยังไม่พร้อม'}});}
-    if(behavior==='generic'){behavior='success';return route.fulfill({status:503,json:{code:'PROVIDER_ERROR',message:'บริการชั่วคราวไม่พร้อม'}});}
+    if(behavior==='unavailable'){behavior='success';return route.fulfill({status:503,json:{success:false,message:'การสร้างตัวละครจากภาพยังไม่พร้อม',payload:{errorCode:'CHARACTER_REFERENCE_UNAVAILABLE'}}});}
+    if(behavior==='generic'){behavior='success';return route.fulfill({status:503,json:{success:false,message:'บริการชั่วคราวไม่พร้อม',payload:{errorCode:'PROVIDER_ERROR'}}});}
     const jobId='job-'+ ++counter;jobs.set(jobId,{jobId,status:'succeeded',rawPrompt:body.prompt,imageCategory:body.category??'character',result:{mediaType:'image',mediaUrl:'data:image/png;base64,'+png.toString('base64')}});data={jobId,status:'queued'};
    }
    if(path.startsWith('jobs/'))data=jobs.get(path.slice(5));

@@ -1,3 +1,4 @@
+import { parseEnvelope } from "./api-envelope.ts";
 import {EditorApiError, type EditorProject} from "./video-editor-api";
 import type {AiEditOperation, AiEditProposal} from "./video-editor-ai-api";
 import {parseSseFrames} from "./ai-chat-sse";
@@ -21,9 +22,10 @@ async function json<T>(response: Response): Promise<T> {
   let payload: unknown;
   try {payload = await response.json();} catch {throw new EditorApiError("อ่านคำตอบของระบบไม่ได้ กรุณาลองใหม่", response.status, "INVALID_RESPONSE");}
   if (!object(payload)) throw new EditorApiError("ระบบส่งข้อมูลไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
-  if (!response.ok) throw new EditorApiError(typeof payload.message === "string" ? payload.message : "ดำเนินการไม่สำเร็จ", response.status, typeof payload.code === "string" ? payload.code : "REQUEST_FAILED");
-  if (!("data" in payload)) throw new EditorApiError("ระบบส่งข้อมูลไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
-  return payload.data as T;
+  const body = parseEnvelope(payload);
+  if (!response.ok) throw new EditorApiError(body.message ?? "ดำเนินการไม่สำเร็จ", response.status, body.errorCode ?? "REQUEST_FAILED");
+  if (!body.hasPayload) throw new EditorApiError("ระบบส่งข้อมูลไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
+  return body.data as T;
 }
 async function call<T>(url: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
   let response: Response;

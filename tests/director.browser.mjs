@@ -40,31 +40,31 @@ async function characterScenarios(width, original) {
   page.on('pageerror', error => errors.push(error.message));
   await context.route('**/api/proxy/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname.replace('/api/proxy/', '');
-    if (path === `director/projects/${project.id}` && request.method() === 'GET') return route.fulfill({ json: { data: project } });
+    if (path === `director/projects/${project.id}` && request.method() === 'GET') return route.fulfill({ json: { success: true, payload: project } });
     if (path === `director/projects/${project.id}/idea`) {
       const body = request.postDataJSON(); posts.push({ path, body });
       project = { ...project, revision: project.revision + 1, idea: { ...project.idea, ...body } };
-      return route.fulfill({ json: { data: project } });
+      return route.fulfill({ json: { success: true, payload: project } });
     }
     if (path === 'assets' && request.method() === 'GET') {
       assetReads += 1;
       await new Promise(resolve => setTimeout(resolve, 350));
-      if (assetError) return route.fulfill({ status: 503, json: { code: 'UNAVAILABLE', message: 'คลังตัวละครไม่พร้อมชั่วคราว' } });
-      return route.fulfill({ json: { data: { items: [owned], total: 1, page: 1, limit: 50 } } });
+      if (assetError) return route.fulfill({ status: 503, json: { success: false, message: 'คลังตัวละครไม่พร้อมชั่วคราว', payload: { errorCode: 'UNAVAILABLE' } } });
+      return route.fulfill({ json: { success: true, payload: { items: [owned], total: 1, page: 1, limit: 50 } } });
     }
-    if (path === `assets/${owned.id}`) return route.fulfill({ json: { data: owned } });
-    if (path === `assets/${created.id}`) return route.fulfill({ json: { data: created } });
+    if (path === `assets/${owned.id}`) return route.fulfill({ json: { success: true, payload: owned } });
+    if (path === `assets/${created.id}`) return route.fulfill({ json: { success: true, payload: created } });
     if (path === 'image-jobs') {
       const body = request.postDataJSON(); posts.push({ path, body });
       assert.equal(body.category, 'character'); assert.equal(body.aspectRatio, '3:4'); assert.equal(body.designFormat, 'full_body'); assert.match(body.idempotencyKey, /^[0-9a-f-]{36}$/);
-      if (rejectCharacter) { rejectCharacter = false; return route.fulfill({ status: 400, json: { code: 'VALIDATION_ERROR', message: 'กรุณาปรับรูปลักษณ์ตัวละคร' } }); }
-      return route.fulfill({ json: { data: { jobId: 'character-job', status: 'queued' } } });
+      if (rejectCharacter) { rejectCharacter = false; return route.fulfill({ status: 400, json: { success: false, message: 'กรุณาปรับรูปลักษณ์ตัวละคร', payload: { errorCode: 'VALIDATION_ERROR' } } }); }
+      return route.fulfill({ json: { success: true, payload: { jobId: 'character-job', status: 'queued' } } });
     }
-    if (path === 'jobs/character-job') return route.fulfill({ json: { data: { jobId: 'character-job', status: 'succeeded', progress: 100, result: { mediaType: 'image', mediaUrl: owned.mediaUrl }, error: null } } });
+    if (path === 'jobs/character-job') return route.fulfill({ json: { success: true, payload: { jobId: 'character-job', status: 'succeeded', progress: 100, result: { mediaType: 'image', mediaUrl: owned.mediaUrl }, error: null } } });
     if (path === 'assets' && request.method() === 'POST') {
       const body = request.postDataJSON(); posts.push({ path, body });
       assert.equal(body.jobId, 'character-job'); assert.equal(body.assetType, 'character'); assert.equal(body.name, 'ดาวน้อย');
-      return route.fulfill({ json: { data: created } });
+      return route.fulfill({ json: { success: true, payload: created } });
     }
     return route.continue();
   });
@@ -113,7 +113,7 @@ try {
     await context.addCookies([{ name: 'ezgen_session', value: 'director-character-fixture', url: base }]);
     const response = await context.request.get(`${base}/api/proxy/director/projects/${process.env.CHARACTER_ONLY_PROJECT}`);
     assert.equal(response.status(), 200);
-    const original = (await response.json()).data;
+    const original = (await response.json()).payload;
     await context.close();
     observations.push(await characterScenarios(1440, original));
   } else for (const width of [1440, 375]) {
@@ -148,7 +148,7 @@ try {
     const project = async () => {
       const response = await context.request.get(`${base}/api/proxy/director/projects/${id}`);
       assert.equal(response.status(), 200);
-      return (await response.json()).data;
+      return (await response.json()).payload;
     };
     const controls = async body => {
       const response = await context.request.post(`${fixtureBase}/__fixture/controls`, { data: body });
@@ -348,7 +348,7 @@ try {
       const capsUnavailable = async route => {
         const response = await route.fetch();
         const payload = await response.json();
-        return route.fulfill({ json: { ...payload, data: { ...payload.data, enabled: false, unavailableReason: 'ระบบสร้างเนื้อหาทดสอบยังไม่พร้อม' } } });
+        return route.fulfill({ json: { ...payload, payload: { ...payload.payload, enabled: false, unavailableReason: 'ระบบสร้างเนื้อหาทดสอบยังไม่พร้อม' } } });
       };
       await context.route(`${base}/api/proxy/director/capabilities`, capsUnavailable);
       await page.reload();

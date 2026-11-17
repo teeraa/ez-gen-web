@@ -1,3 +1,4 @@
+import { parseEnvelope } from "./api-envelope.ts";
 export type Step = "idea" | "plot" | "storyboard";
 export type WorkStatus = "idle" | "queued" | "processing" | "succeeded" | "failed" | "needs_attention";
 export interface Failure { failureCode: string | null; failureMessage: string | null; canRetry: boolean }
@@ -49,10 +50,10 @@ async function request<T>(path: string, init: RequestInit = {}, cached?: Cached<
   catch (error) { if (error instanceof Error && error.name === "AbortError") throw error; throw new DirectorError("เชื่อมต่อไม่สำเร็จ กรุณาลองคำขอเดิมอีกครั้ง", 0, "NETWORK_ERROR"); }
   if (response.status === 304 && cached?.data !== undefined) return cached.data;
   if (response.status === 204) return undefined as T;
-  let payload: unknown;
-  try { payload = await response.json(); } catch { throw new DirectorError("ได้รับข้อมูลไม่สมบูรณ์ กรุณาลองคำขอเดิมอีกครั้ง", response.status, "INVALID_RESPONSE"); }
-  if (!response.ok) throw new DirectorError(object(payload) && typeof payload.message === "string" ? payload.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่", response.status, object(payload) && typeof payload.code === "string" ? payload.code : "UNKNOWN", object(payload) ? payload.details : undefined, object(payload) && typeof payload.requestId === "string" ? payload.requestId : undefined, response.headers.get("Retry-After"));
-  if (!object(payload) || !("data" in payload)) throw new DirectorError("ข้อมูลตอบกลับไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
+  let payload: ReturnType<typeof parseEnvelope>;
+  try { payload = parseEnvelope(await response.json()); } catch { throw new DirectorError("ได้รับข้อมูลไม่สมบูรณ์ กรุณาลองคำขอเดิมอีกครั้ง", response.status, "INVALID_RESPONSE"); }
+  if (!response.ok) throw new DirectorError(payload.message ?? "ดำเนินการไม่สำเร็จ กรุณาลองใหม่", response.status, payload.errorCode ?? "UNKNOWN", payload.details, payload.transactionCode || undefined, response.headers.get("Retry-After"));
+  if (!payload.hasPayload) throw new DirectorError("ข้อมูลตอบกลับไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
   if (cached) { cached.data = payload.data as T; cached.etag = response.headers.get("ETag") ?? undefined; }
   return payload.data as T;
 }

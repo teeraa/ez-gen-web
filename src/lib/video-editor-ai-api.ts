@@ -1,3 +1,4 @@
+import { parseEnvelope } from "./api-envelope.ts";
 import {EditorApiError, type EditorProject, type EditorTextLayer, type EditorAudioClip, type EditorImageLayer, type EditorRatio, type EditorSegment} from "./video-editor-api";
 
 export type AiStyle = "warm" | "fun" | "minimal" | "professional";
@@ -45,9 +46,10 @@ async function request(path: string, method = "GET", body?: unknown, signal?: Ab
   let payload: unknown;
   try {payload = await response.json();} catch {throw new EditorApiError("ไม่สามารถอ่านคำตอบของระบบวิเคราะห์ได้", response.status, "INVALID_RESPONSE");}
   if (!object(payload)) throw new EditorApiError("ระบบส่งข้อมูลวิเคราะห์ไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
-  if (!response.ok) throw new EditorApiError(typeof payload.message === "string" ? payload.message : "ดำเนินการวิเคราะห์ไม่สำเร็จ", response.status, typeof payload.code === "string" ? payload.code : "REQUEST_FAILED");
-  if (!("data" in payload)) throw new EditorApiError("ระบบส่งข้อมูลวิเคราะห์ไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
-  return payload.data;
+  const parsed = parseEnvelope(payload);
+  if (!response.ok) throw new EditorApiError(parsed.message ?? "ดำเนินการวิเคราะห์ไม่สำเร็จ", response.status, parsed.errorCode ?? "REQUEST_FAILED");
+  if (!parsed.hasPayload) throw new EditorApiError("ระบบส่งข้อมูลวิเคราะห์ไม่สมบูรณ์", response.status, "INVALID_RESPONSE");
+  return parsed.data;
 }
 function validDurationReason(value: unknown): boolean {
   return value === undefined || typeof value === "string" && Array.from(value).length <= 2000;

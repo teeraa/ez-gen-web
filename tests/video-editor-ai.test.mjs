@@ -9,7 +9,7 @@ import {readAiIntents,sameAiDraft,aiDurationNotice} from '../src/lib/video-edito
 const originalFetch=globalThis.fetch;
 const source=fs.readFileSync(new URL('../src/lib/video-editor-ai-api.ts',import.meta.url),'utf8');
 const dependency=pathToFileURL(path.resolve('src/lib/video-editor-api.ts')).href;
-const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace('from "./video-editor-api"',`from "${dependency}"`);
+const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace('from "./video-editor-api"',`from "${dependency}"`).replace('from "./api-envelope.ts"',`from "${pathToFileURL(path.resolve('src/lib/api-envelope.ts')).href}"`);
 const {videoEditorAiApi,parseAiJob}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
 const segment={id:'segment-1',assetId:'asset-1',start:0,end:2,volume:0,title:'Opening',reason:'Source evidence',evidenceId:'window-1'};
 const create={requestId:'stable-create',revision:3,assetIds:['asset-1'],brief:'Cafe',targetDuration:15,style:'warm',audioMode:'keep',removeSilence:true,cloudConsent:true};
@@ -39,15 +39,15 @@ test('draft reconciliation compares order, trim and volume instead of only match
  assert.equal(stored.localDraft,undefined);
 });
 test('provider quota errors remain failures and do not trigger automatic requests or fallback',async()=>{
- let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({code:'AI_RATE_LIMITED',message:'Wait for quota'},{status:429});};
+ let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({success:false,message:'Wait for quota',payload:{errorCode:'AI_RATE_LIMITED'}},{status:429});};
  try{await assert.rejects(videoEditorAiApi.create('project-1',create),error=>error.code==='AI_RATE_LIMITED'&&error.status===429);assert.equal(calls,1);}finally{globalThis.fetch=originalFetch;}
 });
 test('explicit retry can submit exactly the original create body after an unknown transport outcome',async()=>{
- const bodies=[];globalThis.fetch=async(url,options)=>{bodies.push(JSON.parse(options.body));if(bodies.length===1)throw new TypeError('response lost');return Response.json({data:job},{status:202});};
+ const bodies=[];globalThis.fetch=async(url,options)=>{bodies.push(JSON.parse(options.body));if(bodies.length===1)throw new TypeError('response lost');return Response.json({success:true,payload:job},{status:202});};
  try{await assert.rejects(videoEditorAiApi.create('project-1',create),error=>error.code==='NETWORK_ERROR');const result=await videoEditorAiApi.create('project-1',create);assert.equal(result.id,job.id);assert.deepEqual(bodies,[create,create]);}finally{globalThis.fetch=originalFetch;}
 });
 test('apply preserves both revision guards and the exact approved set',async()=>{
- let body;globalThis.fetch=async(url,options)=>{body=JSON.parse(options.body);return Response.json({data:{id:'project-1',revision:4}});};
+ let body;globalThis.fetch=async(url,options)=>{body=JSON.parse(options.body);return Response.json({success:true,payload:{id:'project-1',revision:4}});};
  try{const request={requestId:'same-apply',revision:3,draftRevision:2,approvedSegmentIds:['segment-1']};await videoEditorAiApi.apply('job-1',request);assert.deepEqual(body,request);}finally{globalThis.fetch=originalFetch;}
 });
 test('invalid job states and missing evidence lists do not become renderable success',()=>{

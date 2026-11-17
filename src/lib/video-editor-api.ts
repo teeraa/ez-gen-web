@@ -1,3 +1,4 @@
+import { parseEnvelope } from "./api-envelope.ts";
 export type EditorRatio = "9:16" | "16:9" | "1:1";
 export type EditorResolution = "720p" | "1080p";
 /** Source range `[start,end)` of a video asset; speed (absent = 1) and fades exist only when capabilities.clipEffects. */
@@ -21,10 +22,10 @@ export class EditorApiError extends Error { status: number; code: string; constr
 const base = "/api/proxy/video-editor";
 function unwrap<T>(payload: unknown, status: number): T {
   if (!payload || typeof payload !== "object") throw new EditorApiError("ระบบส่งข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", status, "INVALID_RESPONSE");
-  const object = payload as {data?: T; code?: string; message?: string};
-  if (status < 200 || status >= 300) throw new EditorApiError(object.message || "ดำเนินการไม่สำเร็จ กรุณาลองใหม่", status, object.code || "REQUEST_FAILED");
-  if (!("data" in object)) throw new EditorApiError("ระบบส่งข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", status, "INVALID_RESPONSE");
-  return object.data as T;
+  const body = parseEnvelope(payload);
+  if (status < 200 || status >= 300) throw new EditorApiError(body.message || "ดำเนินการไม่สำเร็จ กรุณาลองใหม่", status, body.errorCode || "REQUEST_FAILED");
+  if (!body.hasPayload) throw new EditorApiError("ระบบส่งข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", status, "INVALID_RESPONSE");
+  return body.data as T;
 }
 async function request<T>(path: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${base}${path}`, {method, signal, cache:"no-store", headers: {"Content-Type":"application/json"}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
@@ -76,14 +77,14 @@ interface ChunkSession {uploadId: string; chunkSize: number; chunks: number}
 async function chunkPayload<T>(response: Response): Promise<T> {
   let body: unknown;
   try {body = await response.json();} catch {throw new EditorApiError("อ่านคำตอบของระบบไม่ได้ กรุณาลองใหม่", response.status, "INVALID_RESPONSE");}
-  const value = (body ?? {}) as {data?: T; code?: string; message?: string; details?: unknown};
+  const value = parseEnvelope(body);
   if (!response.ok) {
-    const error = new EditorApiError(value.message || "อัปโหลดไม่สำเร็จ กรุณาลองใหม่", response.status, value.code || "REQUEST_FAILED") as EditorApiError & {details?: unknown};
+    const error = new EditorApiError(value.message || "อัปโหลดไม่สำเร็จ กรุณาลองใหม่", response.status, value.errorCode || "REQUEST_FAILED") as EditorApiError & {details?: unknown};
     error.details = value.details;
     throw error;
   }
   if (value.data === undefined) throw new EditorApiError("ระบบส่งข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", response.status, "INVALID_RESPONSE");
-  return value.data;
+  return value.data as T;
 }
 
 const chunkWait = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {

@@ -1,6 +1,7 @@
-// Client for the Prompt library (/open/v1/prompts) and Skills (/open/v1/skills) menus.
+// Client for the Prompt library (/api/v1/prompts) and Skills (/api/v1/skills) menus.
 // Built-in items (builtIn: true) are shared and read-only; the API answers 403 BUILT_IN_READ_ONLY.
 
+import { parseEnvelope, type ParsedResponse } from "./api-envelope.ts";
 export type PromptCategory = "video" | "image" | "product" | "character" | "camera";
 export type LibraryScope = "all" | "mine" | "builtin" | "saved";
 export type SkillInputKey = "character" | "product" | "style" | "voice" | "music" | "script";
@@ -58,10 +59,10 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     throw new LibraryApiError("การเชื่อมต่อขาดหาย กรุณาลองใหม่", 0, "NETWORK_ERROR");
   }
   if (res.status === 204) return undefined as T;
-  let body: { data?: T; code?: string; message?: string } | null = null;
-  try { body = await res.json(); } catch { /* handled below */ }
+  let body: ParsedResponse | null = null;
+  try { body = parseEnvelope(await res.json()); } catch { /* handled below */ }
   if (!res.ok || !body) {
-    const code = body?.code ?? "REQUEST_FAILED";
+    const code = body?.errorCode ?? "REQUEST_FAILED";
     // Server messages for library-specific codes are already Thai; generic ones are English.
     const message = MESSAGES[code] ?? (body?.message && /[฀-๿]/.test(body.message) ? body.message : "ทำรายการไม่สำเร็จ กรุณาลองใหม่");
     throw new LibraryApiError(message, res.status, code);

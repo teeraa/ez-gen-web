@@ -19,7 +19,7 @@ const old={id:'m0',role:'assistant',content:'',createdAt:stamp,tools:[],error:'A
 const userMsg={id:'m1',role:'user',content:'ใส่ข้อความเปิดว่า โปรโมชันวันนี้',createdAt:stamp,tools:[]};
 const reply={id:'m2',role:'assistant',content:'ใส่ข้อความเปิดให้แล้ว กดนำไปใช้ได้เลย',createdAt:stamp,tools:[{name:'edit_timeline',label:'แก้ timeline',ok:true}],proposal:proposalOf('pending')};
 const sse=(...events)=>events.map(e=>`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
-const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:{id:'owner1',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
+const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:{id:'owner1',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
 (async()=>{await new Promise((r,j)=>{fixture.once('error',j);fixture.listen(18199,'127.0.0.1',r)});const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});const results=[];
 try{for(const width of [1440,375]){const context=await browser.newContext({viewport:{width,height:1000}});await context.addCookies([{name:'ezgen_session',value:'local-chat-fixture',url:base}]);const page=await context.newPage(),errors=[],sent=[];
 let current=structuredClone(project),messages=[old],threadGate=null,threadFails=1,applyReply=null,clears=0;page.on('pageerror',e=>errors.push(e.message));
@@ -27,7 +27,7 @@ const thread=()=>({available:true,provider:'gemini',model:'fixture',cloudNotice:
 await page.route('**/api/proxy/**',async route=>{const request=route.request(),path=new URL(request.url()).pathname.replace('/api/proxy/','');let data;
 if(path==='auth/me')data={id:'owner1'};else if(path==='video-editor/capabilities')data={available:true,unavailableReason:'',maxUploadBytes:52428800,maxSegments:20,maxDuration:1200,aspectRatios:['9:16'],resolutions:['720p'],maxAudioClips:20,maxTextLayers:50,clipEffects:true,clipStyles:true};else if(path==='video-editor/ai-capabilities')data=caps;else if(path==='video-editor/projects')data={items:[current],total:1,page:1,limit:20};
 else if(path==='video-editor/projects/p1')data=current;else if(path==='video-editor/projects/p1/assets')data={items:[asset]};else if(path==='video-editor/projects/p1/exports')data={items:[]};else if(path==='video-editor/projects/p1/ai-jobs')data={items:[]};
-else if(path==='video-editor/projects/p1/ai-chat'){if(threadGate)await threadGate;if(threadFails>0){threadFails--;return route.fulfill({status:500,json:{code:'INTERNAL',message:'โหลดไม่ได้ (fixture)'}});}if(request.method()==='DELETE'){clears++;messages=[];}data=thread();}
+else if(path==='video-editor/projects/p1/ai-chat'){if(threadGate)await threadGate;if(threadFails>0){threadFails--;return route.fulfill({status:500,json:{success:false,message:'โหลดไม่ได้ (fixture)',payload:{errorCode:'INTERNAL'}}});}if(request.method()==='DELETE'){clears++;messages=[];}data=thread();}
 else if(path==='video-editor/projects/p1/ai-chat/messages'){const body=request.postDataJSON();sent.push(body);assert.deepEqual(body,{message:userMsg.content,cloudConsent:true});messages=[old,userMsg,reply];
   return route.fulfill({status:200,contentType:'text/event-stream; charset=utf-8',body:sse({type:'status',tool:'thinking',label:'กำลังคิด'},{type:'status',tool:'edit_timeline',label:'แก้ timeline'},{type:'message',message:reply})});}
 else if(path==='video-editor/projects/p1/ai-chat/messages/m2/apply'){if(applyReply)return route.fulfill(applyReply);current={...current,textLayers:[text],revision:5};const applied={...reply,proposal:{...proposalOf('applied'),appliedRevision:5}};messages=[old,userMsg,applied];data={message:applied,project:current};}
@@ -45,7 +45,7 @@ const consent=page.getByRole('dialog',{name:'ยินยอมส่งข้�
 const card=page.getByLabel('ข้อเสนอการแก้ timeline');await card.getByText('เพิ่มข้อความเปิด').waitFor();assert.equal(sent.length,1);assert.equal(await card.getByText('รอยืนยัน',{exact:true}).count(),1);
 await page.screenshot({path:dir+`/proposal-${width}.png`});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
 // 4) apply after another tab already used the proposal: own message, no revision-conflict wording
-applyReply={status:409,json:{code:'AI_PROPOSAL_NOT_PENDING',message:'ข้อเสนอนี้ถูกใช้ ยกเลิก หรือหมดอายุแล้ว'}};await card.getByRole('button',{name:'นำไปใช้'}).click();
+applyReply={status:409,json:{success:false,message:'ข้อเสนอนี้ถูกใช้ ยกเลิก หรือหมดอายุแล้ว',payload:{errorCode:'AI_PROPOSAL_NOT_PENDING'}}};await card.getByRole('button',{name:'นำไปใช้'}).click();
 await page.getByRole('alert').filter({hasText:'ข้อเสนอนี้ถูกใช้หรือยกเลิกไปแล้ว'}).waitFor();
 // 5) a normal apply lands on the timeline and can be undone
 applyReply=null;await card.getByRole('button',{name:'นำไปใช้'}).click();await card.getByText('ใช้แล้ว',{exact:true}).waitFor();

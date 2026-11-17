@@ -2,17 +2,27 @@ import type { CharacterDesignOptions, ImageCategory } from "@/lib/character-desi
 
 // ── Shared ────────────────────────────────────────────────────────────────────
 
+/** Standard envelope for every backend JSON response (success and error). */
 export interface ApiResponse<T> {
-  data: T
-  requestId: string
+  /** HTTP status code. */
+  code: number
+  /** ISO 8601 server time with offset, e.g. 2026-11-17T15:14:57.510357+07:00 */
+  timestamp: string
+  /** Per-request ID (same as the X-Request-ID header). */
+  transactionCode: string
+  success: boolean
+  titleMessage: string
+  message: string
+  payload: T
 }
 
-export interface ApiError {
-  code: string
-  message: string
-  details?: { field: string; message: string }[]
-  requestId: string
+/** payload of an error envelope (success: false). */
+export interface ApiErrorPayload {
+  errorCode: string
+  details?: unknown
 }
+
+export type ApiError = ApiResponse<ApiErrorPayload>
 
 export interface PaginatedData<T> {
   items: T[]
@@ -359,7 +369,7 @@ export interface ExportDownloadDTO {
   expiresAt: string
 }
 
-// GET /public/v1/shares/:token — deliberately omits prompt, owner and job IDs.
+// GET /api/v1/public/shares/:token — deliberately omits prompt, owner and job IDs.
 export interface PublicShareDTO {
   mediaUrl: string
   thumbnailUrl: string | null

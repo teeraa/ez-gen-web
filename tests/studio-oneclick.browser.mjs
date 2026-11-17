@@ -8,7 +8,7 @@ const artifacts=process.env.ARTIFACT_DIR||'/private/tmp/studio-oneclick-fe';
 fs.mkdirSync(artifacts,{recursive:true});
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
 const generated='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="#ccddee"/><circle cx="150" cy="100" r="50" fill="#334455"/></svg>');
-const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:req.url.endsWith('/auth/login')?{accessToken:'local-oneclick-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
+const fixture=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,payload:req.url.endsWith('/auth/login')?{accessToken:'local-oneclick-fixture',expiresAt:'2099-01-01T00:00:00Z'}:{id:'fixture-user',displayName:'Fixture',email:'fixture@example.invalid',plan:'fixture'}}));});
 let browser;
 const observations=[];
 try{
@@ -23,7 +23,7 @@ try{
    if(path==='studio-pipeline-capabilities')data={enabled:true,textEnabled:true,libraryEnabled:true,libraryAspectRatios:['9:16','16:9'],libraryDurations:[5,10],supportsDialogue:capDialogue,unavailableReason:null,aspectRatios:['9:16','16:9'],durations:[5,10]};
    else if(path==='uploads'){await new Promise(r=>setTimeout(r,200));data={uploadId:'12345678-1234-4234-8234-123456789abc',filename:'reference.png',sizeBytes:png.length,mimeType:'image/png',expiresAt:'2099-01-01T00:00:00Z'};}
    else if(path==='studio-pipelines'&&request.method()==='POST'){
-    const body=request.postDataJSON();posts.push(body);if(reject){reject=false;return route.fulfill({status:422,json:{code:"VALIDATION_ERROR",message:"fixture invalid"}});}
+    const body=request.postDataJSON();posts.push(body);if(reject){reject=false;return route.fulfill({status:422,json:{success:false,message:"fixture invalid",payload:{errorCode:"VALIDATION_ERROR"}}});}
     let job=[...jobs.values()].find(job=>job.key===body.idempotencyKey);
     if(!job){job={...body,key:body.idempotencyKey,id:'pipeline-'+(jobs.size+1),status:'processing',stage:'image',canRetry:false,characterAssetId:null,videoAssetId:null,characterMediaUrl:null,videoMediaUrl:null,characterMediaUrlExpiresAt:null,videoMediaUrlExpiresAt:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};jobs.set(job.id,job);}
     if(drop){drop=false;return route.abort('failed');}data=job;
