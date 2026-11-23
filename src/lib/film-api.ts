@@ -25,7 +25,8 @@ export interface FilmShotVideo extends FilmFailure {
   voice: VoiceState; voiceMessage: string | null;
 }
 
-export type VoiceState = "" | "current" | "outdated" | "updating" | "failed" | "legacy";
+/** "overlap": dubbed over the model's own speech (made before dialogue shots were silent); the clip is stale. */
+export type VoiceState = "" | "current" | "outdated" | "updating" | "failed" | "legacy" | "overlap";
 
 export interface FilmShot {
   id: string; index: number; seconds: number; start: number; transition: "cut" | "continue";

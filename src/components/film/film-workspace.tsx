@@ -608,7 +608,9 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                       </button>
                     )}
                   </div>
-                  {v?.stale && <p className={x.warn}><RefreshCw size={13} /> ช็อตหรือองค์ประกอบถูกแก้หลังสร้างคลิป</p>}
+                  {v?.stale && (v.voice === "overlap"
+                    ? <p className={x.warn}><Mic size={13} /> เสียงพากย์ซ้อนกับเสียงพูดจากโมเดลวิดีโอ กรุณาสร้างวิดีโอช็อตนี้ใหม่ (ช็อตที่มีบทพูดจะสร้างแบบไม่มีเสียงจากโมเดลแล้ว)</p>
+                    : <p className={x.warn}><RefreshCw size={13} /> ช็อตหรือองค์ประกอบถูกแก้หลังสร้างคลิป</p>)}
                   {v?.status === "succeeded" && !v.stale && (v.voice === "updating" ? <p className={x.cannot}><LoaderCircle size={13} className={f.spin} /> กำลังอัปเดตเสียงพากย์…</p>
                     : v.voice === "outdated" ? <p className={x.warn}><Mic size={13} /> คลิปนี้ยังใช้เสียงเดิมของตัวละคร</p>
                     : v.voice === "failed" ? <p className={x.error}><Mic size={13} /> {v.voiceMessage ?? "อัปเดตเสียงไม่สำเร็จ"}</p>
@@ -700,6 +702,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
 
                       <section className={x.block}>
                         <h4>เสียงประกอบ</h4>
+                        {s.dialogue.length > 0 && <p className={x.hint}>ช็อตที่มีบทพูดสร้างวิดีโอแบบไม่มีเสียงจากโมเดล เพื่อไม่ให้เสียงพูดซ้อนกับเสียงพากย์ของตัวละคร จึงจะไม่มีเสียงประกอบนี้ในคลิป</p>}
                         <label className={x.field}>
                           <textarea aria-label="เสียงประกอบ" maxLength={600} disabled={lockedByVideo} value={s.audio} placeholder="เช่น เสียงฝีเท้าบนไม้ เสียงหอบ กลองศึกไกล ๆ" onChange={(e) => edit(i, { audio: e.target.value })} />
                         </label>
