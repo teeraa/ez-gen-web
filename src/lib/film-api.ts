@@ -23,7 +23,11 @@ export interface FilmShotVideo extends FilmFailure {
   draft: boolean; canFinalize: boolean;
   /** Dubbed dialogue: "legacy" clips were made before voices were kept apart and need a new video to change voice. */
   voice: VoiceState; voiceMessage: string | null;
+  /** The clip without dialogue, and the generated dialogue lines (at = seconds from the clip start). */
+  rawUrl: string | null; lines: FilmDubLine[];
 }
+
+export interface FilmDubLine { speakerId: string; text: string; url: string; seconds: number; at: number }
 
 /** "overlap": dubbed over the model's own speech (made before dialogue shots were silent); the clip is stale. */
 export type VoiceState = "" | "current" | "outdated" | "updating" | "failed" | "legacy" | "overlap";
@@ -34,10 +38,12 @@ export interface FilmShot {
   dialogue: FilmLine[]; audio: string; video: FilmShotVideo | null;
   /** Seconds cut from the clip's start/end in the studio and the export. */
   trimIn: number; trimOut: number;
+  /** Moved places of video.lines (same order); empty when none were moved. */
+  lineAt: number[];
 }
 
 /** The episode's music track, mixed under the whole film from 0 s. */
-export interface FilmMusic { name: string; seconds: number; volume: number; url: string | null; expiresAt: string | null }
+export interface FilmMusic { name: string; seconds: number; volume: number; start: number; url: string | null; expiresAt: string | null }
 
 export interface FilmVideoModel { id: string; label: string; minSeconds: number; maxSeconds: number; audio: boolean; default: boolean; draft: boolean }
 
@@ -67,7 +73,7 @@ export interface FilmPlan { status: "queued" | "processing" | "failed"; shotId: 
 /** A shot as sent to PUT /shots; a new shot has no id. */
 export interface ShotDraft {
   id?: string; seconds: number; transition: "cut" | "continue"; characterIds: string[]; locationId: string; propIds: string[];
-  action: string; camera: string; dialogue: FilmLine[]; audio: string; trimIn?: number; trimOut?: number;
+  action: string; camera: string; dialogue: FilmLine[]; audio: string; trimIn?: number; trimOut?: number; lineAt?: number[];
 }
 
 export interface LibraryAsset { id: string; name: string; description: string; mediaUrl: string }
@@ -102,7 +108,7 @@ const json = (method: string, body: unknown): RequestInit => ({ method, body: JS
 export type VideoKind = "draft" | "full" | "finalize";
 
 function normalize(e: FilmEpisode): FilmEpisode {
-  return { ...e, draftPointsPer5s: e.draftPointsPer5s ?? 0, messages: e.messages ?? [], story: e.story ?? null, plan: e.plan ?? null, planAvailable: e.planAvailable ?? false, export: e.export ?? null, exportAvailable: e.exportAvailable ?? false, redubShots: e.redubShots ?? 0, redubPoints: e.redubPoints ?? 0, redubAvailable: e.redubAvailable ?? false, music: e.music ?? null, shots: (e.shots ?? []).map((sh) => ({ ...sh, trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, video: sh.video ? { ...sh.video, voice: sh.video.voice ?? "", voiceMessage: sh.video.voiceMessage ?? null } : null })), planPoints: e.planPoints ?? 0, targetSeconds: e.targetSeconds ?? 0, elements: (e.elements ?? []).map((el) => ({ ...el, syntheticUrl: el.syntheticUrl ?? null })) };
+  return { ...e, draftPointsPer5s: e.draftPointsPer5s ?? 0, messages: e.messages ?? [], story: e.story ?? null, plan: e.plan ?? null, planAvailable: e.planAvailable ?? false, export: e.export ?? null, exportAvailable: e.exportAvailable ?? false, redubShots: e.redubShots ?? 0, redubPoints: e.redubPoints ?? 0, redubAvailable: e.redubAvailable ?? false, music: e.music ? { ...e.music, start: e.music.start ?? 0 } : null, shots: (e.shots ?? []).map((sh) => ({ ...sh, trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, lineAt: sh.lineAt ?? [], video: sh.video ? { ...sh.video, voice: sh.video.voice ?? "", voiceMessage: sh.video.voiceMessage ?? null, rawUrl: sh.video.rawUrl ?? null, lines: sh.video.lines ?? [] } : null })), planPoints: e.planPoints ?? 0, targetSeconds: e.targetSeconds ?? 0, elements: (e.elements ?? []).map((el) => ({ ...el, syntheticUrl: el.syntheticUrl ?? null })) };
 }
 const id = encodeURIComponent;
 
@@ -132,7 +138,7 @@ export const filmApi = {
     if (!response.ok) throw new FilmError(body.message ?? "อัปโหลดเพลงไม่สำเร็จ", response.status, body.errorCode ?? "UNKNOWN", body.details);
     return normalize(body.data as FilmEpisode);
   },
-  updateMusic: (projectId: string, body: { idempotencyKey: string; volume?: number; remove?: boolean }) =>
+  updateMusic: (projectId: string, body: { idempotencyKey: string; volume?: number; start?: number; remove?: boolean }) =>
     request<FilmEpisode>(`film/episodes/${id(projectId)}/music`, json("PATCH", body)).then(normalize),
   /** Dubs the current voices into every clip whose characters' voices changed. */
   redub: (projectId: string, idempotencyKey: string) =>
@@ -159,7 +165,7 @@ export const STYLE_LABEL: Record<string, string> = { cinematic: "ซีเนม
 export const shotLength = (s: Pick<ShotDraft, "seconds" | "trimIn" | "trimOut">) => Math.max(1, s.seconds - (s.trimIn ?? 0) - (s.trimOut ?? 0));
 
 export function toDraft(s: FilmShot): ShotDraft {
-  return { id: s.id, seconds: s.seconds, transition: s.transition, characterIds: [...s.characterIds], locationId: s.locationId, propIds: [...s.propIds], action: s.action, camera: s.camera, dialogue: s.dialogue.map((l) => ({ ...l })), audio: s.audio, trimIn: s.trimIn, trimOut: s.trimOut };
+  return { id: s.id, seconds: s.seconds, transition: s.transition, characterIds: [...s.characterIds], locationId: s.locationId, propIds: [...s.propIds], action: s.action, camera: s.camera, dialogue: s.dialogue.map((l) => ({ ...l })), audio: s.audio, trimIn: s.trimIn, trimOut: s.trimOut, lineAt: [...s.lineAt] };
 }
 
 /** Elements a shot references that cannot be used for a video yet. */

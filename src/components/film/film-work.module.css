@@ -1648,3 +1648,88 @@
   color: var(--f-text);
   font: inherit;
 }
+
+/* Studio header: what this is, and Export at the top right like the AI editor. */
+.studio {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "head head" "main inspector" "timeline timeline";
+}
+.studioHead {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--f-border);
+  background: var(--f-card);
+}
+.studioHead > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.studioHead strong {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.studioHead small {
+  color: var(--f-muted);
+  font-size: 12px;
+}
+.exportState {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--f-ok-bg);
+  color: var(--f-ok);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.exportState[data-tone="warn"] {
+  background: var(--f-warn-bg);
+  color: var(--f-warn);
+}
+@media (max-width: 1100px) {
+  .studio {
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas: "head" "main" "timeline" "inspector";
+  }
+}
+
+/* Dragging in the timeline. */
+.tlShot,
+.tlScene > span[role="button"],
+.tlLine[data-real],
+.tlMusic[data-movable] {
+  cursor: grab;
+  touch-action: none;
+}
+.tl[data-dragging] * {
+  cursor: grabbing !important;
+}
+.tl [data-dragging="true"] {
+  z-index: 5;
+  opacity: 0.85;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+}
+.tlScene > span[role="button"] {
+  flex: 1;
+}
+.tlLine:not([data-real]) {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--f-primary) 45%, transparent);
+  color: var(--f-muted);
+}
+.tlDrop {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 6;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--f-primary);
+  pointer-events: none;
+}

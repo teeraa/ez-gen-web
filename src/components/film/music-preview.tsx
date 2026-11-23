@@ -1,25 +1,25 @@
 "use client";
-// Plays the episode's music track in step with the studio player: from the playhead while the film
-// plays, paused otherwise, and moved to the playhead on every seek.
+// Plays the episode's music track in step with the studio player: it sounds while the playhead is
+// past the music's start (and before its end), from the matching offset, and follows every seek.
 import { useEffect, useRef } from "react";
 
-export function MusicPreview({ url, volume, playing, time, seekToken }: { url: string; volume: number; playing: boolean; time: number; seekToken: number }) {
+export function MusicPreview({ url, volume, start, playing, time, seekToken }: { url: string; volume: number; start: number; playing: boolean; time: number; seekToken: number }) {
   const audio = useRef<HTMLAudioElement | null>(null);
-  const timeRef = useRef(time);
-  useEffect(() => { timeRef.current = time; });
+  const lastSeek = useRef(seekToken);
   useEffect(() => { if (audio.current) audio.current.volume = Math.min(1, Math.max(0, volume)); }, [volume]);
   useEffect(() => {
     const a = audio.current;
     if (!a) return;
-    if (!playing) { a.pause(); return; }
-    if (timeRef.current >= (a.duration || Infinity)) return;
-    a.currentTime = timeRef.current;
-    void a.play().catch(() => {});
-  }, [playing]);
-  useEffect(() => {
-    const a = audio.current;
-    if (a && Number.isFinite(timeRef.current)) a.currentTime = timeRef.current;
-  }, [seekToken]);
+    const seeked = lastSeek.current !== seekToken;
+    lastSeek.current = seekToken;
+    const offset = time - start;
+    const inside = playing && offset >= 0 && offset < (Number.isFinite(a.duration) ? a.duration : Infinity);
+    if (!inside) { if (!a.paused) a.pause(); return; }
+    if (a.paused || seeked) {
+      a.currentTime = offset;
+      void a.play().catch(() => {});
+    }
+  }, [playing, time, start, seekToken]);
   // A signed URL is refreshed on every episode reload: the element is keyed by the file path and
   // its src is set once, so a refresh never restarts the music.
   return (

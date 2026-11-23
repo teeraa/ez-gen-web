@@ -18,6 +18,7 @@ import { FilmExportPanel } from "./film-export-panel";
 import { FilmSteps, NextStep, stepBlockers, type FilmStep } from "./film-steps";
 import { StoryPanel } from "./story-panel";
 import { MusicPreview } from "./music-preview";
+import { DialoguePreview, type PlacedLine } from "./dialogue-preview";
 import { characterVoiceLabel } from "@/lib/voice-api";
 import { definiteRejection, finishSubmission, prepareSubmission } from "@/lib/director-submission";
 import {
@@ -246,6 +247,13 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
       const next = await paid(`film-music-volume:${ep.projectId}`, { volume }, (key) => filmApi.updateMusic(ep.projectId, { idempotencyKey: key, volume }));
       setEp(next);
       setMusicVolume(null);
+    });
+  };
+  const moveMusic = (start: number) => {
+    if (!ep.music || dirty || start === ep.music.start) return;
+    void run("music", async () => {
+      const next = await paid(`film-music-start:${ep.projectId}`, { start }, (key) => filmApi.updateMusic(ep.projectId, { idempotencyKey: key, start }));
+      setEp(next);
     });
   };
   const removeMusic = () => run("music", async () => {
@@ -543,8 +551,60 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
             const STATE_LABEL = { done: "มีวิดีโอแล้ว", draft: "มี draft แล้ว", stale: "วิดีโอเก่า ต้องสร้างใหม่", work: "กำลังสร้าง", error: "สร้างไม่สำเร็จ", idle: "ยังไม่มีวิดีโอ" } as const;
             const clips = shots.map((sh, k) => {
               const sv = videoOf(sh);
-              return { url: sv?.status === "succeeded" ? sv.url : null, start: starts[k], seconds: shotLength(sh), trimIn: sh.trimIn ?? 0 };
+              // With generated dialogue clips, the player plays the clip without dialogue and the lines on top.
+              const url = sv?.status === "succeeded" ? (sv.rawUrl && sv.lines.length ? sv.rawUrl : sv.url) : null;
+              return { url, start: starts[k], seconds: shotLength(sh), trimIn: sh.trimIn ?? 0 };
             });
+            // Where a shot's dialogue lines are now (seconds from the clip start): moved, generated or estimated.
+            const linesOf = (sh: ShotDraft) => {
+              const sv = videoOf(sh);
+              if (sv?.status === "succeeded" && sv.lines.length) {
+                const moved = sh.lineAt?.length === sv.lines.length ? sh.lineAt : null;
+                return sv.lines.map((l, j) => ({ speaker: elName(l.speakerId) ?? "?", text: l.text, at: moved ? moved[j] : l.at, seconds: l.seconds, real: true, url: l.url }));
+              }
+              let at = 0.4;
+              return sh.dialogue.filter((l) => l.line.trim()).map((l) => {
+                const seconds = Math.max(0.8, l.line.length / 12);
+                const out = { speaker: elName(l.speakerId) ?? "?", text: l.line, at, seconds, real: false, url: "" };
+                at += seconds + 0.25;
+                return out;
+              });
+            };
+            // The generated lines on the film timeline, cut to their shot's trimmed span.
+            const placed: PlacedLine[] = shots.flatMap((sh, k) => linesOf(sh).filter((l) => l.real).flatMap((l, j) => {
+              const clipStart = starts[k] - (sh.trimIn ?? 0);
+              const from = Math.max(clipStart + l.at, starts[k]);
+              const to = Math.min(clipStart + l.at + l.seconds, starts[k] + shotLength(sh));
+              return to - from > 0.05 ? [{ key: `${sh.id ?? k}-${j}-${l.url.split("?")[0]}`, url: l.url, at: from, seconds: to - from, offset: from - (clipStart + l.at) }] : [];
+            }));
+            const moveShot = (from: number, to: number) => {
+              if (to < 0 || to >= shots.length || from === to) return;
+              setPlaying(false);
+              const next = [...shots];
+              const [item] = next.splice(from, 1);
+              next.splice(to, 0, item);
+              if (next[0].transition === "continue") next[0] = { ...next[0], transition: "cut" };
+              setDrafts(next);
+              setSel(to);
+            };
+            const moveScene = (from: number, to: number) => {
+              if (to < 0 || to >= scenes.length || from === to) return;
+              setPlaying(false);
+              const order = scenes.map((_, n) => n);
+              order.splice(to, 0, order.splice(from, 1)[0]);
+              const next = order.flatMap((n) => scenes[n].map((k) => shots[k]));
+              if (next[0].transition === "continue") next[0] = { ...next[0], transition: "cut" };
+              setDrafts(next);
+              setSel(next.indexOf(shots[scenes[from][0]]));
+            };
+            const moveLine = (k: number, j: number, at: number) => {
+              const sh = shots[k];
+              const current = linesOf(sh).map((l) => l.at);
+              current[j] = at;
+              setPlaying(false);
+              setSel(k);
+              edit(k, { lineAt: current });
+            };
             const hasClip = clips.some((c) => c.url);
             // Seek to a time in the film: selects the shot under it.
             const seekTo = (t: number) => {
@@ -567,11 +627,21 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                 const tag = (e.target as HTMLElement).tagName;
                 if (e.key === " " && !["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(tag)) { e.preventDefault(); if (hasClip) togglePlay(); }
               }}>
+                <header className={x.studioHead}>
+                  <div><strong>{ep.story?.title || title}</strong><small>{scenes.length} ฉาก · {shots.length} ช็อต · {clock(Math.round(total))}{dirty ? " · ยังไม่บันทึก" : ""}</small></div>
+                  {xp?.status === "succeeded" && !xp.stale && <span className={x.exportState}>รวมล่าสุดแล้ว</span>}
+                  {xp?.stale && <span className={x.exportState} data-tone="warn">มีการแก้หลัง export ล่าสุด</span>}
+                  <button type="button" className={f.primary} onClick={() => setExportOpen(true)}>
+                      {exporting ? <LoaderCircle size={15} className={f.spin} /> : xp?.status === "succeeded" && !xp.stale ? <Download size={15} /> : <Film size={15} />}
+                      {exporting ? ` กำลังรวม ${xp?.progress ?? 0}%` : xp?.status === "succeeded" && !xp.stale ? " ดาวน์โหลดภาพยนตร์" : " Export"}
+                    </button>
+                </header>
                 <div className={x.studioMain}>
                   {voiceBanner}
                   <div className={x.screen}>
                     <div className={x.player} data-ratio={ep.aspectRatio} onClick={() => { if (hasClip) togglePlay(); }}>
-                      {ep.music?.url && <MusicPreview url={ep.music.url} volume={musicVolume ?? ep.music.volume} playing={playing} time={time} seekToken={seek.token} />}
+                      {ep.music?.url && <MusicPreview url={ep.music.url} volume={musicVolume ?? ep.music.volume} start={ep.music.start} playing={playing} time={time} seekToken={seek.token} />}
+                      <DialoguePreview lines={placed} playing={playing} time={time} seekToken={seek.token} />
                       <FilmPlayer clips={clips} index={i} playing={playing} seek={seek} onIndex={setSel} onTime={setTime} onEnd={() => setPlaying(false)} label={`วิดีโอช็อต ${i + 1}`} />
                       {!v?.url && (
                         <div className={x.playerEmpty}>
@@ -757,10 +827,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                       </button>
                     )}
                     <label className={x.zoom} title="ซูม timeline"><ZoomIn size={14} aria-hidden /><input type="range" min={8} max={64} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="ซูม timeline" /></label>
-                    <button type="button" className={f.primary} onClick={() => setExportOpen(true)}>
-                      {exporting ? <LoaderCircle size={15} className={f.spin} /> : xp?.status === "succeeded" && !xp.stale ? <Download size={15} /> : <Film size={15} />}
-                      {exporting ? ` กำลังรวม ${xp?.progress ?? 0}%` : xp?.status === "succeeded" && !xp.stale ? " ดาวน์โหลดภาพยนตร์" : " Export"}
-                    </button>
+
                   </div>
                   <FilmTimeline
                     shots={shots.map((sh, k) => {
@@ -768,18 +835,23 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                       return {
                         key: sh.id ?? `new-${k}`, start: starts[k], seconds: shotLength(sh), full: sh.seconds, trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, scene: sc, continues: scenes[sc][0] !== k,
                         state: stateOf(sh), label: `ฉาก ${sc + 1} ช็อต ${scenes[sc].indexOf(k) + 1} · ${sh.seconds} วินาที · ${STATE_LABEL[stateOf(sh)]}`, thumb: thumbOf(sh),
-                        lines: sh.dialogue.filter((l) => l.line.trim()).map((l) => ({ speaker: elName(l.speakerId) ?? "?", text: l.line })),
+                        lines: linesOf(sh).map(({ speaker, text, at, seconds, real }) => ({ speaker, text, at, seconds, real })),
                         audio: sh.audio, silent: sh.dialogue.length > 0,
                       };
                     })}
-                    scenes={scenes.map((g) => ({ start: starts[g[0]], seconds: g.reduce((n, k) => n + shotLength(shots[k]), 0), title: shots[g[0]].locationId ? `#${elName(shots[g[0]].locationId) ?? ""}` : "", last: g[g.length - 1] }))}
+                    scenes={scenes.map((g) => ({ start: starts[g[0]], seconds: g.reduce((n, k) => n + shotLength(shots[k]), 0), title: shots[g[0]].locationId ? `#${elName(shots[g[0]].locationId) ?? ""}` : "", first: g[0], last: g[g.length - 1] }))}
                     total={total} sel={i} time={time} zoom={zoom} playing={playing} canAdd={shots.length < 40}
                     onSelect={(k) => { setPlaying(false); seekTo(starts[k]); }}
                     onSeek={seekTo}
                     onAddToScene={(last) => { setPlaying(false); addShotToScene(last); }}
                     onAddScene={() => { setPlaying(false); addShot(); }}
-                    music={ep.music ? { name: ep.music.name, seconds: ep.music.seconds, volume: musicVolume ?? ep.music.volume } : null}
+                    music={ep.music ? { name: ep.music.name, seconds: ep.music.seconds, volume: musicVolume ?? ep.music.volume, start: ep.music.start } : null}
+                    musicMovable={!dirty && !busy.includes("music")}
                     onTrim={(k, trimIn, trimOut) => { setPlaying(false); edit(k, { trimIn, trimOut }); }}
+                    onMoveShot={moveShot}
+                    onMoveScene={moveScene}
+                    onMoveLine={moveLine}
+                    onMoveMusic={moveMusic}
                   />
                 </div>
 
