@@ -14,7 +14,11 @@ export interface FilmElement extends FilmFailure {
   voice?: CharacterVoice | null;
 }
 
-export interface FilmLine { speakerId: string; line: string; delivery: string }
+/** emotion: a Voice-menu emotion for this line; "" uses the speaker's voice setting. */
+export interface FilmLine { speakerId: string; line: string; delivery: string; emotion?: string }
+
+/** Emotions a line can be spoken with (same list as the Voice menu). */
+export const LINE_EMOTIONS = ["ปกติ", "ตื่นเต้น", "อบอุ่น", "จริงจัง", "เศร้า", "กระซิบ", "ตะโกน", "โกรธ", "หวาดกลัว"] as const;
 
 export interface FilmShotVideo extends FilmFailure {
   status: "queued" | "processing" | "succeeded" | "failed"; progress: number; url: string | null; expiresAt: string | null;

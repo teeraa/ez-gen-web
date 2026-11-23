@@ -22,7 +22,7 @@ import { DialoguePreview, type PlacedLine } from "./dialogue-preview";
 import { characterVoiceLabel } from "@/lib/voice-api";
 import { definiteRejection, finishSubmission, prepareSubmission } from "@/lib/director-submission";
 import {
-  FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, missingElements, shotLength, toDraft, videoCost, voiceCost,
+  FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, LINE_EMOTIONS, missingElements, shotLength, toDraft, videoCost, voiceCost,
   type ElementKind, type FilmElement, type FilmEpisode, type ShotDraft, type VideoKind,
 } from "@/lib/film-api";
 import f from "./film.module.css";
@@ -765,6 +765,10 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                           <div className={x.lineHead}>
                             <select aria-label="ผู้พูด" value={l.speakerId} disabled={lockedByVideo} onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, speakerId: e.target.value } : o)) })}>
                               {speakers.map((sp) => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                            </select>
+                            <select aria-label="อารมณ์ของบรรทัดนี้" title="อารมณ์ของเสียงในบรรทัดนี้ (ผู้ช่วยเลือกให้ตามช็อตและฉาก)" value={l.emotion ?? ""} disabled={lockedByVideo} onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, emotion: e.target.value } : o)) })}>
+                              <option value="">อารมณ์ตามตัวละคร</option>
+                              {LINE_EMOTIONS.map((em) => <option key={em} value={em}>{em}</option>)}
                             </select>
                             <input aria-label="น้ำเสียง" maxLength={120} disabled={lockedByVideo} value={l.delivery} placeholder="น้ำเสียง เช่น หอบ ตื่นตระหนก" onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, delivery: e.target.value } : o)) })} />
                             <button type="button" className={x.icon} aria-label="ลบบทพูด" disabled={lockedByVideo} onClick={() => edit(i, { dialogue: s.dialogue.filter((_, m) => m !== k) })}><X size={14} /></button>

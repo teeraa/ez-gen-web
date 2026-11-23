@@ -1733,3 +1733,16 @@
   background: var(--f-primary);
   pointer-events: none;
 }
+
+/* Dialogue line header: speaker and emotion on the first row, delivery under them. */
+.lineHead {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+}
+.lineHead input {
+  grid-column: 1 / 3;
+  grid-row: 2;
+}
+.lineHead > button {
+  grid-column: 3;
+  grid-row: 1;
+}
