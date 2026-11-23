@@ -1176,3 +1176,29 @@
 .voiceMissing:hover {
   border-color: var(--f-warn);
 }
+
+/* Clips whose characters' voices changed, and clips that cannot change voice. */
+.voiceBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--f-primary) 30%, transparent);
+  border-radius: 14px;
+  background: var(--f-tint);
+}
+.voiceBanner > p {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+}
+.voiceBanner > p > span {
+  flex: 1;
+  min-width: 200px;
+}
+.voiceBanner > p[data-tone="warn"] {
+  color: var(--f-warn);
+}

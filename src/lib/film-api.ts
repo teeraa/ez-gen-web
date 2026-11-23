@@ -21,7 +21,11 @@ export interface FilmShotVideo extends FilmFailure {
   stale: boolean; modelId: string; seconds: number; mode: "reference" | "continue" | "finalize"; pointsCharged: number; pointsRefunded: number;
   /** A 480p preview; canFinalize means it can still be refined into the full clip. */
   draft: boolean; canFinalize: boolean;
+  /** Dubbed dialogue: "legacy" clips were made before voices were kept apart and need a new video to change voice. */
+  voice: VoiceState; voiceMessage: string | null;
 }
+
+export type VoiceState = "" | "current" | "outdated" | "updating" | "failed" | "legacy";
 
 export interface FilmShot {
   id: string; index: number; seconds: number; start: number; transition: "cut" | "continue";
@@ -39,6 +43,8 @@ export interface FilmEpisode {
   planPoints: number; planAvailable: boolean; targetSeconds: number;
   story: FilmStory | null; messages: FilmMessage[]; plan: FilmPlan | null;
   export: FilmExport | null; exportAvailable: boolean;
+  /** Clips that can take their characters' current voices without a new video, and the price. */
+  redubShots: number; redubPoints: number; redubAvailable: boolean;
 }
 
 /** The merged film of an episode. `stale` means a clip changed after it was made. */
@@ -89,7 +95,7 @@ const json = (method: string, body: unknown): RequestInit => ({ method, body: JS
 export type VideoKind = "draft" | "full" | "finalize";
 
 function normalize(e: FilmEpisode): FilmEpisode {
-  return { ...e, draftPointsPer5s: e.draftPointsPer5s ?? 0, messages: e.messages ?? [], story: e.story ?? null, plan: e.plan ?? null, planAvailable: e.planAvailable ?? false, export: e.export ?? null, exportAvailable: e.exportAvailable ?? false, planPoints: e.planPoints ?? 0, targetSeconds: e.targetSeconds ?? 0, elements: (e.elements ?? []).map((el) => ({ ...el, syntheticUrl: el.syntheticUrl ?? null })) };
+  return { ...e, draftPointsPer5s: e.draftPointsPer5s ?? 0, messages: e.messages ?? [], story: e.story ?? null, plan: e.plan ?? null, planAvailable: e.planAvailable ?? false, export: e.export ?? null, exportAvailable: e.exportAvailable ?? false, redubShots: e.redubShots ?? 0, redubPoints: e.redubPoints ?? 0, redubAvailable: e.redubAvailable ?? false, shots: (e.shots ?? []).map((sh) => (sh.video ? { ...sh, video: { ...sh.video, voice: sh.video.voice ?? "", voiceMessage: sh.video.voiceMessage ?? null } } : sh)), planPoints: e.planPoints ?? 0, targetSeconds: e.targetSeconds ?? 0, elements: (e.elements ?? []).map((el) => ({ ...el, syntheticUrl: el.syntheticUrl ?? null })) };
 }
 const id = encodeURIComponent;
 
@@ -107,6 +113,9 @@ export const filmApi = {
     request<FilmElement>(`film/elements/${id(elementId)}/image`, json("POST", { mode, idempotencyKey })),
   plan: (projectId: string, body: { prompt: string; targetSeconds?: number; shotId?: string; idempotencyKey: string }) =>
     request<FilmEpisode>(`film/episodes/${id(projectId)}/plan`, json("POST", body)).then(normalize),
+  /** Dubs the current voices into every clip whose characters' voices changed. */
+  redub: (projectId: string, idempotencyKey: string) =>
+    request<FilmEpisode>(`film/episodes/${id(projectId)}/redub`, json("POST", { idempotencyKey })).then(normalize),
   exportFilm: (projectId: string, body: { subtitles: boolean; idempotencyKey: string }) =>
     request<FilmEpisode>(`film/episodes/${id(projectId)}/export`, json("POST", body)).then(normalize),
   library: (kind: ElementKind, signal?: AbortSignal) => request<{ items: LibraryAsset[]; total: number }>(`assets?type=${kind}&page=1&limit=50`, { signal }),

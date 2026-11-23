@@ -14,7 +14,7 @@ import x from "./film-work.module.css";
 /** The element being edited, or only its kind when adding a new one. */
 export type ElementEditorTarget = { kind: ElementKind; element?: FilmElement };
 
-export function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId: string; editor: ElementEditorTarget; onClose: () => void; onSaved: (el: FilmElement, created: boolean) => void }) {
+export function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId: string; editor: ElementEditorTarget; onClose: () => void; onSaved: (el: FilmElement, created: boolean, voiceChanged: boolean) => void }) {
   const { kind, element } = editor;
   const [name, setName] = useState(element?.name ?? "");
   const [spec, setSpec] = useState(element?.spec ?? "");
@@ -45,13 +45,13 @@ export function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId
     setError(null);
     try {
       if (element) {
-        onSaved(await filmApi.updateElement(element.id, { revision: element.revision, name: name.trim(), spec: spec.trim(), ...(voiceChanged ? { voice } : {}) }), false);
+        onSaved(await filmApi.updateElement(element.id, { revision: element.revision, name: name.trim(), spec: spec.trim(), ...(voiceChanged ? { voice } : {}) }), false, voiceChanged);
       } else {
         const submission = prepareSubmission(scope, { name: name.trim(), spec: spec.trim(), assetId, voice: voiceChanged ? voice : null });
         try {
           const el = await filmApi.createElement(seriesId, { kind, name: String(submission.body.name), spec: String(submission.body.spec), ...(submission.body.assetId ? { assetId: String(submission.body.assetId) } : {}), ...(submission.body.voice ? { voice: submission.body.voice as CharacterVoiceInput } : {}), idempotencyKey: submission.key });
           finishSubmission(scope);
-          onSaved(el, true);
+          onSaved(el, true, voiceChanged);
         } catch (cause) {
           if (cause instanceof FilmError && definiteRejection(cause)) finishSubmission(scope);
           throw cause;

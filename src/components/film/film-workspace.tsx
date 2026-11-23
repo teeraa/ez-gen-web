@@ -75,7 +75,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
 
   // Poll while an image or a video is being made.
   const planning = !!ep?.plan && active(ep.plan.status);
-  const working = !!ep && (planning || ep.elements.some((e) => active(e.imageStatus)) || ep.shots.some((s) => active(s.video?.status)) || active(ep.export?.status));
+  const working = !!ep && (planning || ep.elements.some((e) => active(e.imageStatus)) || ep.shots.some((s) => active(s.video?.status) || s.video?.voice === "updating") || active(ep.export?.status));
   const messageCount = ep?.messages.length ?? 0;
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
@@ -200,6 +200,27 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
     setEp(next);
     note(`เริ่มรวม ${next.export?.clipCount ?? 0} คลิปเป็นภาพยนตร์`);
   });
+  // Mixes the characters' current voices into every clip that still has an old voice (no new video).
+  const redubAll = (cur: FilmEpisode, question = `อัปเดตเสียงใน ${cur.redubShots} คลิป?`) => run("redub", async () => {
+    if (!(await confirm(question, `${cur.redubShots} คลิป · ใช้ ${cur.redubPoints} แต้ม ไม่ต้องสร้างวิดีโอใหม่`, "อัปเดตเสียง"))) return;
+    const next = await paid(`film-redub:${cur.projectId}`, { shots: cur.redubShots, points: cur.redubPoints }, (key) => filmApi.redub(cur.projectId, key));
+    setEp(next);
+    note(`กำลังอัปเดตเสียงใน ${cur.redubShots} คลิป · ${cur.redubPoints} แต้ม`);
+  });
+  // Clips made before dubbing was kept apart: their voices only change with a new video.
+  const legacyClips = ep.shots.filter((s) => s.video?.status === "succeeded" && !s.video.stale && s.video.voice === "legacy").length;
+  const voiceBanner = (ep.redubShots > 0 || legacyClips > 0) && (
+    <div className={x.voiceBanner}>
+      {ep.redubShots > 0 && (
+        <p><Mic size={14} aria-hidden /> <span>เสียงตัวละครเปลี่ยนแล้ว มี {ep.redubShots} คลิปที่ยังใช้เสียงเดิม</span>
+          <button type="button" className={f.primary} disabled={busy.includes("redub") || dirty || !ep.redubAvailable} title={!ep.redubAvailable ? "ระบบเสียงพากย์ยังไม่พร้อมใช้งาน" : dirty ? "บันทึกช็อตก่อน" : undefined} onClick={() => redubAll(ep)}>
+            {busy.includes("redub") ? <LoaderCircle size={14} className={f.spin} /> : <RefreshCw size={14} />} อัปเดตเสียงทุกคลิป · {ep.redubPoints} แต้ม
+          </button>
+        </p>
+      )}
+      {legacyClips > 0 && <p data-tone="warn"><AlertCircle size={14} aria-hidden /> <span>{legacyClips} คลิปสร้างก่อนระบบแยกเสียงพากย์ เปลี่ยนเสียงในคลิปเหล่านี้ไม่ได้ ถ้าต้องการเสียงใหม่ต้องสร้างวิดีโอช็อตนั้นใหม่</span></p>}
+    </div>
+  );
   const removeElement = (el: FilmElement) => run(`remove:${el.id}`, async () => {
     if (!(await confirm(`ลบ${KIND_LABEL[el.kind]} “${el.name}”?`, "ช็อตที่ใช้อยู่จะต้องเลือกใหม่", "ลบ"))) return;
     await filmApi.removeElement(el.id);
@@ -376,6 +397,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
 
           {tab === "elements" && (
             <div className={f.panel}>
+              {voiceBanner}
               {missingImages.length > 0 && (
                 <div className={x.bulk}>
                   <span>ยังขาดภาพ {missingImages.length} รายการ</span>
@@ -484,6 +506,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
             const STATE_LABEL = { done: "มีวิดีโอแล้ว", draft: "มี draft แล้ว", stale: "วิดีโอเก่า ต้องสร้างใหม่", work: "กำลังสร้าง", error: "สร้างไม่สำเร็จ", idle: "ยังไม่มีวิดีโอ" } as const;
             return (
               <div className={f.panel}>
+                {voiceBanner}
                 <div className={x.shotBar}>
                   <label className={x.model}>
                     <Film size={14} aria-hidden />
@@ -586,6 +609,11 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                     )}
                   </div>
                   {v?.stale && <p className={x.warn}><RefreshCw size={13} /> ช็อตหรือองค์ประกอบถูกแก้หลังสร้างคลิป</p>}
+                  {v?.status === "succeeded" && !v.stale && (v.voice === "updating" ? <p className={x.cannot}><LoaderCircle size={13} className={f.spin} /> กำลังอัปเดตเสียงพากย์…</p>
+                    : v.voice === "outdated" ? <p className={x.warn}><Mic size={13} /> คลิปนี้ยังใช้เสียงเดิมของตัวละคร</p>
+                    : v.voice === "failed" ? <p className={x.error}><Mic size={13} /> {v.voiceMessage ?? "อัปเดตเสียงไม่สำเร็จ"}</p>
+                    : v.voice === "legacy" ? <p className={x.warn}><AlertCircle size={13} /> คลิปนี้สร้างก่อนระบบแยกเสียงพากย์ ถ้าเปลี่ยนเสียงตัวละคร ต้องสร้างวิดีโอช็อตนี้ใหม่</p>
+                    : null)}
                   {v?.status === "failed" && v.failureMessage && <p className={x.error}><AlertCircle size={13} /> {v.failureMessage}{v.pointsRefunded > 0 ? ` · คืน ${v.pointsRefunded} แต้มแล้ว` : ""}</p>}
                   {missing.length > 0 && !dirty ? <p className={x.warn}><ImageIcon size={13} /> {missing.map((m) => m.name).join(", ")} ยังไม่มีภาพที่พร้อมใช้ <button type="button" className={x.link} onClick={() => setTab("elements")}>ไปแก้</button></p>
                     : noVoice.length > 0 && !dirty ? <p className={x.warn}><Mic size={13} /> {noVoice.map((m) => m.name).join(", ")} ยังไม่มีเสียง <button type="button" className={x.link} onClick={() => setTab("elements")}>ไปเลือกเสียง</button></p>
@@ -699,10 +727,16 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
         </footer>
       </section>
 
-      {editor && <ElementEditor seriesId={seriesId} editor={editor} onClose={() => setEditor(null)} onSaved={(el, created) => {
+      {editor && <ElementEditor seriesId={seriesId} editor={editor} onClose={() => setEditor(null)} onSaved={(el, created, voiceChanged) => {
         setEditor(null);
         note(created ? `เพิ่ม${KIND_LABEL[el.kind]} ${el.name} แล้ว` : `แก้ ${el.name} แล้ว`);
-        setReload((n) => n + 1);
+        // A new voice belongs in every clip where the character speaks: offer to update them now.
+        if (!created && voiceChanged) {
+          void filmApi.episode(ep.projectId).then((next) => {
+            setEp(next);
+            if (next.redubShots > 0 && next.redubAvailable) redubAll(next, `เปลี่ยนเสียงของ ${el.name} ในทุกคลิป?`);
+          }, () => setReload((n) => n + 1));
+        } else setReload((n) => n + 1);
       }} />}
     </div>
   );
