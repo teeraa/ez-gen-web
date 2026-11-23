@@ -157,6 +157,11 @@ export function filmErrorMessage(error: unknown): string {
 }
 
 export const videoCost = (pointsPer5s: number, seconds: number) => Math.ceil((pointsPer5s * seconds) / 5);
+/** Dubbing price of a shot, as the API charges it: 1 point per started 10 s of speech (12 Thai characters a second). */
+export function voiceCost(shot: Pick<ShotDraft, "dialogue">, elements: FilmElement[]): number {
+  const chars = shot.dialogue.filter((l) => l.line.trim() && elements.some((e) => e.id === l.speakerId && e.voice)).reduce((n, l) => n + [...l.line.trim()].length, 0);
+  return chars > 0 ? Math.max(1, Math.ceil(chars / 12 / 10)) : 0;
+}
 export const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 export const KIND_LABEL: Record<ElementKind, string> = { character: "ตัวละคร", location: "สถานที่", prop: "ของ" };
 export const STYLE_LABEL: Record<string, string> = { cinematic: "ซีเนมาติก", realistic: "สมจริง", anime: "อนิเมะ", "3d": "3D", watercolor: "สีน้ำ", clay: "ดินปั้น" };

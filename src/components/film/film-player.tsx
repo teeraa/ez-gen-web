@@ -6,7 +6,7 @@
 import { useEffect, useRef } from "react";
 
 /** start/seconds place the clip on the film timeline; trimIn is where playback starts inside the file. */
-export interface FilmClip { url: string | null; start: number; seconds: number; trimIn: number }
+export interface FilmClip { url: string | null; start: number; seconds: number; trimIn: number; muted?: boolean }
 
 export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd, label }: {
   clips: FilmClip[];
@@ -101,6 +101,7 @@ export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd
       {items.map((url) => {
         const key = path(url) as string;
         const isCurrent = key === current;
+        const muted = !!clips.find((c) => path(c.url) === key)?.muted;
         return (
           <video
             key={key}
@@ -108,7 +109,9 @@ export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd
               if (!el) { videos.current.delete(key); return; }
               videos.current.set(key, el);
               if (!el.getAttribute("src")) el.src = url;
+              el.muted = muted;
             }}
+            muted={muted}
             playsInline
             preload="auto"
             aria-label={isCurrent ? label : undefined}

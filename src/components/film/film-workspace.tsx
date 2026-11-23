@@ -22,7 +22,7 @@ import { DialoguePreview, type PlacedLine } from "./dialogue-preview";
 import { characterVoiceLabel } from "@/lib/voice-api";
 import { definiteRejection, finishSubmission, prepareSubmission } from "@/lib/director-submission";
 import {
-  FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, missingElements, shotLength, toDraft, videoCost,
+  FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, missingElements, shotLength, toDraft, videoCost, voiceCost,
   type ElementKind, type FilmElement, type FilmEpisode, type ShotDraft, type VideoKind,
 } from "@/lib/film-api";
 import f from "./film.module.css";
@@ -149,6 +149,8 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const draftOn = !!modelInfo?.draft && ep.draftPointsPer5s > 0;
   const newKind: VideoKind = draftOn && quality === "draft" ? "draft" : "full";
   const rate = (kind: VideoKind) => (kind === "draft" ? ep.draftPointsPer5s : ep.videoPointsPer5s);
+  // What a shot video costs, dubbing of its dialogue included.
+  const shotCost = (kind: VideoKind, sh: Pick<ShotDraft, "seconds" | "dialogue">) => videoCost(kind === "finalize" ? ep.videoPointsPer5s : rate(kind), sh.seconds) + voiceCost(sh, ep.elements);
   // Film length after studio trims.
   const total = shots.reduce((n, s) => n + shotLength(s), 0);
   // Export uses every finished clip, including ones made before the shot was last edited.
@@ -298,7 +300,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
     note(`เริ่มสร้างภาพ ${missingImages.length} รายการ`);
   });
   const readyShots = ep.shots.filter((s) => !active(s.video?.status) && (s.video?.status !== "succeeded" || s.video.stale || (newKind === "full" && s.video.draft && !s.video.canFinalize)) && s.action.trim() && missingElements(toDraft(s), ep.elements).length === 0 && voiceless(toDraft(s)).length === 0);
-  const bulkVideoCost = readyShots.reduce((n, s) => n + videoCost(rate(newKind), s.seconds), 0);
+  const bulkVideoCost = readyShots.reduce((n, s) => n + shotCost(newKind, s), 0);
   const videoAll = () => run("bulk-videos", async () => {
     const what = newKind === "draft" ? "draft 480p" : "วิดีโอ";
     if (!(await confirm(`สร้าง${what} ${readyShots.length} ช็อต?`, `ใช้ ${bulkVideoCost} แต้ม ช็อตแบบต่อเนื่องจะรอช็อตก่อนหน้าให้เสร็จก่อน`, "สร้าง"))) return;
@@ -311,7 +313,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
     note(`เริ่มสร้าง${what} ${readyShots.length} ช็อต · ${bulkVideoCost} แต้ม`);
   });
   const finalShots = ep.shots.filter((s) => s.video?.canFinalize);
-  const bulkFinalCost = finalShots.reduce((n, s) => n + videoCost(ep.videoPointsPer5s, s.seconds), 0);
+  const bulkFinalCost = finalShots.reduce((n, s) => n + shotCost("finalize", s), 0);
   const finalizeAll = () => run("bulk-finalize", async () => {
     if (!(await confirm(`ทำ draft ${finalShots.length} ช็อตเป็นตัวเต็ม?`, `ใช้ ${bulkFinalCost} แต้ม`, "ทำตัวเต็ม"))) return;
     let last: FilmEpisode | null = null;
@@ -367,7 +369,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                       const one = m.shotId ? readyShots.find((s) => s.id === m.shotId) : undefined;
                       if (one) {
                         const no = ep.shots.findIndex((s) => s.id === one.id) + 1;
-                        return <button type="button" className={f.chip} data-strong="true" disabled={dirty || busy.includes(`video:${one.id}`)} onClick={() => { setSel(no - 1); setTab("studio"); void makeVideo(one.id, one.seconds, newKind); }}><Play size={12} /> สร้าง{word}ช็อต {no} · {videoCost(rate(newKind), one.seconds)} แต้ม</button>;
+                        return <button type="button" className={f.chip} data-strong="true" disabled={dirty || busy.includes(`video:${one.id}`)} onClick={() => { setSel(no - 1); setTab("studio"); void makeVideo(one.id, one.seconds, newKind); }}><Play size={12} /> สร้าง{word}ช็อต {no} · {shotCost(newKind, one)} แต้ม</button>;
                       }
                       return readyShots.length > 0 && !dirty ? <button type="button" className={f.chip} data-strong="true" disabled={busy.includes("bulk-videos")} onClick={() => { setTab("studio"); void videoAll(); }}><Play size={12} /> สร้าง{word}ช็อตที่พร้อม ({readyShots.length}) · {bulkVideoCost} แต้ม</button> : null;
                     })()}
@@ -553,7 +555,8 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
               const sv = videoOf(sh);
               // With generated dialogue clips, the player plays the clip without dialogue and the lines on top.
               const url = sv?.status === "succeeded" ? (sv.rawUrl && sv.lines.length ? sv.rawUrl : sv.url) : null;
-              return { url, start: starts[k], seconds: shotLength(sh), trimIn: sh.trimIn ?? 0 };
+              // The clip's own audio is muted under dubbed lines (the model may still speak them).
+              return { url, start: starts[k], seconds: shotLength(sh), trimIn: sh.trimIn ?? 0, muted: !!(sv?.rawUrl && sv.lines.length) };
             });
             // Where a shot's dialogue lines are now (seconds from the clip start): moved, generated or estimated.
             const linesOf = (sh: ShotDraft) => {
@@ -667,11 +670,11 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   </header>
                   <div className={x.inspMake}>
                     <button type="button" className={x.makeBtn} data-tone={v?.canFinalize ? "secondary" : undefined} disabled={!!cannot || lockedByVideo || busy.includes(`video:${s.id}`)} title={cannot || undefined} onClick={() => s.id && makeVideo(s.id, s.seconds, newKind)}>
-                      {lockedByVideo ? <><LoaderCircle size={15} className={f.spin} /> กำลังสร้าง</> : <><Play size={15} /> {newKind === "draft" ? (v?.status === "succeeded" ? "draft ใหม่" : "สร้าง draft") : v?.status === "succeeded" ? "สร้างใหม่" : "สร้างวิดีโอ"} · {videoCost(rate(newKind), s.seconds)} แต้ม</>}
+                      {lockedByVideo ? <><LoaderCircle size={15} className={f.spin} /> กำลังสร้าง</> : <><Play size={15} /> {newKind === "draft" ? (v?.status === "succeeded" ? "draft ใหม่" : "สร้าง draft") : v?.status === "succeeded" ? "สร้างใหม่" : "สร้างวิดีโอ"} · {shotCost(newKind, s)} แต้ม</>}
                     </button>
                     {v?.canFinalize && !dirty && (
                       <button type="button" className={x.makeBtn} disabled={busy.includes(`video:${s.id}`)} title="ใช้ draft นี้ทำเป็นวิดีโอตัวเต็ม ภาพและการเคลื่อนไหวคงเดิม" onClick={() => s.id && makeVideo(s.id, s.seconds, "finalize", v.modelId || videoModel)}>
-                        <Sparkles size={15} /> ทำเป็นตัวเต็ม · {videoCost(ep.videoPointsPer5s, s.seconds)} แต้ม
+                        <Sparkles size={15} /> ทำเป็นตัวเต็ม · {shotCost("finalize", s)} แต้ม
                       </button>
                     )}
                   </div>
