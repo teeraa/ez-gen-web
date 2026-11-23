@@ -1098,3 +1098,61 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- Steps: what is missing and the way to the next step ---------- */
+.nextStep {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--f-border);
+  border-radius: 14px;
+  background: var(--f-card-2);
+}
+.nextStep[data-ready="true"] {
+  border-color: color-mix(in srgb, var(--f-ok) 35%, transparent);
+  background: var(--f-ok-bg);
+}
+.nextStep > p,
+.nextStep > ul {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+}
+.nextStep > p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--f-ok);
+  font-weight: 600;
+}
+.nextStep > ul {
+  padding-left: 18px;
+  color: var(--f-warn);
+}
+.nextStep > ul li + li {
+  margin-top: 2px;
+}
+.nextStep > button {
+  flex: none;
+}
+@media (max-width: 640px) {
+  .nextStep {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* The whole film, at the end of the studio. */
+.filmBox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--f-border);
+  border-radius: 14px;
+  background: var(--f-card);
+  scroll-margin-top: 12px;
+}

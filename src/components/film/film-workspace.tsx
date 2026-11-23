@@ -1,29 +1,30 @@
 "use client";
 // ภาพยนตร์ — one episode, wired to the film API. Left: chat with the planning assistant (story,
-// elements and shots, or one shot). Right: story, elements and shots with per-shot reference-to-video.
+// elements and shots, or one shot). Right: three steps — story, elements (image + voice), studio
+// (scenes and shots with per-shot reference-to-video, then the whole film).
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  AlertCircle, ArrowLeft, ArrowUp, BookOpen, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Download, Eye, Film, ImageIcon, Link2, LoaderCircle, MapPin,
-  MessagesSquare, Mic, Package, Pencil, Play, Plus, RefreshCw, Save, Scissors, Search, Sparkles, Trash2, Users, Wand2, X,
+  AlertCircle, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Eye, Film, ImageIcon, Link2, LoaderCircle, MapPin,
+  MessagesSquare, Mic, Package, Pencil, Play, Plus, RefreshCw, Save, Scissors, Sparkles, Trash2, Users, Wand2, X,
 } from "lucide-react";
 import { ShotArt } from "@/components/director/shot-art";
-import { CreateModal } from "@/components/director/modal";
 import { useConfirm } from "@/components/director/use-confirm";
 import { ShotPlayer } from "./shot-player";
-import { CharacterVoicePicker } from "@/components/voice/character-voice-picker";
-import { characterVoiceLabel, sameVoiceInput, voiceInputOf, type CharacterVoiceInput } from "@/lib/voice-api";
+import { ElementEditor, type ElementEditorTarget } from "./element-editor";
+import { FilmExportPanel, FILM_EXPORT_ID } from "./film-export-panel";
+import { FilmSteps, NextStep, stepBlockers, type FilmStep } from "./film-steps";
+import { StoryPanel } from "./story-panel";
+import { characterVoiceLabel } from "@/lib/voice-api";
 import { definiteRejection, finishSubmission, prepareSubmission } from "@/lib/director-submission";
 import {
   FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, missingElements, toDraft, videoCost,
-  type ElementKind, type FilmElement, type FilmEpisode, type LibraryAsset, type ShotDraft, type VideoKind,
+  type ElementKind, type FilmElement, type FilmEpisode, type ShotDraft, type VideoKind,
 } from "@/lib/film-api";
 import f from "./film.module.css";
 import x from "./film-work.module.css";
 
-type Tab = "story" | "elements" | "shots" | "film";
 const LENGTHS = [30, 60, 120, 180];
-type Editor = { kind: ElementKind; element?: FilmElement };
 
 const KIND_ICON = { character: Users, location: MapPin, prop: Package } as const;
 const SECONDS_MIN = 4;
@@ -35,13 +36,13 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const [ep, setEp] = useState<FilmEpisode | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [reload, setReload] = useState(0);
-  const [tab, setTab] = useState<Tab>("elements");
+  const [tab, setTab] = useState<FilmStep>("elements");
   const [drafts, setDrafts] = useState<ShotDraft[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string[]>([]);
   const [subtitles, setSubtitles] = useState(false);
-  const [editor, setEditor] = useState<Editor | null>(null);
+  const [editor, setEditor] = useState<ElementEditorTarget | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -65,7 +66,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
         setLoadError(null);
         if (!tabChosen.current) {
           tabChosen.current = true;
-          setTab(value.shots.length > 0 ? "shots" : value.elements.length > 0 ? "elements" : "story");
+          setTab(value.shots.length > 0 ? "studio" : value.elements.length > 0 ? "elements" : "story");
         }
       })
       .catch((cause) => { if (!controller.signal.aborted) setLoadError(cause); });
@@ -140,8 +141,6 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const total = shots.reduce((n, s) => n + s.seconds, 0);
   // Export uses every finished clip, including ones made before the shot was last edited.
   const readyClips = ep.shots.filter((s) => s.video?.status === "succeeded").length;
-  const staleClips = ep.shots.filter((s) => s.video?.status === "succeeded" && s.video.stale).length;
-  const draftClips = ep.shots.filter((s) => s.video?.status === "succeeded" && s.video.draft).length;
   const title = `ตอนที่ ${ep.episodeNumber ?? "?"}${ep.episodeTitle ? ` · ${ep.episodeTitle}` : ""}`;
   const byKind = (k: ElementKind) => ep.elements.filter((e) => e.kind === k);
 
@@ -276,8 +275,8 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                 <p>เล่าไอเดียของตอนนี้ได้เลย ผมจะเขียนเรื่องย่อ สร้างตัวละคร สถานที่ ของ และแตกเป็นช็อตพร้อมเวลา กล้อง บทพูด และเสียงให้</p>
                 <ol className={x.steps}>
                   <li data-done={ep.shots.length > 0}>เล่าไอเดียในแชต (หรือเขียนช็อตเองทางขวา)</li>
-                  <li data-done={ep.elements.length > 0 && ep.elements.every((e) => e.prepared)}>สร้างภาพองค์ประกอบให้ครบ</li>
-                  <li data-done={ep.shots.some((s) => s.video?.status === "succeeded")}>สร้างวิดีโอทีละช็อตหรือทั้งหมด</li>
+                  <li data-done={stepBlockers(ep, "elements").length === 0}>สร้างภาพองค์ประกอบ และเลือกเสียงให้ตัวละครทุกตัว</li>
+                  <li data-done={ep.shots.some((s) => s.video?.status === "succeeded")}>สร้างวิดีโอในสตูดิโอ แล้วรวมเป็นภาพยนตร์</li>
                 </ol>
               </div>
             </div>
@@ -295,17 +294,17 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                 {i === ep.messages.length - 1 && !planning && (
                   <div className={f.chips}>
                     {ep.story && <button type="button" className={f.chip} onClick={() => setTab("story")}>ดูเรื่องราว</button>}
-                    {ep.elements.some((e) => !e.prepared) && <button type="button" className={f.chip} onClick={() => setTab("elements")}>สร้างภาพองค์ประกอบ</button>}
-                    {ep.shots.length > 0 && <button type="button" className={f.chip} onClick={() => setTab("shots")}>ดูช็อต</button>}
+                    {stepBlockers(ep, "elements").length > 0 && <button type="button" className={f.chip} onClick={() => setTab("elements")}>เตรียมภาพและเสียงองค์ประกอบ</button>}
+                    {ep.shots.length > 0 && <button type="button" className={f.chip} onClick={() => setTab("studio")}>ไปสตูดิโอ</button>}
                     {/* The assistant only plans; video starts from these buttons (the chat cannot render). */}
                     {(() => {
                       const word = newKind === "draft" ? "draft" : "วิดีโอ";
                       const one = m.shotId ? readyShots.find((s) => s.id === m.shotId) : undefined;
                       if (one) {
                         const no = ep.shots.findIndex((s) => s.id === one.id) + 1;
-                        return <button type="button" className={f.chip} data-strong="true" disabled={dirty || busy.includes(`video:${one.id}`)} onClick={() => { setSel(no - 1); setTab("shots"); void makeVideo(one.id, one.seconds, newKind); }}><Play size={12} /> สร้าง{word}ช็อต {no} · {videoCost(rate(newKind), one.seconds)} แต้ม</button>;
+                        return <button type="button" className={f.chip} data-strong="true" disabled={dirty || busy.includes(`video:${one.id}`)} onClick={() => { setSel(no - 1); setTab("studio"); void makeVideo(one.id, one.seconds, newKind); }}><Play size={12} /> สร้าง{word}ช็อต {no} · {videoCost(rate(newKind), one.seconds)} แต้ม</button>;
                       }
-                      return readyShots.length > 0 && !dirty ? <button type="button" className={f.chip} data-strong="true" disabled={busy.includes("bulk-videos")} onClick={() => { setTab("shots"); void videoAll(); }}><Play size={12} /> สร้าง{word}ช็อตที่พร้อม ({readyShots.length}) · {bulkVideoCost} แต้ม</button> : null;
+                      return readyShots.length > 0 && !dirty ? <button type="button" className={f.chip} data-strong="true" disabled={busy.includes("bulk-videos")} onClick={() => { setTab("studio"); void videoAll(); }}><Play size={12} /> สร้าง{word}ช็อตที่พร้อม ({readyShots.length}) · {bulkVideoCost} แต้ม</button> : null;
                     })()}
                   </div>
                 )}
@@ -357,37 +356,19 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
 
       {/* ---------- Result column ---------- */}
       <section className={f.result} aria-label="ผลลัพธ์">
-        <nav className={f.stages} aria-label="ส่วนของตอน">
-          {([["story", "เรื่องราว", ep.story ? ep.story.title || "มีเรื่องย่อแล้ว" : "ยังไม่ได้วางเรื่อง", BookOpen], ["elements", "องค์ประกอบ", `${ep.elements.length} รายการ · ${ep.elements.filter((e) => e.prepared).length} พร้อม`, Package], ["shots", "ฉากและช็อต", `${shots.length} ช็อต · ${clock(total)}`, Clapperboard], ["film", "ภาพยนตร์", ep.export?.status === "succeeded" ? (ep.export.stale ? "มีคลิปใหม่ · รวมใหม่ได้" : "พร้อมดาวน์โหลด") : active(ep.export?.status) ? `กำลังรวม ${ep.export?.progress ?? 0}%` : `${readyClips} คลิปพร้อมรวม`, Film]] as const).map(([id, label, hint, Icon]) => (
-            <button key={id} type="button" className={f.stage} data-active={tab === id} onClick={() => setTab(id)}>
-              <span className={f.stageIcon}><Icon size={15} /></span>
-              <span className={f.stageText}><strong>{label}</strong><small>{hint}</small></span>
-            </button>
-          ))}
-        </nav>
+        <FilmSteps ep={ep} step={tab} onStep={setTab} hints={{
+          story: ep.story ? ep.story.title || "มีเรื่องย่อแล้ว" : "ยังไม่ได้วางเรื่อง",
+          elements: `${ep.elements.length} รายการ · ${ep.elements.filter((e) => e.prepared).length} มีภาพ · ${ep.elements.filter((e) => e.kind === "character" && e.voice).length}/${byKind("character").length} มีเสียง`,
+          studio: `${shots.length} ช็อต · ${clock(total)} · ${ep.export?.status === "succeeded" ? (ep.export.stale ? "มีคลิปใหม่ รวมใหม่ได้" : "รวมแล้ว") : active(ep.export?.status) ? `กำลังรวม ${ep.export?.progress ?? 0}%` : `${readyClips} คลิปพร้อม`}`,
+        }} />
 
         <div className={f.body}>
           {notice && <div role="alert" className={x.alert}><AlertCircle size={16} /> {notice} <button type="button" aria-label="ปิด" onClick={() => setNotice(null)}><X size={14} /></button></div>}
 
           {tab === "story" && (
             <div className={f.panel}>
-              {ep.story ? (
-                <>
-                  <div className={f.titleRow}><h1>{ep.story.title || title}</h1><div className={f.pills}><span>{clock(total)}</span><span>{ep.aspectRatio}</span><span>{STYLE_LABEL[ep.style] ?? ep.style}</span></div></div>
-                  {ep.story.logline && <p className={f.logline}>{ep.story.logline}</p>}
-                  <div className={f.twoCol}>
-                    <section className={f.box}><h3>เรื่องย่อ</h3><p>{ep.story.synopsis || "—"}</p></section>
-                    <section className={f.box}><h3>แก่นเรื่อง</h3><p>{ep.story.theme || "—"}</p></section>
-                  </div>
-                  <p className={x.hint}>อยากเปลี่ยนเรื่อง พิมพ์บอกผู้ช่วยในแชต หรือแก้รายละเอียดเองในแท็บองค์ประกอบและช็อต</p>
-                </>
-              ) : (
-                <div className={x.center}>
-                  <MessagesSquare />
-                  <h3>ยังไม่ได้วางเรื่อง</h3>
-                  <p>เล่าไอเดียในแชตทางซ้าย เลือกความยาว แล้วกดส่ง ผู้ช่วยจะเขียนเรื่องย่อ สร้างองค์ประกอบ และแตกเป็นช็อตให้</p>
-                </div>
-              )}
+              <StoryPanel ep={ep} title={title} total={total} />
+              <NextStep ep={ep} step="story" onStep={setTab} />
             </div>
           )}
 
@@ -453,10 +434,11 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                 );
               })}
               {ep.filmed && <p className={x.hint}>โหมดสมจริง: ระบบสร้างภาพตัวละครจริง แล้วสร้างภาพซ่อนหน้าไว้ส่งให้โมเดลวิดีโอ เพราะผู้ให้บริการไม่รับภาพอ้างอิงที่มีหน้าคนจริง หน้าในวิดีโอจะสร้างจากคำบรรยายตัวละคร</p>}
+              <NextStep ep={ep} step="elements" onStep={setTab} />
             </div>
           )}
 
-          {tab === "shots" && (() => {
+          {tab === "studio" && (() => {
             if (shots.length === 0) {
               return (
                 <div className={f.panel}>
@@ -510,6 +492,9 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   </div>
                   <span className={f.muted}>{rate(newKind)} แต้ม / 5 วิ · คงเหลือ {ep.balance}</span>
                   <span className={x.spacer} />
+                  <button type="button" className={x.bulkBtn} onClick={() => document.getElementById(FILM_EXPORT_ID)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                    <Film size={14} /> ภาพยนตร์ทั้งเรื่อง
+                  </button>
                   {finalShots.length > 0 && !dirty && (
                     <button type="button" className={x.bulkBtn} disabled={busy.includes("bulk-finalize")} onClick={finalizeAll}>
                       <Sparkles size={14} /> ทำตัวเต็มทุก draft ({finalShots.length}) · {bulkFinalCost} แต้ม
@@ -686,49 +671,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                         </label>
                       </section>
                     </div>
-              </div>
-            );
-          })()}
-
-          {tab === "film" && (() => {
-            const xp = ep.export;
-            const exporting = active(xp?.status) || busy.includes("export");
-            const pending = ep.shots.length - readyClips;
-            return (
-              <div className={f.panel}>
-                <div className={x.filmHead}>
-                  <div>
-                    <h3>รวมเป็นภาพยนตร์</h3>
-                    <p>นำคลิปที่สร้างเสร็จมาต่อกันตามลำดับช็อตเป็นไฟล์ MP4 ไฟล์เดียว ไม่เสียแต้ม</p>
-                  </div>
-                  <label className={x.filmCheck}>
-                    <input type="checkbox" checked={subtitles} disabled={exporting} onChange={(e) => setSubtitles(e.target.checked)} /> ใส่ซับไตเติลบทพูด
-                  </label>
-                  <button type="button" className={f.primary} disabled={exporting || readyClips === 0 || dirty || !ep.exportAvailable} title={!ep.exportAvailable ? "ระบบรวมวิดีโอยังไม่พร้อมใช้งาน" : dirty ? "บันทึกช็อตก่อน" : undefined} onClick={exportFilm}>
-                    {exporting ? <LoaderCircle size={16} className={f.spin} /> : <Film size={16} />} {xp?.status === "succeeded" ? "รวมใหม่" : "รวมเป็นภาพยนตร์"}
-                  </button>
-                </div>
-                {readyClips === 0 && <p className={x.warn}><AlertCircle size={13} /> ยังไม่มีช็อตที่สร้างวิดีโอเสร็จ <button type="button" className={x.link} onClick={() => setTab("shots")}>ไปสร้างวิดีโอ</button></p>}
-                {readyClips > 0 && pending > 0 && <p className={x.warn}><AlertCircle size={13} /> มี {pending} ช็อตที่ยังไม่มีวิดีโอ ระบบจะรวมเฉพาะคลิปที่เสร็จแล้ว</p>}
-                {draftClips > 0 && <p className={x.warn}><AlertCircle size={13} /> มี {draftClips} ช็อตที่ยังเป็น draft 480p ภาพยนตร์จะใช้คลิป draft จนกว่าจะทำเป็นตัวเต็ม <button type="button" className={x.link} onClick={() => setTab("shots")}>ไปทำตัวเต็ม</button></p>}
-                {staleClips > 0 && <p className={x.warn}><AlertCircle size={13} /> มี {staleClips} ช็อตที่แก้หลังสร้างวิดีโอ ภาพยนตร์จะใช้คลิปเดิมจนกว่าจะสร้างวิดีโอใหม่</p>}
-                {xp && active(xp.status) && (
-                  <div className={x.filmProgress} role="status">
-                    <LoaderCircle size={16} className={f.spin} /> {xp.status === "queued" ? "รอคิว…" : `กำลังรวม ${xp.clipCount} คลิป… ${xp.progress}%`}
-                    <div className={x.progress}><i style={{ width: `${xp.progress}%` }} /></div>
-                  </div>
-                )}
-                {xp?.status === "failed" && <p className={x.warn} role="alert"><AlertCircle size={13} /> {xp.failureMessage ?? "รวมภาพยนตร์ไม่สำเร็จ"}</p>}
-                {xp?.status === "succeeded" && xp.url && (
-                  <div className={x.filmResult}>
-                    {xp.stale && <p className={x.warn}><RefreshCw size={13} /> มีคลิปที่เปลี่ยนไปหลังรวมภาพยนตร์ครั้งล่าสุด กด “รวมใหม่” เพื่ออัปเดต</p>}
-                    <video key={xp.url} src={xp.url} controls playsInline preload="metadata" className={x.filmPlayer} data-ratio={ep.aspectRatio} />
-                    <div className={x.filmMeta}>
-                      <span>{xp.clipCount} คลิป{xp.skipped > 0 ? ` · ข้าม ${xp.skipped} ช็อต` : ""}{xp.subtitles ? " · มีซับไตเติล" : ""}</span>
-                      <a className={f.primary} href={xp.url} download={`${(ep.episodeTitle || `ตอนที่ ${ep.episodeNumber ?? ""}`).trim()}.mp4`} target="_blank" rel="noreferrer"><Download size={16} /> ดาวน์โหลด MP4</a>
-                    </div>
-                  </div>
-                )}
+                <FilmExportPanel ep={ep} dirty={dirty} sending={busy.includes("export")} subtitles={subtitles} onSubtitles={setSubtitles} onExport={exportFilm} />
               </div>
             );
           })()}
@@ -756,97 +699,5 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
         setReload((n) => n + 1);
       }} />}
     </div>
-  );
-}
-
-function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId: string; editor: Editor; onClose: () => void; onSaved: (el: FilmElement, created: boolean) => void }) {
-  const { kind, element } = editor;
-  const [name, setName] = useState(element?.name ?? "");
-  const [spec, setSpec] = useState(element?.spec ?? "");
-  const [assetId, setAssetId] = useState("");
-  const [library, setLibrary] = useState<LibraryAsset[] | null>(null);
-  // Characters only. On create, leaving it untouched lets a library character keep its own voice.
-  const initialVoice = voiceInputOf(element?.voice);
-  const [voice, setVoice] = useState<CharacterVoiceInput>(initialVoice);
-  const voiceChanged = kind === "character" && !sameVoiceInput(voice, initialVoice);
-  const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const scope = `film-element:${seriesId}:${kind}`;
-
-  useEffect(() => {
-    if (element) return;
-    const controller = new AbortController();
-    void filmApi.library(kind, controller.signal).then((v) => setLibrary(v.items), () => setLibrary([]));
-    return () => controller.abort();
-  }, [kind, element]);
-
-  const submit = async () => {
-    if (busy || !name.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (element) {
-        onSaved(await filmApi.updateElement(element.id, { revision: element.revision, name: name.trim(), spec: spec.trim(), ...(voiceChanged ? { voice } : {}) }), false);
-      } else {
-        const submission = prepareSubmission(scope, { name: name.trim(), spec: spec.trim(), assetId, voice: voiceChanged ? voice : null });
-        try {
-          const el = await filmApi.createElement(seriesId, { kind, name: String(submission.body.name), spec: String(submission.body.spec), ...(submission.body.assetId ? { assetId: String(submission.body.assetId) } : {}), ...(submission.body.voice ? { voice: submission.body.voice as CharacterVoiceInput } : {}), idempotencyKey: submission.key });
-          finishSubmission(scope);
-          onSaved(el, true);
-        } catch (cause) {
-          if (cause instanceof FilmError && definiteRejection(cause)) finishSubmission(scope);
-          throw cause;
-        }
-      }
-    } catch (cause) {
-      setError(filmErrorMessage(cause));
-    } finally { setBusy(false); }
-  };
-
-  const placeholder = kind === "character" ? "เช่น ชายไทยอายุ 32 ผิวคล้ำแดด ผมมวยสั้น ผ้าคาดเอวแดงเข้ม ถือดาบไทย นิ่งขรึม" : kind === "location" ? "เช่น แนวค่ายไม้บนเนินนอกพระนคร รุ่งสาง หมอกและควันลอย รั้วไม้ปลายแหลม" : "เช่น ดาบไทยด้ามเดียว ฝักไม้แยก ด้ามพันผ้าแดง ยาวราวแขน";
-  return (
-    <CreateModal onClose={() => { if (!busy) onClose(); }}>
-      <form className={x.modal} role="dialog" aria-modal="true" aria-labelledby="film-element-title" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-        <header className={x.modalHead}>
-          <h2 id="film-element-title">{element ? `แก้${KIND_LABEL[kind]}` : `เพิ่ม${KIND_LABEL[kind]}`}</h2>
-          <button type="button" className={x.icon} aria-label="ปิด" disabled={busy} onClick={onClose}><X size={16} /></button>
-        </header>
-        {error && <p role="alert" className={x.error}>{error}</p>}
-        <label className={x.field}>ชื่อ (ใช้อ้างอิงในช็อต)
-          <input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "character" ? "ขุนอินทร์" : kind === "location" ? "แนวค่ายอยุธยา" : "ดาบไทย"} />
-        </label>
-        <label className={x.field}>คำบรรยายหน้าตา / ลักษณะ
-          <textarea rows={4} maxLength={1200} value={spec} onChange={(e) => setSpec(e.target.value)} placeholder={placeholder} />
-          <small className={x.counter}>{spec.length}/1200 · ยิ่งละเอียด ภาพและวิดีโอยิ่งตรงทุกช็อต</small>
-        </label>
-        {kind === "character" && <CharacterVoicePicker value={voice} onChange={setVoice} disabled={busy} />}
-        {kind === "character" && !element && assetId && !voiceChanged && <small className={x.counter}>ถ้าไม่เลือก จะใช้เสียงที่ผูกไว้กับตัวละครในคลัง (ถ้ามี)</small>}
-        {!element && (
-          <div className={x.field}>
-            <span className={x.libHead}>ใช้ภาพจากคลังผลงาน (ไม่บังคับ)
-              {library && library.length > 6 && (
-                <span className={x.libSearch}><Search size={13} /><input aria-label="ค้นหาในคลัง" value={query} placeholder="ค้นหา" onChange={(e) => setQuery(e.target.value)} /></span>
-              )}
-            </span>
-            {/* Fixed-height area so the dialog does not grow and move its buttons when the list loads. */}
-            <div className={x.library}>
-              {library === null ? <small className={x.counter}>กำลังโหลด…</small> : library.length === 0 ? <small className={x.counter}>ยังไม่มี{KIND_LABEL[kind]}ในคลัง สร้างภาพใหม่ได้หลังบันทึก</small> : (
-                library.filter((a) => !query.trim() || a.name.toLowerCase().includes(query.trim().toLowerCase())).map((a) => (
-                  <button key={a.id} type="button" className={x.libItem} aria-pressed={assetId === a.id} onClick={() => { setAssetId(assetId === a.id ? "" : a.id); if (!name.trim()) setName(a.name); if (!spec.trim() && a.description) setSpec(a.description.slice(0, 1200)); }}>
-                    <span className={x.libArt}><ShotArt url={a.mediaUrl} label={a.name} /></span>
-                    <span>{a.name}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-        <div className={x.modalActions}>
-          <button type="button" className={f.secondary} disabled={busy} onClick={onClose}>ยกเลิก</button>
-          <button className={f.primary} disabled={busy || !name.trim()}>{busy ? <LoaderCircle size={16} className={f.spin} /> : <Check size={16} />} {element ? "บันทึก" : "เพิ่ม"}</button>
-        </div>
-      </form>
-    </CreateModal>
   );
 }
