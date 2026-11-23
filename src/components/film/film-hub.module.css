@@ -1,4 +1,4 @@
-/* สร้างหนัง — story list and episode list. Sits inside workbench .page for --wb-* tokens. */
+/* ภาพยนตร์ — story list and episode list. Sits inside workbench .page for --wb-* tokens. */
 
 .hero {
   display: flex;

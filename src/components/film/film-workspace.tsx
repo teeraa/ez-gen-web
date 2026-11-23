@@ -1,5 +1,5 @@
 "use client";
-// สร้างหนัง — one episode, wired to the film API. Left: chat with the planning assistant (story,
+// ภาพยนตร์ — one episode, wired to the film API. Left: chat with the planning assistant (story,
 // elements and shots, or one shot). Right: story, elements and shots with per-shot reference-to-video.
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -121,7 +121,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   };
 
   if (loadError instanceof FilmError && loadError.status === 404) {
-    return <div className={x.center}><h3>ไม่พบตอนนี้</h3><p>ตอนอาจถูกลบ หรือไม่ได้อยู่ในเมนูสร้างหนัง</p><Link href={`/studio/film/${seriesId}`} className={f.primary}>กลับไปหน้าตอนทั้งหมด</Link></div>;
+    return <div className={x.center}><h3>ไม่พบตอนนี้</h3><p>ตอนอาจถูกลบ หรือไม่ได้อยู่ในเมนูภาพยนตร์</p><Link href={`/studio/film/${seriesId}`} className={f.primary}>กลับไปหน้าตอนทั้งหมด</Link></div>;
   }
   if (!ep) {
     return <div className={x.center} role={loadError ? "alert" : "status"}>
@@ -197,7 +197,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const exportFilm = () => run("export", async () => {
     const next = await paid(`film-export:${ep.projectId}`, { subtitles }, (key) => filmApi.exportFilm(ep.projectId, { subtitles, idempotencyKey: key }));
     setEp(next);
-    note(`เริ่มรวม ${next.export?.clipCount ?? 0} คลิปเป็นหนัง`);
+    note(`เริ่มรวม ${next.export?.clipCount ?? 0} คลิปเป็นภาพยนตร์`);
   });
   const removeElement = (el: FilmElement) => run(`remove:${el.id}`, async () => {
     if (!(await confirm(`ลบ${KIND_LABEL[el.kind]} “${el.name}”?`, "ช็อตที่ใช้อยู่จะต้องเลือกใหม่", "ลบ"))) return;
@@ -358,7 +358,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
       {/* ---------- Result column ---------- */}
       <section className={f.result} aria-label="ผลลัพธ์">
         <nav className={f.stages} aria-label="ส่วนของตอน">
-          {([["story", "เรื่องราว", ep.story ? ep.story.title || "มีเรื่องย่อแล้ว" : "ยังไม่ได้วางเรื่อง", BookOpen], ["elements", "องค์ประกอบ", `${ep.elements.length} รายการ · ${ep.elements.filter((e) => e.prepared).length} พร้อม`, Package], ["shots", "ฉากและช็อต", `${shots.length} ช็อต · ${clock(total)}`, Clapperboard], ["film", "หนัง", ep.export?.status === "succeeded" ? (ep.export.stale ? "มีคลิปใหม่ · รวมใหม่ได้" : "พร้อมดาวน์โหลด") : active(ep.export?.status) ? `กำลังรวม ${ep.export?.progress ?? 0}%` : `${readyClips} คลิปพร้อมรวม`, Film]] as const).map(([id, label, hint, Icon]) => (
+          {([["story", "เรื่องราว", ep.story ? ep.story.title || "มีเรื่องย่อแล้ว" : "ยังไม่ได้วางเรื่อง", BookOpen], ["elements", "องค์ประกอบ", `${ep.elements.length} รายการ · ${ep.elements.filter((e) => e.prepared).length} พร้อม`, Package], ["shots", "ฉากและช็อต", `${shots.length} ช็อต · ${clock(total)}`, Clapperboard], ["film", "ภาพยนตร์", ep.export?.status === "succeeded" ? (ep.export.stale ? "มีคลิปใหม่ · รวมใหม่ได้" : "พร้อมดาวน์โหลด") : active(ep.export?.status) ? `กำลังรวม ${ep.export?.progress ?? 0}%` : `${readyClips} คลิปพร้อมรวม`, Film]] as const).map(([id, label, hint, Icon]) => (
             <button key={id} type="button" className={f.stage} data-active={tab === id} onClick={() => setTab(id)}>
               <span className={f.stageIcon}><Icon size={15} /></span>
               <span className={f.stageText}><strong>{label}</strong><small>{hint}</small></span>
@@ -698,30 +698,30 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
               <div className={f.panel}>
                 <div className={x.filmHead}>
                   <div>
-                    <h3>รวมเป็นหนัง</h3>
+                    <h3>รวมเป็นภาพยนตร์</h3>
                     <p>นำคลิปที่สร้างเสร็จมาต่อกันตามลำดับช็อตเป็นไฟล์ MP4 ไฟล์เดียว ไม่เสียแต้ม</p>
                   </div>
                   <label className={x.filmCheck}>
                     <input type="checkbox" checked={subtitles} disabled={exporting} onChange={(e) => setSubtitles(e.target.checked)} /> ใส่ซับไตเติลบทพูด
                   </label>
                   <button type="button" className={f.primary} disabled={exporting || readyClips === 0 || dirty || !ep.exportAvailable} title={!ep.exportAvailable ? "ระบบรวมวิดีโอยังไม่พร้อมใช้งาน" : dirty ? "บันทึกช็อตก่อน" : undefined} onClick={exportFilm}>
-                    {exporting ? <LoaderCircle size={16} className={f.spin} /> : <Film size={16} />} {xp?.status === "succeeded" ? "รวมใหม่" : "รวมเป็นหนัง"}
+                    {exporting ? <LoaderCircle size={16} className={f.spin} /> : <Film size={16} />} {xp?.status === "succeeded" ? "รวมใหม่" : "รวมเป็นภาพยนตร์"}
                   </button>
                 </div>
                 {readyClips === 0 && <p className={x.warn}><AlertCircle size={13} /> ยังไม่มีช็อตที่สร้างวิดีโอเสร็จ <button type="button" className={x.link} onClick={() => setTab("shots")}>ไปสร้างวิดีโอ</button></p>}
                 {readyClips > 0 && pending > 0 && <p className={x.warn}><AlertCircle size={13} /> มี {pending} ช็อตที่ยังไม่มีวิดีโอ ระบบจะรวมเฉพาะคลิปที่เสร็จแล้ว</p>}
-                {draftClips > 0 && <p className={x.warn}><AlertCircle size={13} /> มี {draftClips} ช็อตที่ยังเป็น draft 480p หนังจะใช้คลิป draft จนกว่าจะทำเป็นตัวเต็ม <button type="button" className={x.link} onClick={() => setTab("shots")}>ไปทำตัวเต็ม</button></p>}
-                {staleClips > 0 && <p className={x.warn}><AlertCircle size={13} /> มี {staleClips} ช็อตที่แก้หลังสร้างวิดีโอ หนังจะใช้คลิปเดิมจนกว่าจะสร้างวิดีโอใหม่</p>}
+                {draftClips > 0 && <p className={x.warn}><AlertCircle size={13} /> มี {draftClips} ช็อตที่ยังเป็น draft 480p ภาพยนตร์จะใช้คลิป draft จนกว่าจะทำเป็นตัวเต็ม <button type="button" className={x.link} onClick={() => setTab("shots")}>ไปทำตัวเต็ม</button></p>}
+                {staleClips > 0 && <p className={x.warn}><AlertCircle size={13} /> มี {staleClips} ช็อตที่แก้หลังสร้างวิดีโอ ภาพยนตร์จะใช้คลิปเดิมจนกว่าจะสร้างวิดีโอใหม่</p>}
                 {xp && active(xp.status) && (
                   <div className={x.filmProgress} role="status">
                     <LoaderCircle size={16} className={f.spin} /> {xp.status === "queued" ? "รอคิว…" : `กำลังรวม ${xp.clipCount} คลิป… ${xp.progress}%`}
                     <div className={x.progress}><i style={{ width: `${xp.progress}%` }} /></div>
                   </div>
                 )}
-                {xp?.status === "failed" && <p className={x.warn} role="alert"><AlertCircle size={13} /> {xp.failureMessage ?? "รวมหนังไม่สำเร็จ"}</p>}
+                {xp?.status === "failed" && <p className={x.warn} role="alert"><AlertCircle size={13} /> {xp.failureMessage ?? "รวมภาพยนตร์ไม่สำเร็จ"}</p>}
                 {xp?.status === "succeeded" && xp.url && (
                   <div className={x.filmResult}>
-                    {xp.stale && <p className={x.warn}><RefreshCw size={13} /> มีคลิปที่เปลี่ยนไปหลังรวมหนังครั้งล่าสุด กด “รวมใหม่” เพื่ออัปเดต</p>}
+                    {xp.stale && <p className={x.warn}><RefreshCw size={13} /> มีคลิปที่เปลี่ยนไปหลังรวมภาพยนตร์ครั้งล่าสุด กด “รวมใหม่” เพื่ออัปเดต</p>}
                     <video key={xp.url} src={xp.url} controls playsInline preload="metadata" className={x.filmPlayer} data-ratio={ep.aspectRatio} />
                     <div className={x.filmMeta}>
                       <span>{xp.clipCount} คลิป{xp.skipped > 0 ? ` · ข้าม ${xp.skipped} ช็อต` : ""}{xp.subtitles ? " · มีซับไตเติล" : ""}</span>

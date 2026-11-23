@@ -1,5 +1,5 @@
 "use client";
-// สร้างหนัง hub: the user's film stories (Director series with mode "film").
+// ภาพยนตร์ hub: the user's film stories (Director series with mode "film").
 // Creating a story also creates episode 1 and opens its chat, so a new user is one form away from the chat.
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -153,8 +153,8 @@ export function FilmHub() {
       {confirmDialog}
       <header className={f.hero}>
         <div>
-          <h1><Film aria-hidden /> สร้างหนัง</h1>
-          <p>เล่าไอเดียในแชต แล้วดูเรื่องราว ตัวละคร ฉาก และช็อตก่อตัวขึ้นจนเป็นหนัง แต่ละเรื่องแบ่งเป็นตอนได้</p>
+          <h1><Film aria-hidden /> ภาพยนตร์</h1>
+          <p>เล่าไอเดียในแชต แล้วดูเรื่องราว ตัวละคร ฉาก และช็อตก่อตัวขึ้นจนเป็นภาพยนตร์ แต่ละเรื่องแบ่งเป็นตอนได้</p>
         </div>
         <button type="button" className={w.primary} disabled={!caps} onClick={openCreate}><Plus aria-hidden />สร้างเรื่องใหม่</button>
       </header>
@@ -180,7 +180,7 @@ export function FilmHub() {
         {list && list.items.length === 0 && (
           <div className={f.firstRun}>
             <Film aria-hidden />
-            <h3>เริ่มหนังเรื่องแรก</h3>
+            <h3>เริ่มภาพยนตร์เรื่องแรก</h3>
             <p>ตั้งชื่อเรื่องอย่างเดียวก็เริ่มได้ ระบบจะเปิดตอนที่ 1 ให้คุยกับผู้ช่วยทันที</p>
             <button type="button" className={w.primary} disabled={!caps} onClick={openCreate}><Plus aria-hidden />สร้างเรื่องแรก</button>
           </div>

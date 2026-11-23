@@ -5,6 +5,7 @@ import { Clapperboard, Copy, ExternalLink, Film, Loader2, Plus, Send, Trash2 } f
 import w from "@/components/workbench/workbench.module.css";
 import m from "./marketplace.module.css";
 import { directorApi } from "@/lib/director-api";
+import { DIRECTOR_MENU_ENABLED } from "@/lib/features";
 import { CONTENT_KIND_LABEL, baht, failText, marketplaceApi, thaiDate, type AdAngle, type Content, type ContentKind, type Product } from "@/lib/marketplace-api";
 
 export interface ContentDraft { kind: ContentKind; title: string; brief: string }
@@ -14,7 +15,7 @@ const BRIEF_MAX = 4000;
 /** Where each kind of content is made, and which series list a finished work can be linked from. */
 const STUDIO: Record<ContentKind, { href: string; label: string; mode: "director" | "film"; refType: "director_series" | "film_series"; workHref: (id: string) => string }> = {
   promo_video: { href: "/studio/director", label: "เปิดหน้าผู้กำกับ", mode: "director", refType: "director_series", workHref: (id) => `/studio/director/series/${id}` },
-  short_film: { href: "/studio/film", label: "เปิดหน้าสร้างหนัง", mode: "film", refType: "film_series", workHref: (id) => `/studio/film/${id}` },
+  short_film: { href: "/studio/film", label: "เปิดหน้าภาพยนตร์", mode: "film", refType: "film_series", workHref: (id) => `/studio/film/${id}` },
 };
 
 /** Text the user pastes into the Director or film page; built only from what they entered (and an AI angle, if picked). */
@@ -96,13 +97,14 @@ export function ProductContents({ product, contents, setContents, draft, clearDr
         <div className={m.itemTop}>
           <h2>คอนเทนต์โปรโมทของสินค้านี้</h2>
           <div className={w.toolbar}>
-            <button type="button" className={w.primary} onClick={() => start("promo_video")}><Clapperboard aria-hidden />สร้างวิดีโอโปรโมท</button>
-            <button type="button" className={w.secondary} onClick={() => start("short_film")}><Film aria-hidden />สร้างหนังสั้นโปรโมท</button>
+            {/* Promo videos are made in ผู้กำกับ, which is hidden for now; existing ones still open. */}
+            {DIRECTOR_MENU_ENABLED && <button type="button" className={w.primary} onClick={() => start("promo_video")}><Clapperboard aria-hidden />สร้างวิดีโอโปรโมท</button>}
+            <button type="button" className={DIRECTOR_MENU_ENABLED ? w.secondary : w.primary} onClick={() => start("short_film")}><Film aria-hidden />สร้างหนังสั้นโปรโมท</button>
           </div>
         </div>
         {contents.length === 0 ? (
           <div className={w.empty} style={{ padding: 32 }}><Clapperboard aria-hidden /><h3>ยังไม่มีคอนเทนต์</h3>
-            <p>เลือกสร้างวิดีโอโปรโมทหรือหนังสั้น ระบบจะเตรียมบรีฟจากข้อมูลสินค้าให้นำไปใช้ในหน้าผู้กำกับหรือหน้าสร้างหนัง</p></div>
+            <p>{DIRECTOR_MENU_ENABLED ? "เลือกสร้างวิดีโอโปรโมทหรือหนังสั้น" : "สร้างหนังสั้นโปรโมท"} ระบบจะเตรียมบรีฟจากข้อมูลสินค้าให้นำไปใช้ในหน้า{DIRECTOR_MENU_ENABLED ? "ผู้กำกับหรือหน้าภาพยนตร์" : "ภาพยนตร์"}</p></div>
         ) : (
           <div className={w.list}>
             {contents.map((c) => (
@@ -155,7 +157,7 @@ export function ProductContents({ product, contents, setContents, draft, clearDr
               <option value="">ยังไม่ผูก</option>
               {series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <small>แสดงงานล่าสุด 20 รายการจาก{form.kind === "short_film" ? "หน้าสร้างหนัง" : "หน้าผู้กำกับ"}</small>
+            <small>แสดงงานล่าสุด 20 รายการจาก{form.kind === "short_film" ? "หน้าภาพยนตร์" : "หน้าผู้กำกับ"}</small>
           </label>
           <button className={`${w.primary} ${w.block}`} disabled={!form.title.trim() || busy}>
             {busy ? <Loader2 className={m.spin} aria-hidden /> : <Plus aria-hidden />}บันทึกคอนเทนต์

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { FilmSeries } from "@/components/film/film-series";
 
-export const metadata = { title: "สร้างหนัง — ตอนทั้งหมด" };
+export const metadata = { title: "ภาพยนตร์ — ตอนทั้งหมด" };
 
 async function Series({ params }: { params: Promise<{ seriesId: string }> }) {
   const { seriesId } = await params;

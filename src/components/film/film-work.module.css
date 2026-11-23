@@ -1,4 +1,4 @@
-/* สร้างหนัง workspace — elements and shot editors. Uses the --f-* tokens set by film.module.css .root. */
+/* ภาพยนตร์ workspace — elements and shot editors. Uses the --f-* tokens set by film.module.css .root. */
 
 .center {
   display: flex;
@@ -940,7 +940,7 @@
   align-content: start;
 }
 
-/* ---------- Phase 4: หนัง tab ---------- */
+/* ---------- Phase 4: ภาพยนตร์ tab ---------- */
 .filmHead {
   display: flex;
   align-items: center;

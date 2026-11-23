@@ -1,4 +1,4 @@
-// Client for the สร้างหนัง API (/api/v1/film). Mirrors the backend film DTOs.
+// Client for the ภาพยนตร์ API (/api/v1/film). Mirrors the backend film DTOs.
 
 import { parseEnvelope } from "./api-envelope.ts";
 import type { CharacterVoice, CharacterVoiceInput } from "./voice-api.ts";

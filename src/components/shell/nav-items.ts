@@ -16,6 +16,7 @@ import {
   Wand2,
   type LucideIcon,
 } from "lucide-react";
+import { DIRECTOR_MENU_ENABLED } from "@/lib/features";
 
 export interface NavItem {
   href: string;
@@ -32,6 +33,8 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+const DIRECTOR_ITEM: NavItem = { href: "/studio/director", label: "ผู้กำกับ", icon: Clapperboard };
+
 // One menu for every signed-in page, grouped by what the user is doing:
 // make something → manage the reusable pieces → find finished work.
 export const NAV_GROUPS: NavGroup[] = [
@@ -41,8 +44,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/", label: "หน้าแรก", icon: House, exact: true },
       { href: "/studio", label: "สร้างวิดีโอ", icon: Sparkles, exact: true },
       { href: "/studio/images", label: "ภาพ / สินค้า", icon: ShoppingBag },
-      { href: "/studio/director", label: "ผู้กำกับ", icon: Clapperboard },
-      { href: "/studio/film", label: "สร้างหนัง", icon: Film },
+      ...(DIRECTOR_MENU_ENABLED ? [DIRECTOR_ITEM] : []),
+      { href: "/studio/film", label: "ภาพยนตร์", icon: Film },
       { href: "/studio/ai-editor", label: "AI ตัดต่อ", icon: Scissors },
       { href: "/studio/voice", label: "เสียง", icon: AudioLines },
     ],
@@ -73,6 +76,7 @@ export const SETTINGS_ITEM: NavItem = { href: "/studio/settings", label: "ตั
 
 // Pages that still exist but are no longer in the menu keep their title in the navbar.
 const UNLISTED_ITEMS: NavItem[] = [
+  ...(DIRECTOR_MENU_ENABLED ? [] : [DIRECTOR_ITEM]),
   { href: "/studio/projects", label: "โปรเจกต์", icon: Clapperboard },
   { href: "/studio/story-flow", label: "เรื่องยาว", icon: Clapperboard },
   { href: "/studio/characters", label: "ตัวละคร", icon: Sparkles },

@@ -120,7 +120,7 @@ export function FilmSeries({ id }: { id: string }) {
       <div className={w.page}>
         <div className={w.empty}>
           <Film aria-hidden /><h3>ไม่พบเรื่องนี้</h3><p>เรื่องอาจถูกลบ หรือคุณไม่มีสิทธิ์เข้าถึง</p>
-          <Link href="/studio/film" className={w.primary}>กลับไปหน้าสร้างหนัง</Link>
+          <Link href="/studio/film" className={w.primary}>กลับไปหน้าภาพยนตร์</Link>
         </div>
       </div>
     );
@@ -136,7 +136,7 @@ export function FilmSeries({ id }: { id: string }) {
               <button type="button" className={w.primary} onClick={() => { setLoadError(null); setReload((n) => n + 1); }}>ลองใหม่</button>
             </>
           )}
-          <Link href="/studio/film">กลับไปหน้าสร้างหนัง</Link>
+          <Link href="/studio/film">กลับไปหน้าภาพยนตร์</Link>
         </div>
       </div>
     );
