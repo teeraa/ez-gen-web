@@ -32,7 +32,12 @@ export interface FilmShot {
   id: string; index: number; seconds: number; start: number; transition: "cut" | "continue";
   characterIds: string[]; locationId: string; propIds: string[]; action: string; camera: string;
   dialogue: FilmLine[]; audio: string; video: FilmShotVideo | null;
+  /** Seconds cut from the clip's start/end in the studio and the export. */
+  trimIn: number; trimOut: number;
 }
+
+/** The episode's music track, mixed under the whole film from 0 s. */
+export interface FilmMusic { name: string; seconds: number; volume: number; url: string | null; expiresAt: string | null }
 
 export interface FilmVideoModel { id: string; label: string; minSeconds: number; maxSeconds: number; audio: boolean; default: boolean; draft: boolean }
 
@@ -46,6 +51,7 @@ export interface FilmEpisode {
   export: FilmExport | null; exportAvailable: boolean;
   /** Clips that can take their characters' current voices without a new video, and the price. */
   redubShots: number; redubPoints: number; redubAvailable: boolean;
+  music: FilmMusic | null;
 }
 
 /** The merged film of an episode. `stale` means a clip changed after it was made. */
@@ -61,7 +67,7 @@ export interface FilmPlan { status: "queued" | "processing" | "failed"; shotId: 
 /** A shot as sent to PUT /shots; a new shot has no id. */
 export interface ShotDraft {
   id?: string; seconds: number; transition: "cut" | "continue"; characterIds: string[]; locationId: string; propIds: string[];
-  action: string; camera: string; dialogue: FilmLine[]; audio: string;
+  action: string; camera: string; dialogue: FilmLine[]; audio: string; trimIn?: number; trimOut?: number;
 }
 
 export interface LibraryAsset { id: string; name: string; description: string; mediaUrl: string }
@@ -96,7 +102,7 @@ const json = (method: string, body: unknown): RequestInit => ({ method, body: JS
 export type VideoKind = "draft" | "full" | "finalize";
 
 function normalize(e: FilmEpisode): FilmEpisode {
-  return { ...e, draftPointsPer5s: e.draftPointsPer5s ?? 0, messages: e.messages ?? [], story: e.story ?? null, plan: e.plan ?? null, planAvailable: e.planAvailable ?? false, export: e.export ?? null, exportAvailable: e.exportAvailable ?? false, redubShots: e.redubShots ?? 0, redubPoints: e.redubPoints ?? 0, redubAvailable: e.redubAvailable ?? false, shots: (e.shots ?? []).map((sh) => (sh.video ? { ...sh, video: { ...sh.video, voice: sh.video.voice ?? "", voiceMessage: sh.video.voiceMessage ?? null } } : sh)), planPoints: e.planPoints ?? 0, targetSeconds: e.targetSeconds ?? 0, elements: (e.elements ?? []).map((el) => ({ ...el, syntheticUrl: el.syntheticUrl ?? null })) };
+  return { ...e, draftPointsPer5s: e.draftPointsPer5s ?? 0, messages: e.messages ?? [], story: e.story ?? null, plan: e.plan ?? null, planAvailable: e.planAvailable ?? false, export: e.export ?? null, exportAvailable: e.exportAvailable ?? false, redubShots: e.redubShots ?? 0, redubPoints: e.redubPoints ?? 0, redubAvailable: e.redubAvailable ?? false, music: e.music ?? null, shots: (e.shots ?? []).map((sh) => ({ ...sh, trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, video: sh.video ? { ...sh.video, voice: sh.video.voice ?? "", voiceMessage: sh.video.voiceMessage ?? null } : null })), planPoints: e.planPoints ?? 0, targetSeconds: e.targetSeconds ?? 0, elements: (e.elements ?? []).map((el) => ({ ...el, syntheticUrl: el.syntheticUrl ?? null })) };
 }
 const id = encodeURIComponent;
 
@@ -114,6 +120,20 @@ export const filmApi = {
     request<FilmElement>(`film/elements/${id(elementId)}/image`, json("POST", { mode, idempotencyKey })),
   plan: (projectId: string, body: { prompt: string; targetSeconds?: number; shotId?: string; idempotencyKey: string }) =>
     request<FilmEpisode>(`film/episodes/${id(projectId)}/plan`, json("POST", body)).then(normalize),
+  /** Sets the episode's music track from an audio file (MP3, WAV, M4A). */
+  uploadMusic: async (projectId: string, file: File, idempotencyKey: string) => {
+    const form = new FormData();
+    form.set("file", file, file.name);
+    form.set("idempotencyKey", idempotencyKey);
+    let response: Response;
+    try { response = await fetch(`/api/proxy/film/episodes/${id(projectId)}/music`, { method: "POST", body: form, cache: "no-store" }); } catch { throw new FilmError("เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่", 0, "NETWORK_ERROR"); }
+    let body: ReturnType<typeof parseEnvelope>;
+    try { body = parseEnvelope(await response.json()); } catch { throw new FilmError("ได้รับข้อมูลไม่สมบูรณ์ กรุณาลองใหม่", response.status, "INVALID_RESPONSE"); }
+    if (!response.ok) throw new FilmError(body.message ?? "อัปโหลดเพลงไม่สำเร็จ", response.status, body.errorCode ?? "UNKNOWN", body.details);
+    return normalize(body.data as FilmEpisode);
+  },
+  updateMusic: (projectId: string, body: { idempotencyKey: string; volume?: number; remove?: boolean }) =>
+    request<FilmEpisode>(`film/episodes/${id(projectId)}/music`, json("PATCH", body)).then(normalize),
   /** Dubs the current voices into every clip whose characters' voices changed. */
   redub: (projectId: string, idempotencyKey: string) =>
     request<FilmEpisode>(`film/episodes/${id(projectId)}/redub`, json("POST", { idempotencyKey })).then(normalize),
@@ -135,8 +155,11 @@ export const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60
 export const KIND_LABEL: Record<ElementKind, string> = { character: "ตัวละคร", location: "สถานที่", prop: "ของ" };
 export const STYLE_LABEL: Record<string, string> = { cinematic: "ซีเนมาติก", realistic: "สมจริง", anime: "อนิเมะ", "3d": "3D", watercolor: "สีน้ำ", clay: "ดินปั้น" };
 
+/** Seconds a shot plays in the film after its trims. */
+export const shotLength = (s: Pick<ShotDraft, "seconds" | "trimIn" | "trimOut">) => Math.max(1, s.seconds - (s.trimIn ?? 0) - (s.trimOut ?? 0));
+
 export function toDraft(s: FilmShot): ShotDraft {
-  return { id: s.id, seconds: s.seconds, transition: s.transition, characterIds: [...s.characterIds], locationId: s.locationId, propIds: [...s.propIds], action: s.action, camera: s.camera, dialogue: s.dialogue.map((l) => ({ ...l })), audio: s.audio };
+  return { id: s.id, seconds: s.seconds, transition: s.transition, characterIds: [...s.characterIds], locationId: s.locationId, propIds: [...s.propIds], action: s.action, camera: s.camera, dialogue: s.dialogue.map((l) => ({ ...l })), audio: s.audio, trimIn: s.trimIn, trimOut: s.trimOut };
 }
 
 /** Elements a shot references that cannot be used for a video yet. */

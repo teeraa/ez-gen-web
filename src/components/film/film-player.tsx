@@ -5,7 +5,8 @@
 // reuses the already-buffered element, and a refreshed signed URL never reloads a playing clip.
 import { useEffect, useRef } from "react";
 
-export interface FilmClip { url: string | null; start: number; seconds: number }
+/** start/seconds place the clip on the film timeline; trimIn is where playback starts inside the file. */
+export interface FilmClip { url: string | null; start: number; seconds: number; trimIn: number }
 
 export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd, label }: {
   clips: FilmClip[];
@@ -31,21 +32,37 @@ export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd
   const currentUrl = clips[index]?.url ?? null;
   const current = path(currentUrl);
   const start = clips[index]?.start ?? 0;
+  const trimIn = clips[index]?.trimIn ?? 0;
+  const length = clips[index]?.seconds ?? 0;
   const next = nextWithClip(index);
   const nextUrl = next >= 0 ? clips[next].url : null;
 
   // Callbacks change every render; effects read the latest ones.
-  const latest = useRef({ onIndex, onTime, onEnd, next });
-  useEffect(() => { latest.current = { onIndex, onTime, onEnd, next }; });
+  const latest = useRef({ onIndex, onTime, onEnd, next, nextTrim: next >= 0 ? clips[next].trimIn : 0 });
+  useEffect(() => { latest.current = { onIndex, onTime, onEnd, next, nextTrim: next >= 0 ? clips[next].trimIn : 0 }; });
+  // The clip whose end was already handled (the trimmed end and the native "ended" both fire).
+  const finished = useRef<string | null>(null);
+  useEffect(() => { finished.current = null; }, [current]);
+  const finish = () => {
+    if (!current || finished.current === current) return;
+    finished.current = current;
+    const n = latest.current.next;
+    if (n < 0) { latest.current.onEnd(); return; }
+    pending.current = latest.current.nextTrim;
+    latest.current.onIndex(n);
+  };
+  const finishRef = useRef(finish);
+  useEffect(() => { finishRef.current = finish; });
 
   const seekToken = useRef(seek.token);
   useEffect(() => {
     if (seek.token === seekToken.current) return;
     seekToken.current = seek.token;
+    finished.current = null;
     const v = current ? videos.current.get(current) : undefined;
-    if (v && v.readyState >= 1) v.currentTime = seek.at;
-    else pending.current = seek.at;
-  }, [seek, current]);
+    if (v && v.readyState >= 1) v.currentTime = trimIn + seek.at;
+    else pending.current = trimIn + seek.at;
+  }, [seek, current, trimIn]);
 
   // Play/pause; while playing, a shot without a clip is skipped.
   useEffect(() => {
@@ -53,11 +70,12 @@ export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd
     if (!playing) { v?.pause(); return; }
     if (!v) {
       const n = latest.current.next;
-      if (n >= 0) { pending.current = 0; latest.current.onIndex(n); } else latest.current.onEnd();
+      if (n >= 0) { pending.current = latest.current.nextTrim; latest.current.onIndex(n); } else latest.current.onEnd();
       return;
     }
+    if (v.currentTime < trimIn - 0.05 && pending.current === null) v.currentTime = trimIn;
     void v.play().catch(() => latest.current.onEnd());
-  }, [playing, current]);
+  }, [playing, current, trimIn]);
 
   // A smooth playhead while playing (timeupdate fires only ~4 times a second).
   useEffect(() => {
@@ -65,12 +83,17 @@ export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd
     let frame = 0;
     const tick = () => {
       const v = videos.current.get(current);
-      if (v) latest.current.onTime(start + v.currentTime);
+      if (v) {
+        const at = Math.max(0, v.currentTime - trimIn);
+        latest.current.onTime(start + Math.min(at, length));
+        // A trimmed end stops the clip before the file ends.
+        if (at >= length - 0.04 && !v.paused) { v.pause(); finishRef.current(); return; }
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, current, start]);
+  }, [playing, current, start, trimIn, length]);
 
   const items = [currentUrl, nextUrl].filter((u): u is string => !!u).filter((u, k, all) => all.findIndex((o) => path(o) === path(u)) === k);
   return (
@@ -104,11 +127,7 @@ export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd
               }
             }}
             onEnded={() => {
-              if (!isCurrent || !playing) return;
-              const n = latest.current.next;
-              if (n < 0) { latest.current.onEnd(); return; }
-              pending.current = 0;
-              latest.current.onIndex(n);
+              if (isCurrent && playing) finish();
             }}
           />
         );

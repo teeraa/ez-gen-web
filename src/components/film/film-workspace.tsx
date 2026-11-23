@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Download, Eye, Film, ImageIcon, Link2, LoaderCircle, MapPin,
-  MessagesSquare, Mic, Package, Pause, Pencil, Play, Plus, RefreshCw, Save, Scissors, Sparkles, Trash2, Users, Wand2, X, ZoomIn,
+  MessagesSquare, Mic, Music, Package, Pause, Pencil, Play, Plus, RefreshCw, Save, Scissors, Sparkles, Trash2, Upload, Users, Wand2, X, ZoomIn,
 } from "lucide-react";
 import { ShotArt } from "@/components/director/shot-art";
 import { useConfirm } from "@/components/director/use-confirm";
@@ -17,10 +17,11 @@ import { ElementEditor, type ElementEditorTarget } from "./element-editor";
 import { FilmExportPanel } from "./film-export-panel";
 import { FilmSteps, NextStep, stepBlockers, type FilmStep } from "./film-steps";
 import { StoryPanel } from "./story-panel";
+import { MusicPreview } from "./music-preview";
 import { characterVoiceLabel } from "@/lib/voice-api";
 import { definiteRejection, finishSubmission, prepareSubmission } from "@/lib/director-submission";
 import {
-  FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, missingElements, toDraft, videoCost,
+  FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, missingElements, shotLength, toDraft, videoCost,
   type ElementKind, type FilmElement, type FilmEpisode, type ShotDraft, type VideoKind,
 } from "@/lib/film-api";
 import f from "./film.module.css";
@@ -56,6 +57,9 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const [seek, setSeek] = useState({ token: 0, at: 0 });
   const [zoom, setZoom] = useState(24);
   const [exportOpen, setExportOpen] = useState(false);
+  // Music volume while the slider moves; saved when it is released.
+  const [musicVolume, setMusicVolume] = useState<number | null>(null);
+  const musicInput = useRef<HTMLInputElement>(null);
   // window.confirm is silently suppressed in some embedded browsers (e.g. the Claude browser pane).
   const [confirm, confirmDialog] = useConfirm();
   const [quality, setQuality] = useState<"draft" | "full">("draft");
@@ -144,7 +148,8 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const draftOn = !!modelInfo?.draft && ep.draftPointsPer5s > 0;
   const newKind: VideoKind = draftOn && quality === "draft" ? "draft" : "full";
   const rate = (kind: VideoKind) => (kind === "draft" ? ep.draftPointsPer5s : ep.videoPointsPer5s);
-  const total = shots.reduce((n, s) => n + s.seconds, 0);
+  // Film length after studio trims.
+  const total = shots.reduce((n, s) => n + shotLength(s), 0);
   // Export uses every finished clip, including ones made before the shot was last edited.
   const readyClips = ep.shots.filter((s) => s.video?.status === "succeeded").length;
   const title = `ตอนที่ ${ep.episodeNumber ?? "?"}${ep.episodeTitle ? ` · ${ep.episodeTitle}` : ""}`;
@@ -227,6 +232,29 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
       {legacyClips > 0 && <p data-tone="warn"><AlertCircle size={14} aria-hidden /> <span>{legacyClips} คลิปสร้างก่อนระบบแยกเสียงพากย์ เปลี่ยนเสียงในคลิปเหล่านี้ไม่ได้ ถ้าต้องการเสียงใหม่ต้องสร้างวิดีโอช็อตนั้นใหม่</span></p>}
     </div>
   );
+  const uploadMusic = (file: File) => run("music", async () => {
+    if (file.size > 30 * 1024 * 1024) throw new FilmError("ไฟล์เพลงใหญ่เกิน 30 MB", 0, "FILE_TOO_LARGE");
+    const next = await paid(`film-music:${ep.projectId}`, { name: file.name, size: file.size }, (key) => filmApi.uploadMusic(ep.projectId, file, key));
+    setEp(next);
+    setMusicVolume(null);
+    note(`เพิ่มเพลง ${next.music?.name ?? file.name} แล้ว`);
+  });
+  const saveMusicVolume = () => {
+    const volume = musicVolume;
+    if (volume === null || !ep.music || volume === ep.music.volume) return;
+    void run("music", async () => {
+      const next = await paid(`film-music-volume:${ep.projectId}`, { volume }, (key) => filmApi.updateMusic(ep.projectId, { idempotencyKey: key, volume }));
+      setEp(next);
+      setMusicVolume(null);
+    });
+  };
+  const removeMusic = () => run("music", async () => {
+    if (!(await confirm("ลบเพลงประกอบ?", "เพลงจะหายจากภาพยนตร์ทั้งเรื่อง", "ลบ"))) return;
+    const next = await paid(`film-music-remove:${ep.projectId}`, { remove: true }, (key) => filmApi.updateMusic(ep.projectId, { idempotencyKey: key, remove: true }));
+    setEp(next);
+    setMusicVolume(null);
+    note("ลบเพลงประกอบแล้ว");
+  });
   const removeElement = (el: FilmElement) => run(`remove:${el.id}`, async () => {
     if (!(await confirm(`ลบ${KIND_LABEL[el.kind]} “${el.name}”?`, "ช็อตที่ใช้อยู่จะต้องเลือกใหม่", "ลบ"))) return;
     await filmApi.removeElement(el.id);
@@ -489,7 +517,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
             const v = saved?.video ?? null;
             const missing = missingElements(s, ep.elements);
             const noVoice = voiceless(s);
-            const starts = shots.map((_, k) => shots.slice(0, k).reduce((n, o) => n + o.seconds, 0));
+            const starts = shots.map((_, k) => shots.slice(0, k).reduce((n, o) => n + shotLength(o), 0));
             const start = starts[i];
             const lockedByVideo = active(v?.status);
             const speakers = ep.elements.filter((e) => s.characterIds.includes(e.id));
@@ -515,13 +543,13 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
             const STATE_LABEL = { done: "มีวิดีโอแล้ว", draft: "มี draft แล้ว", stale: "วิดีโอเก่า ต้องสร้างใหม่", work: "กำลังสร้าง", error: "สร้างไม่สำเร็จ", idle: "ยังไม่มีวิดีโอ" } as const;
             const clips = shots.map((sh, k) => {
               const sv = videoOf(sh);
-              return { url: sv?.status === "succeeded" ? sv.url : null, start: starts[k], seconds: sh.seconds };
+              return { url: sv?.status === "succeeded" ? sv.url : null, start: starts[k], seconds: shotLength(sh), trimIn: sh.trimIn ?? 0 };
             });
             const hasClip = clips.some((c) => c.url);
             // Seek to a time in the film: selects the shot under it.
             const seekTo = (t: number) => {
               const at = Math.min(Math.max(0, t), total);
-              let k = starts.findIndex((st, j) => at < st + shots[j].seconds);
+              let k = starts.findIndex((st, j) => at < st + shotLength(shots[j]));
               if (k < 0) k = shots.length - 1;
               setSel(k);
               setTime(at);
@@ -543,6 +571,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   {voiceBanner}
                   <div className={x.screen}>
                     <div className={x.player} data-ratio={ep.aspectRatio} onClick={() => { if (hasClip) togglePlay(); }}>
+                      {ep.music?.url && <MusicPreview url={ep.music.url} volume={musicVolume ?? ep.music.volume} playing={playing} time={time} seekToken={seek.token} />}
                       <FilmPlayer clips={clips} index={i} playing={playing} seek={seek} onIndex={setSel} onTime={setTime} onEnd={() => setPlaying(false)} label={`วิดีโอช็อต ${i + 1}`} />
                       {!v?.url && (
                         <div className={x.playerEmpty}>
@@ -558,7 +587,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
 
                 <aside className={x.inspector} aria-label={`รายละเอียดฉาก ${sceneOf + 1} ช็อต ${shotInScene}`}>
                   <header className={x.inspHead}>
-                    <div><strong>ฉาก {sceneOf + 1} · ช็อต {shotInScene}</strong><small>ช็อตที่ {i + 1} · {clock(start)}–{clock(start + s.seconds)}{s.locationId ? ` · #${elName(s.locationId) ?? ""}` : ""}</small></div>
+                    <div><strong>ฉาก {sceneOf + 1} · ช็อต {shotInScene}</strong><small>ช็อตที่ {i + 1} · {clock(Math.floor(start))}–{clock(Math.floor(start + shotLength(s)))}{s.locationId ? ` · #${elName(s.locationId) ?? ""}` : ""}</small></div>
                     <span className={x.inspTools}>
                       {s.id && ep.planAvailable && <button type="button" className={x.icon} aria-pressed={target === s.id} disabled={dirty || lockedByVideo} title={dirty ? "บันทึกช็อตก่อน" : "พิมพ์ในแชตเพื่อแก้เฉพาะช็อตนี้"} aria-label="แก้ช็อตนี้ด้วยแชต" onClick={() => { setTarget(target === s.id ? null : s.id ?? null); document.getElementById("film-chat")?.focus(); }}><MessagesSquare size={15} /></button>}
                       <button type="button" className={x.icon} aria-label="ย้ายไปก่อนหน้า" title="ย้ายไปก่อนหน้า" disabled={i === 0} onClick={() => move(i, -1)}><ChevronLeft size={16} /></button>
@@ -600,10 +629,19 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                         </button>
                       </div>
                       <label className={x.inline}>ความยาว
-                        <select value={s.seconds} disabled={lockedByVideo} onChange={(e) => edit(i, { seconds: Number(e.target.value) })}>
+                        <select value={s.seconds} disabled={lockedByVideo} onChange={(e) => { const n = Number(e.target.value); const fits = (s.trimIn ?? 0) + (s.trimOut ?? 0) <= n - 1; edit(i, { seconds: n, ...(fits ? {} : { trimIn: 0, trimOut: 0 }) }); }}>
                           {Array.from({ length: SECONDS_MAX - SECONDS_MIN + 1 }, (_, k) => SECONDS_MIN + k).map((n) => <option key={n} value={n}>{n} วินาที</option>)}
                         </select>
                       </label>
+                        <div className={x.trims}>
+                          <label>ตัดหัว (วินาที)
+                            <input type="number" min={0} step={0.1} max={Math.max(0, s.seconds - 1 - (s.trimOut ?? 0))} value={s.trimIn ?? 0} onChange={(e) => { const n = Math.round(Math.max(0, Number(e.target.value) || 0) * 10) / 10; if (n + (s.trimOut ?? 0) <= s.seconds - 1) edit(i, { trimIn: n }); }} />
+                          </label>
+                          <label>ตัดท้าย (วินาที)
+                            <input type="number" min={0} step={0.1} max={Math.max(0, s.seconds - 1 - (s.trimIn ?? 0))} value={s.trimOut ?? 0} onChange={(e) => { const n = Math.round(Math.max(0, Number(e.target.value) || 0) * 10) / 10; if (n + (s.trimIn ?? 0) <= s.seconds - 1) edit(i, { trimOut: n }); }} />
+                          </label>
+                        </div>
+                        <p className={x.hint}>ตัดหัวท้ายไม่ต้องสร้างวิดีโอใหม่ ใช้ทั้งตอนเล่นและตอน export ลากขอบช็อตใน timeline ก็ได้</p>
                     </section>
 
                     <section className={x.block}>
@@ -703,6 +741,21 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                       </button>
                     )}
                     <span className={x.spacer} />
+                    <input ref={musicInput} type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a" hidden onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) uploadMusic(file); }} />
+                    {ep.music ? (
+                      <span className={x.musicCtl}>
+                        <Music size={14} aria-hidden /><span title={ep.music.name}>{ep.music.name}</span>
+                        <input type="range" min={0} max={100} value={Math.round((musicVolume ?? ep.music.volume) * 100)} disabled={dirty || busy.includes("music")} aria-label="ระดับเสียงเพลง"
+                          onChange={(e) => setMusicVolume(Number(e.target.value) / 100)}
+                          onPointerUp={() => saveMusicVolume()} onKeyUp={() => saveMusicVolume()} onBlur={() => saveMusicVolume()} />
+                        <button type="button" className={x.icon} aria-label="เปลี่ยนเพลง" title="เปลี่ยนเพลง" disabled={dirty || busy.includes("music")} onClick={() => musicInput.current?.click()}><Upload size={13} /></button>
+                        <button type="button" className={x.icon} aria-label="ลบเพลง" title="ลบเพลง" disabled={dirty || busy.includes("music")} onClick={removeMusic}><Trash2 size={13} /></button>
+                      </span>
+                    ) : (
+                      <button type="button" className={x.bulkBtn} disabled={dirty || busy.includes("music")} title={dirty ? "บันทึกช็อตก่อน" : "เพลงประกอบทั้งเรื่อง (MP3, WAV, M4A ไม่เกิน 30 MB)"} onClick={() => musicInput.current?.click()}>
+                        {busy.includes("music") ? <LoaderCircle size={14} className={f.spin} /> : <Music size={14} />} เพิ่มเพลง
+                      </button>
+                    )}
                     <label className={x.zoom} title="ซูม timeline"><ZoomIn size={14} aria-hidden /><input type="range" min={8} max={64} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="ซูม timeline" /></label>
                     <button type="button" className={f.primary} onClick={() => setExportOpen(true)}>
                       {exporting ? <LoaderCircle size={15} className={f.spin} /> : xp?.status === "succeeded" && !xp.stale ? <Download size={15} /> : <Film size={15} />}
@@ -713,18 +766,20 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                     shots={shots.map((sh, k) => {
                       const sc = scenes.findIndex((g) => g.includes(k));
                       return {
-                        key: sh.id ?? `new-${k}`, start: starts[k], seconds: sh.seconds, scene: sc, continues: scenes[sc][0] !== k,
+                        key: sh.id ?? `new-${k}`, start: starts[k], seconds: shotLength(sh), full: sh.seconds, trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, scene: sc, continues: scenes[sc][0] !== k,
                         state: stateOf(sh), label: `ฉาก ${sc + 1} ช็อต ${scenes[sc].indexOf(k) + 1} · ${sh.seconds} วินาที · ${STATE_LABEL[stateOf(sh)]}`, thumb: thumbOf(sh),
                         lines: sh.dialogue.filter((l) => l.line.trim()).map((l) => ({ speaker: elName(l.speakerId) ?? "?", text: l.line })),
                         audio: sh.audio, silent: sh.dialogue.length > 0,
                       };
                     })}
-                    scenes={scenes.map((g) => ({ start: starts[g[0]], seconds: g.reduce((n, k) => n + shots[k].seconds, 0), title: shots[g[0]].locationId ? `#${elName(shots[g[0]].locationId) ?? ""}` : "", last: g[g.length - 1] }))}
+                    scenes={scenes.map((g) => ({ start: starts[g[0]], seconds: g.reduce((n, k) => n + shotLength(shots[k]), 0), title: shots[g[0]].locationId ? `#${elName(shots[g[0]].locationId) ?? ""}` : "", last: g[g.length - 1] }))}
                     total={total} sel={i} time={time} zoom={zoom} playing={playing} canAdd={shots.length < 40}
                     onSelect={(k) => { setPlaying(false); seekTo(starts[k]); }}
                     onSeek={seekTo}
                     onAddToScene={(last) => { setPlaying(false); addShotToScene(last); }}
                     onAddScene={() => { setPlaying(false); addShot(); }}
+                    music={ep.music ? { name: ep.music.name, seconds: ep.music.seconds, volume: musicVolume ?? ep.music.volume } : null}
+                    onTrim={(k, trimIn, trimOut) => { setPlaying(false); edit(k, { trimIn, trimOut }); }}
                   />
                 </div>
 

@@ -1,14 +1,16 @@
 "use client";
-// The studio timeline: one row each for scenes, shot clips, dubbed dialogue and sound effects,
-// laid out in seconds like the AI editor. Clicking seeks; the playhead follows playback.
+// The studio timeline: one row each for scenes, shot clips, dubbed dialogue, sound effects and
+// music, laid out in seconds like the AI editor. Clicking seeks; the playhead follows playback; the
+// selected shot has handles that trim its clip's start and end (ripple: later shots move).
 import { Fragment, useEffect, useRef, type ReactNode } from "react";
-import { Link2, Plus } from "lucide-react";
+import { Link2, Music, Plus } from "lucide-react";
 import x from "./film-work.module.css";
 
 export type ShotState = "done" | "draft" | "stale" | "work" | "error" | "idle";
 
 export interface TimelineShot {
-  key: string; start: number; seconds: number; scene: number; continues: boolean;
+  /** start/seconds are after trims; full is the clip's whole length. */
+  key: string; start: number; seconds: number; full: number; trimIn: number; trimOut: number; scene: number; continues: boolean;
   state: ShotState; label: string; thumb: ReactNode;
   lines: { speaker: string; text: string }[];
   /** Sound effects the model adds; silent shots (with dubbed dialogue) get none. */
@@ -16,19 +18,30 @@ export interface TimelineShot {
 }
 export interface TimelineScene { start: number; seconds: number; title: string; last: number }
 
-const LANES = [["ruler", ""], ["scene", "ฉาก"], ["video", "วิดีโอ"], ["dialogue", "บทพูด"], ["audio", "เสียงประกอบ"]] as const;
+const LANES = [["ruler", ""], ["scene", "ฉาก"], ["video", "วิดีโอ"], ["dialogue", "บทพูด"], ["audio", "เสียงประกอบ"], ["music", "เพลง"]] as const;
+const round = (n: number) => Math.round(n * 10) / 10;
 // Matches the dub mix: lines start 0.4 s into the clip with 0.25 s gaps, about 12 Thai characters a second.
 const DUB_LEAD = 0.4, DUB_GAP = 0.25, DUB_RATE = 12;
 const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 
-export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, canAdd, onSelect, onSeek, onAddToScene, onAddScene }: {
+export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, canAdd, music, onSelect, onSeek, onAddToScene, onAddScene, onTrim }: {
   shots: TimelineShot[]; scenes: TimelineScene[]; total: number; sel: number; time: number;
   /** Pixels per second. */
   zoom: number; playing: boolean; canAdd: boolean;
   onSelect: (i: number) => void; onSeek: (t: number) => void;
   onAddToScene: (lastShot: number) => void; onAddScene: () => void;
+  music: { name: string; seconds: number; volume: number } | null;
+  onTrim: (i: number, trimIn: number, trimOut: number) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
+  const cur = shots[sel];
+  // Trims keep at least one second of the clip.
+  const setTrim = (side: "in" | "out", value: number, base: { trimIn: number; trimOut: number }) => {
+    if (!cur) return;
+    const room = cur.full - 1;
+    if (side === "in") onTrim(sel, Math.min(Math.max(0, round(value)), room - base.trimOut), base.trimOut);
+    else onTrim(sel, base.trimIn, Math.min(Math.max(0, round(value)), room - base.trimIn));
+  };
   const width = Math.max(total + 6, 30) * zoom;
   const step = zoom >= 48 ? 1 : zoom >= 20 ? 5 : 10;
   const ticks = Array.from({ length: Math.floor(width / zoom / step) + 1 }, (_, k) => k * step);
@@ -83,15 +96,21 @@ export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, c
                 </button>
               </Fragment>
             ))}
+            {cur && (["in", "out"] as const).map((side) => (
+              <TrimHandle key={side} side={side} zoom={zoom} left={(side === "in" ? cur.start : cur.start + cur.seconds) * zoom}
+                value={side === "in" ? cur.trimIn : cur.trimOut} max={cur.full - 1 - (side === "in" ? cur.trimOut : cur.trimIn)}
+                onChange={(v) => setTrim(side, v, cur)} />
+            ))}
             <button type="button" className={x.tlAddScene} style={{ left: total * zoom + 6 }} disabled={!canAdd} onClick={onAddScene}><Plus size={13} /> ฉาก</button>
           </div>
 
           <div className={x.tlLane} data-lane="dialogue">
             {shots.flatMap((sh, k) => {
-              let at = sh.start + DUB_LEAD;
+              // Lines are placed from the clip's own start, so a start trim moves them earlier.
+              let at = sh.start - sh.trimIn + DUB_LEAD;
               return sh.lines.map((l, j) => {
                 const len = Math.max(0.8, l.text.length / DUB_RATE);
-                const left = Math.min(at, sh.start + sh.seconds - 0.5);
+                const left = Math.min(Math.max(at, sh.start), sh.start + sh.seconds - 0.5);
                 const w = Math.max(0.5, Math.min(len, sh.start + sh.seconds - left));
                 at += len + DUB_GAP;
                 return (
@@ -111,9 +130,42 @@ export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, c
             ))}
           </div>
 
+          <div className={x.tlLane} data-lane="music">
+            {music && (
+              <span className={x.tlMusic} style={{ left: 0, width: Math.min(music.seconds, total) * zoom }} title={`${music.name} · ระดับเสียง ${Math.round(music.volume * 100)}%`}>
+                <Music size={11} aria-hidden /> {music.name} · {Math.round(music.volume * 100)}%
+              </span>
+            )}
+          </div>
+
           <div className={x.tlPlayhead} style={{ left: time * zoom }} aria-hidden />
         </div>
       </div>
     </div>
+  );
+}
+
+/** A draggable (and arrow-key) handle at the start or end of the selected shot. */
+function TrimHandle({ side, left, value, max, zoom, onChange }: { side: "in" | "out"; left: number; value: number; max: number; zoom: number; onChange: (value: number) => void }) {
+  const drag = useRef<{ x: number; value: number } | null>(null);
+  // Moving right cuts more at the start and less at the end.
+  const sign = side === "in" ? 1 : -1;
+  return (
+    <span className={x.tlHandle} data-side={side} style={{ left }} role="slider" tabIndex={0}
+      aria-label={side === "in" ? "ตัดหัวช็อต (วินาที)" : "ตัดท้ายช็อต (วินาที)"} aria-valuemin={0} aria-valuemax={Math.max(0, max)} aria-valuenow={value}
+      title={`${side === "in" ? "ตัดหัว" : "ตัดท้าย"} ${value} วิ — ลากเพื่อปรับ`}
+      onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, value }; }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (d) onChange(d.value + (sign * (e.clientX - d.x)) / zoom);
+      }}
+      onPointerUp={() => { drag.current = null; }}
+      onPointerCancel={() => { drag.current = null; }}
+      onKeyDown={(e) => {
+        const dir = e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 0;
+        if (!dir) return;
+        e.preventDefault();
+        onChange(value + sign * dir * (e.shiftKey ? 0.5 : 0.1));
+      }} />
   );
 }
