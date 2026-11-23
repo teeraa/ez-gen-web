@@ -2,17 +2,19 @@
 // ภาพยนตร์ — one episode, wired to the film API. Left: chat with the planning assistant (story,
 // elements and shots, or one shot). Right: three steps — story, elements (image + voice), studio
 // (scenes and shots with per-shot reference-to-video, then the whole film).
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  AlertCircle, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Eye, Film, ImageIcon, Link2, LoaderCircle, MapPin,
-  MessagesSquare, Mic, Package, Pencil, Play, Plus, RefreshCw, Save, Scissors, Sparkles, Trash2, Users, Wand2, X,
+  AlertCircle, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Download, Eye, Film, ImageIcon, Link2, LoaderCircle, MapPin,
+  MessagesSquare, Mic, Package, Pause, Pencil, Play, Plus, RefreshCw, Save, Scissors, Sparkles, Trash2, Users, Wand2, X, ZoomIn,
 } from "lucide-react";
 import { ShotArt } from "@/components/director/shot-art";
 import { useConfirm } from "@/components/director/use-confirm";
-import { ShotPlayer } from "./shot-player";
+import { CreateModal } from "@/components/director/modal";
+import { FilmPlayer } from "./film-player";
+import { FilmTimeline, type ShotState } from "./film-timeline";
 import { ElementEditor, type ElementEditorTarget } from "./element-editor";
-import { FilmExportPanel, FILM_EXPORT_ID } from "./film-export-panel";
+import { FilmExportPanel } from "./film-export-panel";
 import { FilmSteps, NextStep, stepBlockers, type FilmStep } from "./film-steps";
 import { StoryPanel } from "./story-panel";
 import { characterVoiceLabel } from "@/lib/voice-api";
@@ -48,8 +50,12 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const [prompt, setPrompt] = useState("");
   const [target, setTarget] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
-  const [continuous, setContinuous] = useState(true);
-  const [playToken, setPlayToken] = useState(0);
+  // Studio playback: the playhead in seconds from the film start, and jumps inside the current clip.
+  const [playing, setPlaying] = useState(false);
+  const [time, setTime] = useState(0);
+  const [seek, setSeek] = useState({ token: 0, at: 0 });
+  const [zoom, setZoom] = useState(24);
+  const [exportOpen, setExportOpen] = useState(false);
   // window.confirm is silently suppressed in some embedded browsers (e.g. the Claude browser pane).
   const [confirm, confirmDialog] = useConfirm();
   const [quality, setQuality] = useState<"draft" | "full">("draft");
@@ -385,7 +391,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
           studio: `${shots.length} ช็อต · ${clock(total)} · ${ep.export?.status === "succeeded" ? (ep.export.stale ? "มีคลิปใหม่ รวมใหม่ได้" : "รวมแล้ว") : active(ep.export?.status) ? `กำลังรวม ${ep.export?.progress ?? 0}%` : `${readyClips} คลิปพร้อม`}`,
         }} />
 
-        <div className={f.body}>
+        <div className={f.body} data-studio={(tab === "studio" && shots.length > 0) || undefined}>
           {notice && <div role="alert" className={x.alert}><AlertCircle size={16} /> {notice} <button type="button" aria-label="ปิด" onClick={() => setNotice(null)}><X size={14} /></button></div>}
 
           {tab === "story" && (
@@ -471,7 +477,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   <div className={x.shotEmpty}>
                     <Clapperboard aria-hidden />
                     <h3>ยังไม่มีช็อต</h3>
-                    <p>เล่าไอเดียในแชตทางซ้าย ผู้ช่วยจะแตกเรื่องเป็นฉากและช็อตให้ หรือเพิ่มช็อตเองก็ได้</p>
+                    <p>เล่าไอเดียในแชต ผู้ช่วยจะแตกเรื่องเป็นฉากและช็อตให้ หรือเพิ่มช็อตเองก็ได้</p>
                     <button type="button" className={f.secondary} onClick={addShot}><Plus size={16} /> เพิ่มช็อตเอง</button>
                   </div>
                 </div>
@@ -483,7 +489,8 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
             const v = saved?.video ?? null;
             const missing = missingElements(s, ep.elements);
             const noVoice = voiceless(s);
-            const start = shots.slice(0, i).reduce((n, o) => n + o.seconds, 0);
+            const starts = shots.map((_, k) => shots.slice(0, k).reduce((n, o) => n + o.seconds, 0));
+            const start = starts[i];
             const lockedByVideo = active(v?.status);
             const speakers = ep.elements.filter((e) => s.characterIds.includes(e.id));
             const outOfRange = !!modelInfo && (s.seconds < modelInfo.minSeconds || s.seconds > modelInfo.maxSeconds);
@@ -492,113 +499,74 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
             const scenes: number[][] = [];
             shots.forEach((sh, k) => { if (k === 0 || sh.transition === "cut") scenes.push([k]); else scenes[scenes.length - 1].push(k); });
             const sceneOf = scenes.findIndex((sc) => sc.includes(i));
+            const shotInScene = scenes[sceneOf].indexOf(i) + 1;
             const elName = (id: string) => ep.elements.find((e) => e.id === id)?.name;
-            const stateOf = (sh: ShotDraft) => {
-              const sv = sh.id ? ep.shots.find((o) => o.id === sh.id)?.video : null;
+            const videoOf = (sh: ShotDraft) => (sh.id ? ep.shots.find((o) => o.id === sh.id)?.video ?? null : null);
+            const stateOf = (sh: ShotDraft): ShotState => {
+              const sv = videoOf(sh);
               return sv?.status === "succeeded" ? (sv.stale ? "stale" : sv.draft ? "draft" : "done") : active(sv?.status) ? "work" : sv?.status === "failed" ? "error" : "idle";
             };
             const thumbOf = (sh: ShotDraft) => {
-              const sv = sh.id ? ep.shots.find((o) => o.id === sh.id)?.video : null;
+              const sv = videoOf(sh);
               if (sv?.status === "succeeded" && sv.url) return <video src={`${sv.url}#t=0.1`} muted playsInline preload="metadata" aria-hidden />;
               const el = ep.elements.find((e) => e.id === sh.locationId) ?? ep.elements.find((e) => sh.characterIds.includes(e.id));
               return <ShotArt url={el?.imageUrl} label={el?.name ?? "ช็อต"} />;
             };
             const STATE_LABEL = { done: "มีวิดีโอแล้ว", draft: "มี draft แล้ว", stale: "วิดีโอเก่า ต้องสร้างใหม่", work: "กำลังสร้าง", error: "สร้างไม่สำเร็จ", idle: "ยังไม่มีวิดีโอ" } as const;
+            const clips = shots.map((sh, k) => {
+              const sv = videoOf(sh);
+              return { url: sv?.status === "succeeded" ? sv.url : null, start: starts[k], seconds: sh.seconds };
+            });
+            const hasClip = clips.some((c) => c.url);
+            // Seek to a time in the film: selects the shot under it.
+            const seekTo = (t: number) => {
+              const at = Math.min(Math.max(0, t), total);
+              let k = starts.findIndex((st, j) => at < st + shots[j].seconds);
+              if (k < 0) k = shots.length - 1;
+              setSel(k);
+              setTime(at);
+              setSeek((cur) => ({ token: cur.token + 1, at: at - starts[k] }));
+            };
+            const togglePlay = () => {
+              if (playing) { setPlaying(false); return; }
+              if (time >= total - 0.05) seekTo(0);
+              setPlaying(true);
+            };
+            const xp = ep.export;
+            const exporting = active(xp?.status) || busy.includes("export");
             return (
-              <div className={f.panel}>
-                {voiceBanner}
-                <div className={x.shotBar}>
-                  <label className={x.model}>
-                    <Film size={14} aria-hidden />
-                    <select value={videoModel} onChange={(e) => setModel(e.target.value)} aria-label="โมเดลวิดีโอ">
-                      {ep.videoModels.map((m) => <option key={m.id} value={m.id}>{m.label} · {m.minSeconds}–{m.maxSeconds} วิ{m.audio ? " · มีเสียง" : ""}</option>)}
-                    </select>
-                  </label>
-                  <div className={x.quality} role="radiogroup" aria-label="คุณภาพตอนสร้าง">
-                    <button type="button" role="radio" aria-checked={newKind === "draft"} disabled={!draftOn} title={draftOn ? `ดูตัวอย่าง 480p ก่อน ${ep.draftPointsPer5s} แต้ม / 5 วิ ชอบแล้วค่อยทำตัวเต็ม` : "โมเดลนี้ไม่มีโหมด draft"} onClick={() => setQuality("draft")}>Draft 480p</button>
-                    <button type="button" role="radio" aria-checked={newKind === "full"} title={`${ep.videoPointsPer5s} แต้ม / 5 วิ`} onClick={() => setQuality("full")}>ตัวเต็ม {ep.resolution}</button>
-                  </div>
-                  <span className={f.muted}>{rate(newKind)} แต้ม / 5 วิ · คงเหลือ {ep.balance}</span>
-                  <span className={x.spacer} />
-                  <button type="button" className={x.bulkBtn} onClick={() => document.getElementById(FILM_EXPORT_ID)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-                    <Film size={14} /> ภาพยนตร์ทั้งเรื่อง
-                  </button>
-                  {finalShots.length > 0 && !dirty && (
-                    <button type="button" className={x.bulkBtn} disabled={busy.includes("bulk-finalize")} onClick={finalizeAll}>
-                      <Sparkles size={14} /> ทำตัวเต็มทุก draft ({finalShots.length}) · {bulkFinalCost} แต้ม
-                    </button>
-                  )}
-                  {readyShots.length > 0 && !dirty && (
-                    <button type="button" className={x.bulkBtn} disabled={busy.includes("bulk-videos")} onClick={videoAll}>
-                      <Play size={14} /> {newKind === "draft" ? "draft" : "สร้าง"}ทุกช็อตที่พร้อม ({readyShots.length}) · {bulkVideoCost} แต้ม
-                    </button>
-                  )}
-                </div>
-
-                <div className={x.strip} role="tablist" aria-label={`ฉากและช็อต · รวม ${clock(total)}`}>
-                  {scenes.map((sc, n) => (
-                    <div key={n} className={x.scene} data-current={n === sceneOf}>
-                      <div className={x.sceneHead}>
-                        <strong>ฉาก {n + 1}</strong>
-                        {shots[sc[0]].locationId && <span>#{elName(shots[sc[0]].locationId)}</span>}
-                      </div>
-                      <div className={x.sceneShots}>
-                        {sc.map((k, j) => (
-                          <Fragment key={shots[k].id ?? `new-${k}`}>
-                            {j > 0 && <span className={x.joint} title="ต่อเนื่องจากเฟรมสุดท้ายของช็อตก่อนหน้า"><Link2 size={12} aria-hidden /></span>}
-                            <button type="button" role="tab" aria-selected={k === i} aria-label={`ช็อต ${k + 1} · ${shots[k].seconds} วินาที · ${STATE_LABEL[stateOf(shots[k])]}`} className={x.thumb} data-ratio={ep.aspectRatio} onClick={() => setSel(k)}>
-                              <span className={x.thumbArt}>{thumbOf(shots[k])}</span>
-                              <span className={x.thumbNo}>{k + 1}</span>
-                              <span className={x.thumbDur}>{shots[k].seconds} วิ</span>
-                              <i className={x.dot} data-state={stateOf(shots[k])} />
-                            </button>
-                          </Fragment>
-                        ))}
-                        <button type="button" className={x.sceneAdd} disabled={shots.length >= 40} title={`เพิ่มช็อตในฉาก ${n + 1} (ต่อจากช็อตสุดท้ายของฉาก)`} aria-label={`เพิ่มช็อตในฉาก ${n + 1}`} onClick={() => addShotToScene(sc[sc.length - 1])}><Plus size={14} /></button>
-                      </div>
+              <div className={x.studio} onKeyDown={(e) => {
+                const tag = (e.target as HTMLElement).tagName;
+                if (e.key === " " && !["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(tag)) { e.preventDefault(); if (hasClip) togglePlay(); }
+              }}>
+                <div className={x.studioMain}>
+                  {voiceBanner}
+                  <div className={x.screen}>
+                    <div className={x.player} data-ratio={ep.aspectRatio} onClick={() => { if (hasClip) togglePlay(); }}>
+                      <FilmPlayer clips={clips} index={i} playing={playing} seek={seek} onIndex={setSel} onTime={setTime} onEnd={() => setPlaying(false)} label={`วิดีโอช็อต ${i + 1}`} />
+                      {!v?.url && (
+                        <div className={x.playerEmpty}>
+                          <span className={x.playerBg} aria-hidden>{thumbOf(s)}</span>
+                          {active(v?.status) ? <><LoaderCircle className={f.spin} /> <strong>{v?.progress ?? 0}%</strong><small>{v?.status === "queued" ? "รอคิว" : v?.mode === "finalize" ? "ทำตัวเต็มจาก draft" : v?.mode === "continue" ? "ต่อจากเฟรมสุดท้ายของช็อตก่อน" : "สร้างจากภาพอ้างอิง"}{v?.draft ? " · draft 480p" : ""}</small></> : <><Film /><small>ยังไม่มีวิดีโอ</small></>}
+                        </div>
+                      )}
+                      <span className={x.stageTag}>ฉาก {sceneOf + 1} · ช็อต {shotInScene} · {clock(Math.floor(time))}{v?.draft && v.status === "succeeded" && <b className={x.draftTag}>DRAFT 480p</b>}</span>
+                      {active(v?.status) && <div className={x.progress}><i style={{ width: `${v?.progress ?? 0}%` }} /></div>}
                     </div>
-                  ))}
-                  <button type="button" className={x.addThumb} disabled={shots.length >= 40} onClick={addShot}><Plus size={18} /><span>เพิ่มฉาก</span></button>
+                  </div>
                 </div>
 
-                <section className={x.stage} aria-label={`ตัวอย่างช็อต ${i + 1}`}>
-                  <div className={x.player} data-ratio={ep.aspectRatio}>
-                    <ShotPlayer
-                        clips={shots.map((sh) => {
-                          const sv = sh.id ? ep.shots.find((o) => o.id === sh.id)?.video : null;
-                          return { url: sv?.status === "succeeded" ? sv.url : null };
-                        })}
-                        index={i}
-                        onIndex={setSel}
-                        continuous={continuous}
-                        startToken={playToken}
-                        label={(k) => `วิดีโอช็อต ${k + 1}`}
-                      />
-                    {!v?.url && (
-                      <div className={x.playerEmpty}>
-                        <span className={x.playerBg} aria-hidden>{thumbOf(s)}</span>
-                        {active(v?.status) ? <><LoaderCircle className={f.spin} /> <strong>{v?.progress ?? 0}%</strong><small>{v?.status === "queued" ? "รอคิว" : v?.mode === "finalize" ? "ทำตัวเต็มจาก draft" : v?.mode === "continue" ? "ต่อจากเฟรมสุดท้ายของช็อตก่อน" : "สร้างจากภาพอ้างอิง"}{v?.draft ? " · draft 480p" : ""}</small></> : <><Film /><small>ยังไม่มีวิดีโอ</small></>}
-                      </div>
-                    )}
-                    <span className={x.stageTag}>ช็อต {i + 1} · {clock(start)}–{clock(start + s.seconds)} · ฉาก {sceneOf + 1}{v?.draft && v.status === "succeeded" && <b className={x.draftTag}>DRAFT 480p</b>}</span>
-                    {active(v?.status) && <div className={x.progress}><i style={{ width: `${v?.progress ?? 0}%` }} /></div>}
-                  </div>
-                  <div className={x.stageBar}>
-                    {s.id && ep.planAvailable && <button type="button" className={x.act} aria-pressed={target === s.id} disabled={dirty || lockedByVideo} title={dirty ? "บันทึกช็อตก่อน" : "พิมพ์ในแชตเพื่อแก้เฉพาะช็อตนี้"} onClick={() => { setTarget(target === s.id ? null : s.id ?? null); document.getElementById("film-chat")?.focus(); }}><MessagesSquare size={13} /> แก้ด้วยแชต</button>}
-                    <button type="button" className={x.icon} aria-label="ย้ายไปก่อนหน้า" title="ย้ายไปก่อนหน้า" disabled={i === 0} onClick={() => move(i, -1)}><ChevronLeft size={16} /></button>
-                    <button type="button" className={x.icon} aria-label="ย้ายไปถัดไป" title="ย้ายไปถัดไป" disabled={i === shots.length - 1} onClick={() => move(i, 1)}><ChevronRight size={16} /></button>
-                    <button type="button" className={x.icon} aria-label="ลบช็อต" title="ลบช็อต" disabled={lockedByVideo} onClick={() => removeShot(i)}><Trash2 size={15} /></button>
-                    <label className={x.autoplay} title="เล่นจบแล้วไปช็อตถัดไปที่มีวิดีโอโดยอัตโนมัติ">
-                      <input type="checkbox" checked={continuous} onChange={(e) => setContinuous(e.target.checked)} /> เล่นต่อเนื่อง
-                    </label>
-                    <button type="button" className={x.act} disabled={!shots.some((sh) => sh.id && ep.shots.find((o) => o.id === sh.id)?.video?.url)} title="เล่นทุกช็อตตั้งแต่ช็อตแรกที่มีวิดีโอ" onClick={() => {
-                      const first = shots.findIndex((sh) => sh.id && ep.shots.find((o) => o.id === sh.id)?.video?.status === "succeeded");
-                      if (first < 0) return;
-                      setContinuous(true);
-                      setSel(first);
-                      setPlayToken((n) => n + 1);
-                    }}><Play size={13} /> เล่นทั้งเรื่อง</button>
-                    <span className={x.spacer} />
+                <aside className={x.inspector} aria-label={`รายละเอียดฉาก ${sceneOf + 1} ช็อต ${shotInScene}`}>
+                  <header className={x.inspHead}>
+                    <div><strong>ฉาก {sceneOf + 1} · ช็อต {shotInScene}</strong><small>ช็อตที่ {i + 1} · {clock(start)}–{clock(start + s.seconds)}{s.locationId ? ` · #${elName(s.locationId) ?? ""}` : ""}</small></div>
+                    <span className={x.inspTools}>
+                      {s.id && ep.planAvailable && <button type="button" className={x.icon} aria-pressed={target === s.id} disabled={dirty || lockedByVideo} title={dirty ? "บันทึกช็อตก่อน" : "พิมพ์ในแชตเพื่อแก้เฉพาะช็อตนี้"} aria-label="แก้ช็อตนี้ด้วยแชต" onClick={() => { setTarget(target === s.id ? null : s.id ?? null); document.getElementById("film-chat")?.focus(); }}><MessagesSquare size={15} /></button>}
+                      <button type="button" className={x.icon} aria-label="ย้ายไปก่อนหน้า" title="ย้ายไปก่อนหน้า" disabled={i === 0} onClick={() => move(i, -1)}><ChevronLeft size={16} /></button>
+                      <button type="button" className={x.icon} aria-label="ย้ายไปถัดไป" title="ย้ายไปถัดไป" disabled={i === shots.length - 1} onClick={() => move(i, 1)}><ChevronRight size={16} /></button>
+                      <button type="button" className={x.icon} aria-label="ลบช็อต" title="ลบช็อต" disabled={lockedByVideo} onClick={() => removeShot(i)}><Trash2 size={15} /></button>
+                    </span>
+                  </header>
+                  <div className={x.inspMake}>
                     <button type="button" className={x.makeBtn} data-tone={v?.canFinalize ? "secondary" : undefined} disabled={!!cannot || lockedByVideo || busy.includes(`video:${s.id}`)} title={cannot || undefined} onClick={() => s.id && makeVideo(s.id, s.seconds, newKind)}>
                       {lockedByVideo ? <><LoaderCircle size={15} className={f.spin} /> กำลังสร้าง</> : <><Play size={15} /> {newKind === "draft" ? (v?.status === "succeeded" ? "draft ใหม่" : "สร้าง draft") : v?.status === "succeeded" ? "สร้างใหม่" : "สร้างวิดีโอ"} · {videoCost(rate(newKind), s.seconds)} แต้ม</>}
                     </button>
@@ -620,95 +588,157 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   {missing.length > 0 && !dirty ? <p className={x.warn}><ImageIcon size={13} /> {missing.map((m) => m.name).join(", ")} ยังไม่มีภาพที่พร้อมใช้ <button type="button" className={x.link} onClick={() => setTab("elements")}>ไปแก้</button></p>
                     : noVoice.length > 0 && !dirty ? <p className={x.warn}><Mic size={13} /> {noVoice.map((m) => m.name).join(", ")} ยังไม่มีเสียง <button type="button" className={x.link} onClick={() => setTab("elements")}>ไปเลือกเสียง</button></p>
                     : cannot && !lockedByVideo && <p className={x.cannot}>{cannot}</p>}
-                </section>
-
-                    <div className={x.fields} role="tabpanel" aria-label={`รายละเอียดช็อต ${i + 1}`}>
-                      <section className={x.block}>
-                        <h4>การเปิดช็อต</h4>
-                        <div className={x.choices} role="radiogroup" aria-label="การต่อภาพ">
-                          <button type="button" role="radio" aria-checked={s.transition === "cut"} className={x.choice} disabled={lockedByVideo} onClick={() => edit(i, { transition: "cut" })}>
-                            <Scissors size={16} aria-hidden /><span><strong>เริ่มฉากใหม่</strong><small>ตัดภาพ เปลี่ยนสถานที่หรือมุมกล้องได้</small></span>
-                          </button>
-                          <button type="button" role="radio" aria-checked={s.transition === "continue"} className={x.choice} disabled={i === 0 || lockedByVideo} onClick={() => edit(i, { transition: "continue" })}>
-                            <Link2 size={16} aria-hidden /><span><strong>ต่อจากช็อต {i || "ก่อน"}</strong><small>{i === 0 ? "ช็อตแรกต้องเริ่มฉากใหม่" : "ใช้เฟรมสุดท้ายของช็อตก่อนเป็นภาพแรก"}</small></span>
-                          </button>
-                        </div>
-                        <label className={x.inline}>ความยาว
-                          <select value={s.seconds} disabled={lockedByVideo} onChange={(e) => edit(i, { seconds: Number(e.target.value) })}>
-                            {Array.from({ length: SECONDS_MAX - SECONDS_MIN + 1 }, (_, k) => SECONDS_MIN + k).map((n) => <option key={n} value={n}>{n} วินาที</option>)}
-                          </select>
-                        </label>
-                      </section>
-
-                      <section className={x.block}>
-                        <h4>ในช็อตนี้มี</h4>
-                        <div className={x.refRow}>
-                          <span className={x.refLabel}><Users size={13} aria-hidden /> ตัวละคร</span>
-                          <div className={x.refChips}>
-                            {byKind("character").map((e) => {
-                              const on = s.characterIds.includes(e.id);
-                              return <button key={e.id} type="button" className={x.chip} aria-pressed={on} disabled={lockedByVideo || (!on && s.characterIds.length >= 4)} onClick={() => edit(i, { characterIds: on ? s.characterIds.filter((c) => c !== e.id) : [...s.characterIds, e.id], dialogue: on ? s.dialogue.filter((l) => l.speakerId !== e.id) : s.dialogue })}>{on && <Check size={12} aria-hidden />}{e.name}</button>;
-                            })}
-                            {byKind("character").length === 0 && <button type="button" className={x.link} onClick={() => setTab("elements")}>เพิ่มตัวละครก่อน</button>}
-                          </div>
-                        </div>
-                        <div className={x.refRow}>
-                          <span className={x.refLabel}><MapPin size={13} aria-hidden /> สถานที่</span>
-                          <div className={x.refChips}>
-                            {byKind("location").map((e) => <button key={e.id} type="button" className={x.chip} aria-pressed={s.locationId === e.id} disabled={lockedByVideo} onClick={() => edit(i, { locationId: s.locationId === e.id ? "" : e.id })}>{s.locationId === e.id && <Check size={12} aria-hidden />}{e.name}</button>)}
-                            {byKind("location").length === 0 && <span className={f.muted}>—</span>}
-                          </div>
-                        </div>
-                        <div className={x.refRow}>
-                          <span className={x.refLabel}><Package size={13} aria-hidden /> ของสำคัญ</span>
-                          <div className={x.refChips}>
-                            {byKind("prop").map((e) => {
-                              const on = s.propIds.includes(e.id);
-                              return <button key={e.id} type="button" className={x.chip} aria-pressed={on} disabled={lockedByVideo || (!on && s.propIds.length >= 3)} onClick={() => edit(i, { propIds: on ? s.propIds.filter((c) => c !== e.id) : [...s.propIds, e.id] })}>{on && <Check size={12} aria-hidden />}{e.name}</button>;
-                            })}
-                            {byKind("prop").length === 0 && <span className={f.muted}>—</span>}
-                          </div>
-                        </div>
-                      </section>
-
-                      <section className={x.block}>
-                        <h4>เกิดอะไรขึ้น</h4>
-                        <label className={x.field}><span>การกระทำ / ลำดับการเคลื่อนไหว</span>
-                          <textarea maxLength={2000} disabled={lockedByVideo} value={s.action} placeholder="เช่น ทหารหนุ่มวิ่งขึ้นบันไดไม้ หยุดตรงหน้าขุนอินทร์ ก้มหัวรายงาน ขุนอินทร์ค่อย ๆ หันมา" onChange={(e) => edit(i, { action: e.target.value })} />
-                        </label>
-                        <label className={x.field}><span>กล้อง</span>
-                          <textarea maxLength={300} disabled={lockedByVideo} value={s.camera} placeholder="เช่น tracking ตามขึ้นบันได แล้วหยุดเป็น over-the-shoulder" onChange={(e) => edit(i, { camera: e.target.value })} />
-                        </label>
-                      </section>
-
-                      <section className={x.block}>
-                        <h4>บทพูด {s.dialogue.length > 0 && <small>{s.dialogue.length}/6</small>}</h4>
-                        {s.dialogue.map((l, k) => (
-                          <div key={k} className={x.line}>
-                            <div className={x.lineHead}>
-                              <select aria-label="ผู้พูด" value={l.speakerId} disabled={lockedByVideo} onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, speakerId: e.target.value } : o)) })}>
-                                {speakers.map((sp) => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
-                              </select>
-                              <input aria-label="น้ำเสียง" maxLength={120} disabled={lockedByVideo} value={l.delivery} placeholder="น้ำเสียง เช่น หอบ ตื่นตระหนก" onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, delivery: e.target.value } : o)) })} />
-                              <button type="button" className={x.icon} aria-label="ลบบทพูด" disabled={lockedByVideo} onClick={() => edit(i, { dialogue: s.dialogue.filter((_, m) => m !== k) })}><X size={14} /></button>
-                            </div>
-                            <textarea aria-label="บทพูด" maxLength={300} disabled={lockedByVideo} value={l.line} placeholder="ท่านขุน! ข้าศึกมากันเต็มทุ่งแล้ว!" onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, line: e.target.value } : o)) })} />
-                          </div>
-                        ))}
-                        <button type="button" className={x.addLine} disabled={lockedByVideo || speakers.length === 0 || s.dialogue.length >= 6} onClick={() => edit(i, { dialogue: [...s.dialogue, { speakerId: speakers[0]?.id ?? "", line: "", delivery: "" }] })}>
-                          <Plus size={14} /> {speakers.length === 0 ? "เลือกตัวละครในช็อตก่อนเพิ่มบทพูด" : "เพิ่มบทพูด"}
+                  <div className={x.fields} role="tabpanel" aria-label={`รายละเอียดช็อต ${i + 1}`}>
+                    <section className={x.block}>
+                      <h4>การเปิดช็อต</h4>
+                      <div className={x.choices} role="radiogroup" aria-label="การต่อภาพ">
+                        <button type="button" role="radio" aria-checked={s.transition === "cut"} className={x.choice} disabled={lockedByVideo} onClick={() => edit(i, { transition: "cut" })}>
+                          <Scissors size={16} aria-hidden /><span><strong>เริ่มฉากใหม่</strong><small>ตัดภาพ เปลี่ยนสถานที่หรือมุมกล้องได้</small></span>
                         </button>
-                      </section>
+                        <button type="button" role="radio" aria-checked={s.transition === "continue"} className={x.choice} disabled={i === 0 || lockedByVideo} onClick={() => edit(i, { transition: "continue" })}>
+                          <Link2 size={16} aria-hidden /><span><strong>ต่อจากช็อต {i || "ก่อน"}</strong><small>{i === 0 ? "ช็อตแรกต้องเริ่มฉากใหม่" : "ใช้เฟรมสุดท้ายของช็อตก่อนเป็นภาพแรก"}</small></span>
+                        </button>
+                      </div>
+                      <label className={x.inline}>ความยาว
+                        <select value={s.seconds} disabled={lockedByVideo} onChange={(e) => edit(i, { seconds: Number(e.target.value) })}>
+                          {Array.from({ length: SECONDS_MAX - SECONDS_MIN + 1 }, (_, k) => SECONDS_MIN + k).map((n) => <option key={n} value={n}>{n} วินาที</option>)}
+                        </select>
+                      </label>
+                    </section>
 
-                      <section className={x.block}>
-                        <h4>เสียงประกอบ</h4>
-                        {s.dialogue.length > 0 && <p className={x.hint}>ช็อตที่มีบทพูดสร้างวิดีโอแบบไม่มีเสียงจากโมเดล เพื่อไม่ให้เสียงพูดซ้อนกับเสียงพากย์ของตัวละคร จึงจะไม่มีเสียงประกอบนี้ในคลิป</p>}
-                        <label className={x.field}>
-                          <textarea aria-label="เสียงประกอบ" maxLength={600} disabled={lockedByVideo} value={s.audio} placeholder="เช่น เสียงฝีเท้าบนไม้ เสียงหอบ กลองศึกไกล ๆ" onChange={(e) => edit(i, { audio: e.target.value })} />
-                        </label>
-                      </section>
+                    <section className={x.block}>
+                      <h4>ในช็อตนี้มี</h4>
+                      <div className={x.refRow}>
+                        <span className={x.refLabel}><Users size={13} aria-hidden /> ตัวละคร</span>
+                        <div className={x.refChips}>
+                          {byKind("character").map((e) => {
+                            const on = s.characterIds.includes(e.id);
+                            return <button key={e.id} type="button" className={x.chip} aria-pressed={on} disabled={lockedByVideo || (!on && s.characterIds.length >= 4)} onClick={() => edit(i, { characterIds: on ? s.characterIds.filter((c) => c !== e.id) : [...s.characterIds, e.id], dialogue: on ? s.dialogue.filter((l) => l.speakerId !== e.id) : s.dialogue })}>{on && <Check size={12} aria-hidden />}{e.name}</button>;
+                          })}
+                          {byKind("character").length === 0 && <button type="button" className={x.link} onClick={() => setTab("elements")}>เพิ่มตัวละครก่อน</button>}
+                        </div>
+                      </div>
+                      <div className={x.refRow}>
+                        <span className={x.refLabel}><MapPin size={13} aria-hidden /> สถานที่</span>
+                        <div className={x.refChips}>
+                          {byKind("location").map((e) => <button key={e.id} type="button" className={x.chip} aria-pressed={s.locationId === e.id} disabled={lockedByVideo} onClick={() => edit(i, { locationId: s.locationId === e.id ? "" : e.id })}>{s.locationId === e.id && <Check size={12} aria-hidden />}{e.name}</button>)}
+                          {byKind("location").length === 0 && <span className={f.muted}>—</span>}
+                        </div>
+                      </div>
+                      <div className={x.refRow}>
+                        <span className={x.refLabel}><Package size={13} aria-hidden /> ของสำคัญ</span>
+                        <div className={x.refChips}>
+                          {byKind("prop").map((e) => {
+                            const on = s.propIds.includes(e.id);
+                            return <button key={e.id} type="button" className={x.chip} aria-pressed={on} disabled={lockedByVideo || (!on && s.propIds.length >= 3)} onClick={() => edit(i, { propIds: on ? s.propIds.filter((c) => c !== e.id) : [...s.propIds, e.id] })}>{on && <Check size={12} aria-hidden />}{e.name}</button>;
+                          })}
+                          {byKind("prop").length === 0 && <span className={f.muted}>—</span>}
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className={x.block}>
+                      <h4>เกิดอะไรขึ้น</h4>
+                      <label className={x.field}><span>การกระทำ / ลำดับการเคลื่อนไหว</span>
+                        <textarea maxLength={2000} disabled={lockedByVideo} value={s.action} placeholder="เช่น ทหารหนุ่มวิ่งขึ้นบันไดไม้ หยุดตรงหน้าขุนอินทร์ ก้มหัวรายงาน ขุนอินทร์ค่อย ๆ หันมา" onChange={(e) => edit(i, { action: e.target.value })} />
+                      </label>
+                      <label className={x.field}><span>กล้อง</span>
+                        <textarea maxLength={300} disabled={lockedByVideo} value={s.camera} placeholder="เช่น tracking ตามขึ้นบันได แล้วหยุดเป็น over-the-shoulder" onChange={(e) => edit(i, { camera: e.target.value })} />
+                      </label>
+                    </section>
+
+                    <section className={x.block}>
+                      <h4>บทพูด {s.dialogue.length > 0 && <small>{s.dialogue.length}/6</small>}</h4>
+                      {s.dialogue.map((l, k) => (
+                        <div key={k} className={x.line}>
+                          <div className={x.lineHead}>
+                            <select aria-label="ผู้พูด" value={l.speakerId} disabled={lockedByVideo} onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, speakerId: e.target.value } : o)) })}>
+                              {speakers.map((sp) => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                            </select>
+                            <input aria-label="น้ำเสียง" maxLength={120} disabled={lockedByVideo} value={l.delivery} placeholder="น้ำเสียง เช่น หอบ ตื่นตระหนก" onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, delivery: e.target.value } : o)) })} />
+                            <button type="button" className={x.icon} aria-label="ลบบทพูด" disabled={lockedByVideo} onClick={() => edit(i, { dialogue: s.dialogue.filter((_, m) => m !== k) })}><X size={14} /></button>
+                          </div>
+                          <textarea aria-label="บทพูด" maxLength={300} disabled={lockedByVideo} value={l.line} placeholder="ท่านขุน! ข้าศึกมากันเต็มทุ่งแล้ว!" onChange={(e) => edit(i, { dialogue: s.dialogue.map((o, m) => (m === k ? { ...o, line: e.target.value } : o)) })} />
+                        </div>
+                      ))}
+                      <button type="button" className={x.addLine} disabled={lockedByVideo || speakers.length === 0 || s.dialogue.length >= 6} onClick={() => edit(i, { dialogue: [...s.dialogue, { speakerId: speakers[0]?.id ?? "", line: "", delivery: "" }] })}>
+                        <Plus size={14} /> {speakers.length === 0 ? "เลือกตัวละครในช็อตก่อนเพิ่มบทพูด" : "เพิ่มบทพูด"}
+                      </button>
+                    </section>
+
+                    <section className={x.block}>
+                      <h4>เสียงประกอบ</h4>
+                      {s.dialogue.length > 0 && <p className={x.hint}>ช็อตที่มีบทพูดสร้างวิดีโอแบบไม่มีเสียงจากโมเดล เพื่อไม่ให้เสียงพูดซ้อนกับเสียงพากย์ของตัวละคร จึงจะไม่มีเสียงประกอบนี้ในคลิป</p>}
+                      <label className={x.field}>
+                        <textarea aria-label="เสียงประกอบ" maxLength={600} disabled={lockedByVideo} value={s.audio} placeholder="เช่น เสียงฝีเท้าบนไม้ เสียงหอบ กลองศึกไกล ๆ" onChange={(e) => edit(i, { audio: e.target.value })} />
+                      </label>
+                    </section>
+                  </div>
+                </aside>
+
+                <div className={x.timelineDock}>
+                  <div className={x.toolbar}>
+                    <button type="button" className={x.playBtn} disabled={!hasClip} aria-label={playing ? "หยุด" : "เล่นทั้งเรื่อง"} title={hasClip ? "เล่น/หยุด (Space)" : "ยังไม่มีคลิป"} onClick={togglePlay}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
+                    <span className={x.timecode}>{clock(Math.floor(time))} / {clock(total)}</span>
+                    <span className={x.divider} />
+                    <label className={x.model}>
+                      <Film size={14} aria-hidden />
+                      <select value={videoModel} onChange={(e) => setModel(e.target.value)} aria-label="โมเดลวิดีโอ">
+                        {ep.videoModels.map((m) => <option key={m.id} value={m.id}>{m.label} · {m.minSeconds}–{m.maxSeconds} วิ{m.audio ? " · มีเสียง" : ""}</option>)}
+                      </select>
+                    </label>
+                    <div className={x.quality} role="radiogroup" aria-label="คุณภาพตอนสร้าง">
+                      <button type="button" role="radio" aria-checked={newKind === "draft"} disabled={!draftOn} title={draftOn ? `ดูตัวอย่าง 480p ก่อน ${ep.draftPointsPer5s} แต้ม / 5 วิ ชอบแล้วค่อยทำตัวเต็ม` : "โมเดลนี้ไม่มีโหมด draft"} onClick={() => setQuality("draft")}>Draft 480p</button>
+                      <button type="button" role="radio" aria-checked={newKind === "full"} title={`${ep.videoPointsPer5s} แต้ม / 5 วิ`} onClick={() => setQuality("full")}>ตัวเต็ม {ep.resolution}</button>
                     </div>
-                <FilmExportPanel ep={ep} dirty={dirty} sending={busy.includes("export")} subtitles={subtitles} onSubtitles={setSubtitles} onExport={exportFilm} />
+                    <span className={f.muted}>{rate(newKind)} แต้ม / 5 วิ · คงเหลือ {ep.balance}</span>
+                    {finalShots.length > 0 && !dirty && (
+                      <button type="button" className={x.bulkBtn} disabled={busy.includes("bulk-finalize")} onClick={finalizeAll}>
+                        <Sparkles size={14} /> ทำตัวเต็มทุก draft ({finalShots.length}) · {bulkFinalCost}
+                      </button>
+                    )}
+                    {readyShots.length > 0 && !dirty && (
+                      <button type="button" className={x.bulkBtn} disabled={busy.includes("bulk-videos")} onClick={videoAll}>
+                        <Play size={14} /> {newKind === "draft" ? "draft" : "สร้าง"}ทุกช็อตที่พร้อม ({readyShots.length}) · {bulkVideoCost}
+                      </button>
+                    )}
+                    <span className={x.spacer} />
+                    <label className={x.zoom} title="ซูม timeline"><ZoomIn size={14} aria-hidden /><input type="range" min={8} max={64} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="ซูม timeline" /></label>
+                    <button type="button" className={f.primary} onClick={() => setExportOpen(true)}>
+                      {exporting ? <LoaderCircle size={15} className={f.spin} /> : xp?.status === "succeeded" && !xp.stale ? <Download size={15} /> : <Film size={15} />}
+                      {exporting ? ` กำลังรวม ${xp?.progress ?? 0}%` : xp?.status === "succeeded" && !xp.stale ? " ดาวน์โหลดภาพยนตร์" : " Export"}
+                    </button>
+                  </div>
+                  <FilmTimeline
+                    shots={shots.map((sh, k) => {
+                      const sc = scenes.findIndex((g) => g.includes(k));
+                      return {
+                        key: sh.id ?? `new-${k}`, start: starts[k], seconds: sh.seconds, scene: sc, continues: scenes[sc][0] !== k,
+                        state: stateOf(sh), label: `ฉาก ${sc + 1} ช็อต ${scenes[sc].indexOf(k) + 1} · ${sh.seconds} วินาที · ${STATE_LABEL[stateOf(sh)]}`, thumb: thumbOf(sh),
+                        lines: sh.dialogue.filter((l) => l.line.trim()).map((l) => ({ speaker: elName(l.speakerId) ?? "?", text: l.line })),
+                        audio: sh.audio, silent: sh.dialogue.length > 0,
+                      };
+                    })}
+                    scenes={scenes.map((g) => ({ start: starts[g[0]], seconds: g.reduce((n, k) => n + shots[k].seconds, 0), title: shots[g[0]].locationId ? `#${elName(shots[g[0]].locationId) ?? ""}` : "", last: g[g.length - 1] }))}
+                    total={total} sel={i} time={time} zoom={zoom} playing={playing} canAdd={shots.length < 40}
+                    onSelect={(k) => { setPlaying(false); seekTo(starts[k]); }}
+                    onSeek={seekTo}
+                    onAddToScene={(last) => { setPlaying(false); addShotToScene(last); }}
+                    onAddScene={() => { setPlaying(false); addShot(); }}
+                  />
+                </div>
+
+                {exportOpen && (
+                  <CreateModal portal onClose={() => setExportOpen(false)}>
+                    <div className={x.modal} role="dialog" aria-modal="true" aria-label="รวมเป็นภาพยนตร์">
+                      <header className={x.modalHead}>
+                        <h2>Export ภาพยนตร์</h2>
+                        <button type="button" className={x.icon} aria-label="ปิด" onClick={() => setExportOpen(false)}><X size={16} /></button>
+                      </header>
+                      <FilmExportPanel ep={ep} dirty={dirty} sending={busy.includes("export")} subtitles={subtitles} onSubtitles={setSubtitles} onExport={exportFilm} />
+                    </div>
+                  </CreateModal>
+                )}
               </div>
             );
           })()}

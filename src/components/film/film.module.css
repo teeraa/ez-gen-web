@@ -1144,3 +1144,11 @@
 .chip:disabled {
   opacity: 0.5;
 }
+
+/* The studio fills the result column like the AI editor: no page padding or page scroll. */
+.body[data-studio] {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
