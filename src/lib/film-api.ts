@@ -1,6 +1,7 @@
 // Client for the สร้างหนัง API (/api/v1/film). Mirrors the backend film DTOs.
 
 import { parseEnvelope } from "./api-envelope.ts";
+import type { CharacterVoice, CharacterVoiceInput } from "./voice-api.ts";
 export type ElementKind = "character" | "location" | "prop";
 export type WorkStatus = "idle" | "queued" | "processing" | "succeeded" | "failed";
 
@@ -9,6 +10,8 @@ export interface FilmFailure { failureCode: string | null; failureMessage: strin
 export interface FilmElement extends FilmFailure {
   id: string; seriesId: string; kind: ElementKind; name: string; spec: string; revision: number;
   imageStatus: WorkStatus; imageUrl: string | null; imageExpiresAt: string | null; syntheticUrl: string | null; prepared: boolean; updatedAt: string;
+  /** Characters only; null when no voice is bound. */
+  voice?: CharacterVoice | null;
 }
 
 export interface FilmLine { speakerId: string; line: string; delivery: string }
@@ -96,9 +99,9 @@ export const filmApi = {
   /** kind "draft" renders a 480p preview, "finalize" refines the shot's draft into the full clip. */
   requestVideo: (projectId: string, shotId: string, modelId: string, kind: VideoKind, idempotencyKey: string) =>
     request<FilmEpisode>(`film/episodes/${id(projectId)}/shots/${id(shotId)}/video`, json("POST", { modelId, idempotencyKey, ...(kind === "draft" ? { draft: true } : kind === "finalize" ? { finalize: true } : {}) })).then(normalize),
-  createElement: (seriesId: string, body: { kind: ElementKind; name: string; spec: string; assetId?: string; idempotencyKey: string }) =>
+  createElement: (seriesId: string, body: { kind: ElementKind; name: string; spec: string; assetId?: string; voice?: CharacterVoiceInput; idempotencyKey: string }) =>
     request<FilmElement>(`film/series/${id(seriesId)}/elements`, json("POST", body)),
-  updateElement: (elementId: string, body: { revision: number; name?: string; spec?: string }) => request<FilmElement>(`film/elements/${id(elementId)}`, json("PATCH", body)),
+  updateElement: (elementId: string, body: { revision: number; name?: string; spec?: string; voice?: CharacterVoiceInput }) => request<FilmElement>(`film/elements/${id(elementId)}`, json("PATCH", body)),
   removeElement: (elementId: string) => request<void>(`film/elements/${id(elementId)}`, { method: "DELETE" }),
   requestImage: (elementId: string, mode: "generate" | "prepare", idempotencyKey: string) =>
     request<FilmElement>(`film/elements/${id(elementId)}/image`, json("POST", { mode, idempotencyKey })),

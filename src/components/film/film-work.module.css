@@ -1086,3 +1086,15 @@
   font-size: 12.5px;
   cursor: pointer;
 }
+
+/* Voice bound to a character element (dubs its dialogue in every shot). */
+.voiceTag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,62 @@
+/* Works inside both the workbench (--wb-*) and film (--f-*) themes. */
+.box {
+  --cv-border: var(--wb-border, var(--f-border, rgba(127, 127, 127, 0.3)));
+  --cv-muted: var(--wb-muted, var(--f-muted, #888));
+  --cv-card: var(--wb-card-2, var(--f-card, transparent));
+  --cv-primary: var(--wb-primary, var(--f-primary, #5b5bd6));
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--cv-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13px;
+}
+.legend { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px; font-weight: 600; }
+.modes { display: flex; gap: 6px; flex-wrap: wrap; }
+.mode {
+  padding: 6px 12px;
+  border: 1px solid var(--cv-border);
+  border-radius: 999px;
+  background: var(--cv-card);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.mode[aria-checked="true"] { border-color: var(--cv-primary); color: var(--cv-primary); font-weight: 600; }
+.mode:disabled { opacity: 0.5; cursor: not-allowed; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.grid label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; min-width: 0; }
+.grid select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--cv-border);
+  border-radius: 10px;
+  background: var(--cv-card);
+  color: inherit;
+  font: inherit;
+}
+.wide { grid-column: 1 / -1; }
+.note { color: var(--cv-muted); font-weight: 400; }
+.warn { color: #d9553d; grid-column: 1 / -1; }
+.audio { width: 100%; height: 32px; }
+.history { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--cv-border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.item[data-on] { border-color: var(--cv-primary); }
+.item .audio { grid-column: 1 / -1; }
+.itemText { display: flex; flex-direction: column; min-width: 0; }
+.itemText small { color: var(--cv-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link { display: inline-flex; align-items: center; gap: 4px; color: var(--cv-primary); font-size: 12px; text-decoration: none; align-self: flex-start; }
+@media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+.real { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #b4462f; background: rgba(217, 85, 61, 0.12); }

@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Search, ArrowUpRight, Trash2, UserRound, Pencil, Images, Film, Package, LayoutGrid, List, Maximize2, Plus } from "lucide-react";
 import { creativeApi, type Asset } from "@/lib/creative-api";
+import { characterVoiceLabel, sameVoiceInput, voiceInputOf, type CharacterVoiceInput } from "@/lib/voice-api";
+import { CharacterVoicePicker } from "@/components/voice/character-voice-picker";
 import w from "@/components/workbench/workbench.module.css";
 import { WorkbenchHead } from "@/components/workbench/workbench-ui";
 import c from "./collection.module.css";
@@ -30,6 +32,8 @@ export function AssetLibrary() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
+  // Voice being chosen in the edit dialog (characters only).
+  const [voice, setVoice] = useState<CharacterVoiceInput>({ voiceId: "" });
   const [deleting, setDeleting] = useState<string | null>(null);
   const [mediaErrors, setMediaErrors] = useState<Record<string, string>>({});
   const [refreshingMedia, setRefreshingMedia] = useState<Record<string, boolean>>({});
@@ -119,9 +123,11 @@ export function AssetLibrary() {
     setBusy(true);
     setError("");
     try {
+      const voiceChanged = editing.assetType === "character" && !sameVoiceInput(voice, voiceInputOf(editing.voice));
       const result = await creativeApi.editAsset(editing.id, {
         name: editing.name.trim(),
         description: editing.description,
+        ...(voiceChanged ? { voice } : {}),
       });
       setAssets((items) =>
         items.map((asset) => (asset.id === result.id ? result : asset)),
@@ -231,7 +237,7 @@ export function AssetLibrary() {
                   {asset.mediaUrl && asset.assetType !== "video" && (
                     <a href={asset.mediaUrl} target="_blank" rel="noreferrer" aria-label={`เปิดภาพขนาดเต็ม ${asset.name}`}><Maximize2 aria-hidden /></a>
                   )}
-                  <button type="button" onClick={() => setEditing(asset)} aria-label={`แก้ไข ${asset.name}`}><Pencil aria-hidden /></button>
+                  <button type="button" onClick={() => { setVoice(voiceInputOf(asset.voice)); setEditing(asset); }} aria-label={`แก้ไข ${asset.name}`}><Pencil aria-hidden /></button>
                   <button type="button" disabled={deleting === asset.id} onClick={() => remove(asset)} aria-label={`ลบ ${asset.name}`}><Trash2 aria-hidden /></button>
                 </div>
               </div>
@@ -249,6 +255,7 @@ export function AssetLibrary() {
               <div className={c.body}>
                 <h2 title={asset.name}>{asset.name}</h2>
                 {asset.description && <p>{asset.description}</p>}
+                {asset.assetType === "character" && asset.voice && <p className={c.voiceTag} title="เสียงของตัวละคร">🎙 {characterVoiceLabel(asset.voice)}</p>}
                 <div className={c.foot}>
                   <span>{new Date(asset.createdAt).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })} · ส่วนตัว</span>
                   {asset.assetType === "character" && <Link href={`/studio/projects?asset=${encodeURIComponent(asset.id)}`} className={c.use}>ใช้สร้างวิดีโอ <ArrowUpRight aria-hidden /></Link>}
@@ -299,6 +306,7 @@ export function AssetLibrary() {
               <textarea id="edit-description" maxLength={2000} value={editing.description} style={{ minHeight: 96 }}
                 onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
             </label>
+            {editing.assetType === "character" && <CharacterVoicePicker value={voice} onChange={setVoice} disabled={busy} />}
             <div className={c.dialogActions}>
               <button className={w.secondary} type="button" onClick={() => setEditing(null)}>ยกเลิก</button>
               <button className={w.primary} disabled={busy || !editing.name.trim()}>บันทึกการแก้ไข</button>

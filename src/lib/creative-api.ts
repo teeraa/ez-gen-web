@@ -1,4 +1,5 @@
 import { parseEnvelope } from "./api-envelope.ts";
+import type { CharacterVoice, CharacterVoiceInput } from "./voice-api.ts";
 import type { CharacterDesignOptions, ImageCategory } from "./character-design";
 import type {
   PaginatedData,
@@ -21,6 +22,8 @@ export interface Asset {
   version: number;
   createdAt: string;
   updatedAt: string;
+  /** Characters only; null when no voice is bound. */
+  voice?: CharacterVoice | null;
 }
 export interface ImageCapabilities {
   categories?: ImageCategory[];
@@ -85,7 +88,7 @@ export const creativeApi = {
     scope: "personal";
     jobId: string;
   }) => request<Asset>("assets", "POST", body),
-  editAsset: (id: string, body: Partial<Asset>) =>
+  editAsset: (id: string, body: { name?: string; description?: string; voice?: CharacterVoiceInput }) =>
     request<Asset>(`assets/${id}`, "PUT", body),
   deleteAsset: (id: string) => request<void>(`assets/${id}`, "DELETE"),
 };

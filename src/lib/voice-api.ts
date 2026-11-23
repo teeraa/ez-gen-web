@@ -21,6 +21,26 @@ export interface VoiceGeneration {
 export interface VoiceGenerationList { items: VoiceGeneration[]; total: number; page: number; limit: number }
 export interface VoiceGenerateBody { requestId: string; text: string; voiceId: string; emotion: string; speed: number; pitch: number }
 
+/** Voice bound to a character (library asset or film element); name/kind are snapshots from when it was chosen. */
+export interface CharacterVoice {
+  voiceId: string; voiceName: string; kind: "preset" | "design" | "reference";
+  emotion: string; speed: number; pitch: number; templateId: string | null;
+}
+/** Request body: a preset/profile id with settings, or templateId to copy everything from a past generation. `{ voiceId: "" }` removes the voice. */
+export interface CharacterVoiceInput { voiceId: string; emotion?: string; speed?: number; pitch?: number; templateId?: string }
+export const NO_VOICE: CharacterVoiceInput = { voiceId: "" };
+export function voiceInputOf(v: CharacterVoice | null | undefined): CharacterVoiceInput {
+  if (!v) return NO_VOICE;
+  return v.templateId ? { voiceId: v.voiceId, templateId: v.templateId } : { voiceId: v.voiceId, emotion: v.emotion, speed: v.speed, pitch: v.pitch };
+}
+export function sameVoiceInput(a: CharacterVoiceInput, b: CharacterVoiceInput): boolean {
+  return (a.templateId ?? "") === (b.templateId ?? "") && a.voiceId === b.voiceId && (a.templateId ? true : (a.emotion ?? "") === (b.emotion ?? "") && (a.speed ?? 1) === (b.speed ?? 1) && (a.pitch ?? 0) === (b.pitch ?? 0));
+}
+/** Short label such as "นารา · อบอุ่น · 1.2x". */
+export function characterVoiceLabel(v: CharacterVoice): string {
+  return [v.voiceName || "เสียงที่เลือก", v.emotion && v.emotion !== "ปกติ" ? v.emotion : "", v.speed && v.speed !== 1 ? `${v.speed}x` : ""].filter(Boolean).join(" · ");
+}
+
 export class VoiceApiError extends Error {
   status: number; code: string;
   constructor(message: string, status: number, code: string) { super(message); this.status = status; this.code = code; }

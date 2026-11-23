@@ -5,12 +5,14 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle, ArrowLeft, ArrowUp, BookOpen, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Download, Eye, Film, ImageIcon, Link2, LoaderCircle, MapPin,
-  MessagesSquare, Package, Pencil, Play, Plus, RefreshCw, Save, Scissors, Search, Sparkles, Trash2, Users, Wand2, X,
+  MessagesSquare, Mic, Package, Pencil, Play, Plus, RefreshCw, Save, Scissors, Search, Sparkles, Trash2, Users, Wand2, X,
 } from "lucide-react";
 import { ShotArt } from "@/components/director/shot-art";
 import { CreateModal } from "@/components/director/modal";
 import { useConfirm } from "@/components/director/use-confirm";
 import { ShotPlayer } from "./shot-player";
+import { CharacterVoicePicker } from "@/components/voice/character-voice-picker";
+import { characterVoiceLabel, sameVoiceInput, voiceInputOf, type CharacterVoiceInput } from "@/lib/voice-api";
 import { definiteRejection, finishSubmission, prepareSubmission } from "@/lib/director-submission";
 import {
   FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, missingElements, toDraft, videoCost,
@@ -426,6 +428,11 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                               <div className={x.elBody}>
                                 <strong>{kind === "character" ? "@" : kind === "location" ? "#" : ""}{el.name}</strong>
                                 <p>{el.spec || <span className={f.muted}>ยังไม่มีคำบรรยาย</span>}</p>
+                                {kind === "character" && (
+                                  <p className={x.voiceTag} title="เสียงของตัวละคร ใช้พากย์บทพูดในทุกช็อต">
+                                    <Mic size={12} aria-hidden /> {el.voice ? characterVoiceLabel(el.voice) : <span className={f.muted}>ยังไม่ได้เลือกเสียง (ใช้เสียงจากโมเดลวิดีโอ)</span>}
+                                  </p>
+                                )}
                                 {el.imageStatus === "failed" && el.failureMessage && <p className={x.error}>{el.failureMessage}</p>}
                                 <div className={x.actions}>
                                   {needsPrepare ? (
@@ -758,6 +765,10 @@ function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId: strin
   const [spec, setSpec] = useState(element?.spec ?? "");
   const [assetId, setAssetId] = useState("");
   const [library, setLibrary] = useState<LibraryAsset[] | null>(null);
+  // Characters only. On create, leaving it untouched lets a library character keep its own voice.
+  const initialVoice = voiceInputOf(element?.voice);
+  const [voice, setVoice] = useState<CharacterVoiceInput>(initialVoice);
+  const voiceChanged = kind === "character" && !sameVoiceInput(voice, initialVoice);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -776,11 +787,11 @@ function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId: strin
     setError(null);
     try {
       if (element) {
-        onSaved(await filmApi.updateElement(element.id, { revision: element.revision, name: name.trim(), spec: spec.trim() }), false);
+        onSaved(await filmApi.updateElement(element.id, { revision: element.revision, name: name.trim(), spec: spec.trim(), ...(voiceChanged ? { voice } : {}) }), false);
       } else {
-        const submission = prepareSubmission(scope, { name: name.trim(), spec: spec.trim(), assetId });
+        const submission = prepareSubmission(scope, { name: name.trim(), spec: spec.trim(), assetId, voice: voiceChanged ? voice : null });
         try {
-          const el = await filmApi.createElement(seriesId, { kind, name: String(submission.body.name), spec: String(submission.body.spec), ...(submission.body.assetId ? { assetId: String(submission.body.assetId) } : {}), idempotencyKey: submission.key });
+          const el = await filmApi.createElement(seriesId, { kind, name: String(submission.body.name), spec: String(submission.body.spec), ...(submission.body.assetId ? { assetId: String(submission.body.assetId) } : {}), ...(submission.body.voice ? { voice: submission.body.voice as CharacterVoiceInput } : {}), idempotencyKey: submission.key });
           finishSubmission(scope);
           onSaved(el, true);
         } catch (cause) {
@@ -809,6 +820,8 @@ function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId: strin
           <textarea rows={4} maxLength={1200} value={spec} onChange={(e) => setSpec(e.target.value)} placeholder={placeholder} />
           <small className={x.counter}>{spec.length}/1200 · ยิ่งละเอียด ภาพและวิดีโอยิ่งตรงทุกช็อต</small>
         </label>
+        {kind === "character" && <CharacterVoicePicker value={voice} onChange={setVoice} disabled={busy} />}
+        {kind === "character" && !element && assetId && !voiceChanged && <small className={x.counter}>ถ้าไม่เลือก จะใช้เสียงที่ผูกไว้กับตัวละครในคลัง (ถ้ามี)</small>}
         {!element && (
           <div className={x.field}>
             <span className={x.libHead}>ใช้ภาพจากคลังผลงาน (ไม่บังคับ)

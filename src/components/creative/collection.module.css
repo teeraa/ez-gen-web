@@ -871,3 +871,14 @@
     aspect-ratio: 16 / 10;
   }
 }
+
+/* Voice bound to a character (library card). */
+.body .voiceTag {
+  display: block;
+  margin: 0;
+  font-size: 12px;
+  color: var(--wb-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
