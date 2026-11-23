@@ -1,23 +1,33 @@
 "use client";
 
 // Picks the voice bound to a character: none, a Voice-menu voice (preset or "My voices") with
-// emotion/speed/pitch, or a template copied from one of the user's past Voice-menu generations.
+// emotion/speed/pitch, a new voice designed from a description right here, or a template copied
+// from one of the user's past Voice-menu generations. `required` hides "none" (ภาพยนตร์ characters).
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Mic } from "lucide-react";
-import { voiceApi, type CharacterVoiceInput, type VoiceCapabilities, type VoiceGeneration, type VoiceProfile } from "@/lib/voice-api";
+import { ArrowUpRight, LoaderCircle, Mic, Wand2 } from "lucide-react";
+import { VoiceApiError, voiceApi, type CharacterVoiceInput, type VoiceCapabilities, type VoiceGeneration, type VoiceProfile } from "@/lib/voice-api";
 import v from "./character-voice-picker.module.css";
 
-type Mode = "none" | "voice" | "template";
+type Mode = "none" | "voice" | "design" | "template";
 
 const modeOf = (value: CharacterVoiceInput): Mode => value.templateId ? "template" : value.voiceId ? "voice" : "none";
 
-export function CharacterVoicePicker({ value, onChange, disabled }: { value: CharacterVoiceInput; onChange: (next: CharacterVoiceInput) => void; disabled?: boolean }) {
+export function CharacterVoicePicker({ value, onChange, disabled, required, designName }: {
+  value: CharacterVoiceInput; onChange: (next: CharacterVoiceInput) => void; disabled?: boolean;
+  /** The character must have a voice: no "none" option, and an empty value is flagged. */
+  required?: boolean;
+  /** Suggested name for a newly designed voice (usually the character's name). */
+  designName?: string;
+}) {
   const [caps, setCaps] = useState<VoiceCapabilities | null>(null);
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
   const [history, setHistory] = useState<VoiceGeneration[] | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [mode, setMode] = useState<Mode>(modeOf(value));
+  const [mode, setMode] = useState<Mode>(() => { const m = modeOf(value); return required && m === "none" ? "voice" : m; });
+  const [design, setDesign] = useState({ name: "", text: "" });
+  const [designing, setDesigning] = useState(false);
+  const [designError, setDesignError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -46,11 +56,31 @@ export function CharacterVoicePicker({ value, onChange, disabled }: { value: Cha
     if (next === "template" && !value.templateId) onChange({ voiceId: "" });
   };
 
+  // A designed voice is saved to "My voices" (free) and bound right away.
+  const createDesign = async () => {
+    const name = (design.name.trim() || designName?.trim() || "เสียงใหม่").slice(0, 40);
+    const text = design.text.trim();
+    if (designing || text.length < 5) return;
+    setDesigning(true);
+    setDesignError(null);
+    try {
+      const p = await voiceApi.createDesign(name, text);
+      setProfiles((list) => [p, ...list.filter((o) => o.id !== p.id)]);
+      setDesign({ name: "", text: "" });
+      setMode("voice");
+      onChange({ voiceId: p.id, emotion: "ปกติ", speed: 1, pitch: 0 });
+    } catch (cause) {
+      setDesignError(cause instanceof VoiceApiError ? cause.message : "สร้างเสียงไม่สำเร็จ กรุณาลองใหม่");
+    } finally { setDesigning(false); }
+  };
+  const empty = !value.voiceId && !value.templateId;
+  const modes = ([["none", "ไม่ใช้เสียง"], ["voice", "เลือกเสียง"], ["design", "ออกแบบเสียงใหม่"], ["template", "จากเมนูเสียง"]] as const).filter(([k]) => !(required && k === "none"));
+
   return (
     <fieldset className={v.box} disabled={disabled}>
       <legend className={v.legend}><Mic size={14} aria-hidden /> เสียงของตัวละคร</legend>
       <div className={v.modes} role="radiogroup" aria-label="แหล่งเสียง">
-        {([["none", "ไม่ใช้เสียง"], ["voice", "เลือกเสียง"], ["template", "จากเมนูเสียง"]] as const).map(([k, label]) => (
+        {modes.map(([k, label]) => (
           <button key={k} type="button" role="radio" aria-checked={mode === k} className={v.mode} onClick={() => pick(k)}
             disabled={k === "template" && history !== null && history.length === 0}>{label}</button>
         ))}
@@ -61,7 +91,8 @@ export function CharacterVoicePicker({ value, onChange, disabled }: { value: Cha
       {mode === "voice" && (
         <div className={v.grid}>
           <label className={v.wide}>เสียง
-            <select value={value.voiceId} onChange={(e) => onChange({ ...value, voiceId: e.target.value })}>
+            <select value={value.voiceId} onChange={(e) => onChange({ voiceId: e.target.value, emotion: value.emotion ?? "ปกติ", speed: value.speed ?? 1, pitch: value.pitch ?? 0 })}>
+              {!value.voiceId && <option value="" disabled>— เลือกเสียง —</option>}
               {missing && <option value={value.voiceId}>เสียงที่ถูกลบแล้ว</option>}
               <optgroup label="เสียงสำเร็จรูป">
                 {caps?.voices.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.description}</option>)}
@@ -91,6 +122,26 @@ export function CharacterVoicePicker({ value, onChange, disabled }: { value: Cha
         </div>
       )}
 
+      {mode === "design" && (
+        <div className={v.grid}>
+          <label className={v.wide}>ชื่อเสียง
+            <input className={v.input} maxLength={40} value={design.name} placeholder={designName ? `เช่น ${designName}` : "เช่น เสียงขุนอินทร์"} onChange={(e) => setDesign({ ...design, name: e.target.value })} />
+          </label>
+          <label className={v.wide}>บรรยายเสียง
+            <textarea className={v.input} rows={3} maxLength={300} value={design.text} placeholder="เช่น ชายไทยวัย 50 เสียงทุ้มต่ำ แหบเล็กน้อย พูดช้า หนักแน่น น่าเกรงขาม" onChange={(e) => setDesign({ ...design, text: e.target.value })} />
+          </label>
+          <div className={v.wide}>
+            <button type="button" className={v.make} disabled={designing || design.text.trim().length < 5} onClick={() => void createDesign()}>
+              {designing ? <LoaderCircle size={14} className={v.spin} aria-hidden /> : <Wand2 size={14} aria-hidden />} สร้างเสียงนี้ให้ตัวละคร
+            </button>
+          </div>
+          <small className={`${v.note} ${v.wide}`}>เก็บไว้ใน “เสียงของฉัน” ใช้ซ้ำกับตัวละครอื่นได้ ไม่เสียแต้ม</small>
+          {designError && <small className={`${v.note} ${v.warn}`} role="alert">{designError}</small>}
+        </div>
+      )}
+
+      {required && empty && mode !== "design" && <small className={`${v.note} ${v.warn}`}>ตัวละครต้องมีเสียง เลือกเสียงหรือออกแบบเสียงใหม่ก่อนบันทึก</small>}
+
       {mode === "template" && (
         <div className={v.history} role="radiogroup" aria-label="เสียงที่เคยสร้างในเมนูเสียง">
           {history === null ? <small className={v.note}>กำลังโหลด…</small> : history.map((g) => (
@@ -103,7 +154,7 @@ export function CharacterVoicePicker({ value, onChange, disabled }: { value: Cha
               <audio controls preload="none" src={g.audioUrl} className={v.audio} />
             </label>
           ))}
-          {history !== null && history.length > 0 && !value.templateId && <small className={`${v.note} ${v.warn}`}>ยังไม่ได้เลือก — ถ้าบันทึกตอนนี้ ตัวละครจะไม่มีเสียง</small>}
+          {history !== null && history.length > 0 && !value.templateId && !required && <small className={`${v.note} ${v.warn}`}>ยังไม่ได้เลือก — ถ้าบันทึกตอนนี้ ตัวละครจะไม่มีเสียง</small>}
           {history !== null && <small className={v.note}>ใช้เสียง อารมณ์ ความเร็ว และระดับเสียงเดียวกับรายการที่เลือก แสดง 20 รายการล่าสุด</small>}
         </div>
       )}

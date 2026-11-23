@@ -1156,3 +1156,23 @@
   background: var(--f-card);
   scroll-margin-top: 12px;
 }
+
+/* A character without a voice: shots with it cannot be made, so the fix is one click away. */
+.voiceMissing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--f-warn) 40%, transparent);
+  border-radius: 999px;
+  background: var(--f-warn-bg);
+  color: var(--f-warn);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.voiceMissing:hover {
+  border-color: var(--f-warn);
+}

@@ -143,6 +143,8 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const readyClips = ep.shots.filter((s) => s.video?.status === "succeeded").length;
   const title = `ตอนที่ ${ep.episodeNumber ?? "?"}${ep.episodeTitle ? ` · ${ep.episodeTitle}` : ""}`;
   const byKind = (k: ElementKind) => ep.elements.filter((e) => e.kind === k);
+  // Characters in a shot that still need a voice; such shots cannot be made yet.
+  const voiceless = (d: ShotDraft) => ep.elements.filter((e) => e.kind === "character" && !e.voice && d.characterIds.includes(e.id));
 
   const edit = (i: number, patch: Partial<ShotDraft>) => setDrafts(shots.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const move = (i: number, d: -1 | 1) => {
@@ -232,7 +234,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
     }
     note(`เริ่มสร้างภาพ ${missingImages.length} รายการ`);
   });
-  const readyShots = ep.shots.filter((s) => !active(s.video?.status) && (s.video?.status !== "succeeded" || s.video.stale || (newKind === "full" && s.video.draft && !s.video.canFinalize)) && s.action.trim() && missingElements(toDraft(s), ep.elements).length === 0);
+  const readyShots = ep.shots.filter((s) => !active(s.video?.status) && (s.video?.status !== "succeeded" || s.video.stale || (newKind === "full" && s.video.draft && !s.video.canFinalize)) && s.action.trim() && missingElements(toDraft(s), ep.elements).length === 0 && voiceless(toDraft(s)).length === 0);
   const bulkVideoCost = readyShots.reduce((n, s) => n + videoCost(rate(newKind), s.seconds), 0);
   const videoAll = () => run("bulk-videos", async () => {
     const what = newKind === "draft" ? "draft 480p" : "วิดีโอ";
@@ -410,9 +412,11 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                                 <strong>{kind === "character" ? "@" : kind === "location" ? "#" : ""}{el.name}</strong>
                                 <p>{el.spec || <span className={f.muted}>ยังไม่มีคำบรรยาย</span>}</p>
                                 {kind === "character" && (
-                                  <p className={x.voiceTag} title="เสียงของตัวละคร ใช้พากย์บทพูดในทุกช็อต">
-                                    <Mic size={12} aria-hidden /> {el.voice ? characterVoiceLabel(el.voice) : <span className={f.muted}>ยังไม่ได้เลือกเสียง (ใช้เสียงจากโมเดลวิดีโอ)</span>}
-                                  </p>
+                                  el.voice ? (
+                                    <p className={x.voiceTag} title="เสียงของตัวละคร ใช้พากย์บทพูดในทุกช็อต"><Mic size={12} aria-hidden /> {characterVoiceLabel(el.voice)}</p>
+                                  ) : (
+                                    <button type="button" className={x.voiceMissing} onClick={() => setEditor({ kind, element: el })}><Mic size={12} aria-hidden /> ยังไม่มีเสียง · เลือกเสียง</button>
+                                  )
                                 )}
                                 {el.imageStatus === "failed" && el.failureMessage && <p className={x.error}>{el.failureMessage}</p>}
                                 <div className={x.actions}>
@@ -456,11 +460,12 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
             const saved = s.id ? ep.shots.find((o) => o.id === s.id) : undefined;
             const v = saved?.video ?? null;
             const missing = missingElements(s, ep.elements);
+            const noVoice = voiceless(s);
             const start = shots.slice(0, i).reduce((n, o) => n + o.seconds, 0);
             const lockedByVideo = active(v?.status);
             const speakers = ep.elements.filter((e) => s.characterIds.includes(e.id));
             const outOfRange = !!modelInfo && (s.seconds < modelInfo.minSeconds || s.seconds > modelInfo.maxSeconds);
-            const cannot = dirty ? "บันทึกช็อตก่อนสร้างวิดีโอ" : !s.id ? "บันทึกช็อตก่อน" : lockedByVideo ? "" : missing.length ? `ยังไม่พร้อม: ${missing.map((m) => m.name).join(", ")}` : !s.action.trim() ? "ใส่สิ่งที่เกิดขึ้นในช็อตก่อน" : outOfRange ? `โมเดลนี้รองรับ ${modelInfo?.minSeconds}–${modelInfo?.maxSeconds} วินาที` : "";
+            const cannot = dirty ? "บันทึกช็อตก่อนสร้างวิดีโอ" : !s.id ? "บันทึกช็อตก่อน" : lockedByVideo ? "" : missing.length ? `ยังไม่พร้อม: ${missing.map((m) => m.name).join(", ")}` : noVoice.length ? `ตัวละครยังไม่มีเสียง: ${noVoice.map((m) => m.name).join(", ")}` : !s.action.trim() ? "ใส่สิ่งที่เกิดขึ้นในช็อตก่อน" : outOfRange ? `โมเดลนี้รองรับ ${modelInfo?.minSeconds}–${modelInfo?.maxSeconds} วินาที` : "";
             // A scene is a run of shots joined by "continue"; a cut starts the next scene.
             const scenes: number[][] = [];
             shots.forEach((sh, k) => { if (k === 0 || sh.transition === "cut") scenes.push([k]); else scenes[scenes.length - 1].push(k); });
@@ -583,6 +588,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   {v?.stale && <p className={x.warn}><RefreshCw size={13} /> ช็อตหรือองค์ประกอบถูกแก้หลังสร้างคลิป</p>}
                   {v?.status === "failed" && v.failureMessage && <p className={x.error}><AlertCircle size={13} /> {v.failureMessage}{v.pointsRefunded > 0 ? ` · คืน ${v.pointsRefunded} แต้มแล้ว` : ""}</p>}
                   {missing.length > 0 && !dirty ? <p className={x.warn}><ImageIcon size={13} /> {missing.map((m) => m.name).join(", ")} ยังไม่มีภาพที่พร้อมใช้ <button type="button" className={x.link} onClick={() => setTab("elements")}>ไปแก้</button></p>
+                    : noVoice.length > 0 && !dirty ? <p className={x.warn}><Mic size={13} /> {noVoice.map((m) => m.name).join(", ")} ยังไม่มีเสียง <button type="button" className={x.link} onClick={() => setTab("elements")}>ไปเลือกเสียง</button></p>
                     : cannot && !lockedByVideo && <p className={x.cannot}>{cannot}</p>}
                 </section>
 

@@ -24,6 +24,9 @@ export function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId
   const initialVoice = voiceInputOf(element?.voice);
   const [voice, setVoice] = useState<CharacterVoiceInput>(initialVoice);
   const voiceChanged = kind === "character" && !sameVoiceInput(voice, initialVoice);
+  // Every character needs a voice. A new character from the library may keep the library's voice.
+  const keepsLibraryVoice = !element && !!assetId && !voiceChanged;
+  const needsVoice = kind === "character" && !voice.voiceId && !voice.templateId && !keepsLibraryVoice;
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +40,7 @@ export function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId
   }, [kind, element]);
 
   const submit = async () => {
-    if (busy || !name.trim()) return;
+    if (busy || !name.trim() || needsVoice) return;
     setBusy(true);
     setError(null);
     try {
@@ -75,7 +78,7 @@ export function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId
           <textarea rows={4} maxLength={1200} value={spec} onChange={(e) => setSpec(e.target.value)} placeholder={placeholder} />
           <small className={x.counter}>{spec.length}/1200 · ยิ่งละเอียด ภาพและวิดีโอยิ่งตรงทุกช็อต</small>
         </label>
-        {kind === "character" && <CharacterVoicePicker value={voice} onChange={setVoice} disabled={busy} />}
+        {kind === "character" && <CharacterVoicePicker value={voice} onChange={setVoice} disabled={busy} required designName={name.trim()} />}
         {kind === "character" && !element && assetId && !voiceChanged && <small className={x.counter}>ถ้าไม่เลือก จะใช้เสียงที่ผูกไว้กับตัวละครในคลัง (ถ้ามี)</small>}
         {!element && (
           <div className={x.field}>
@@ -99,7 +102,7 @@ export function ElementEditor({ seriesId, editor, onClose, onSaved }: { seriesId
         )}
         <div className={x.modalActions}>
           <button type="button" className={f.secondary} disabled={busy} onClick={onClose}>ยกเลิก</button>
-          <button className={f.primary} disabled={busy || !name.trim()}>{busy ? <LoaderCircle size={16} className={f.spin} /> : <Check size={16} />} {element ? "บันทึก" : "เพิ่ม"}</button>
+          <button className={f.primary} disabled={busy || !name.trim() || needsVoice} title={needsVoice ? "เลือกเสียงให้ตัวละครก่อน" : undefined}>{busy ? <LoaderCircle size={16} className={f.spin} /> : <Check size={16} />} {element ? "บันทึก" : "เพิ่ม"}</button>
         </div>
       </form>
     </CreateModal>

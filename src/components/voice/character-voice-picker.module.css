@@ -60,3 +60,30 @@
 .link { display: inline-flex; align-items: center; gap: 4px; color: var(--cv-primary); font-size: 12px; text-decoration: none; align-self: flex-start; }
 @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
 .real { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #b4462f; background: rgba(217, 85, 61, 0.12); }
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--cv-border);
+  border-radius: 10px;
+  background: var(--cv-card);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+  resize: vertical;
+}
+.make {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cv-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.make:disabled { opacity: 0.5; cursor: not-allowed; }
+.spin { animation: cv-spin 0.9s linear infinite; }
+@keyframes cv-spin { to { transform: rotate(360deg); } }
