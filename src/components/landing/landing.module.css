@@ -203,6 +203,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 .themeBtn {
   width: 38px;
@@ -1639,9 +1640,32 @@
     overflow-x: auto;
     scrollbar-width: none;
   }
-  .costNote,
-  .btnGhost {
+  .costNote {
     display: none;
+  }
+  /* Phones: the sign-in button stays; the bar tightens so it fits next to sign-up. */
+  .navIn {
+    gap: 10px;
+    padding: 8px 8px 8px 12px;
+  }
+  .brand {
+    white-space: nowrap;
+  }
+  .navRight {
+    gap: 6px;
+  }
+  .navRight .btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .navRight .btnGhost {
+    border: 1px solid var(--border);
+    color: var(--text) !important;
+  }
+  .themeBtn {
+    width: 34px;
+    height: 34px;
   }
   .edMain {
     grid-template-columns: 1fr;
@@ -1658,6 +1682,13 @@
   }
   .edCap {
     font-size: 11px;
+  }
+}
+@media (max-width: 380px) {
+  /* Very narrow phones: the logo mark alone, so both buttons keep their full labels. */
+  .brand b,
+  .brand span:last-child {
+    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {
