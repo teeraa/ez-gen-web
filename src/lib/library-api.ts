@@ -5,7 +5,8 @@ import { parseEnvelope, type ParsedResponse } from "./api-envelope.ts";
 export type PromptCategory = "video" | "image" | "product" | "character" | "camera";
 export type LibraryScope = "all" | "mine" | "builtin" | "saved";
 export type SkillInputKey = "character" | "product" | "style" | "voice" | "music" | "script";
-export type SkillOutput = "video_9_16" | "video_16_9" | "storyboard" | "image_set";
+/** "film": a ภาพยนตร์ skill; its directive guides the film planner when an episode chooses it. */
+export type SkillOutput = "video_9_16" | "video_16_9" | "storyboard" | "image_set" | "film";
 
 export interface PromptItem {
   id: string;
@@ -26,6 +27,8 @@ export interface SkillItem {
   steps: string[];
   inputs: SkillInputKey[];
   output: SkillOutput;
+  /** Film skills only: English guidance for the film planner ("" otherwise). */
+  directive: string;
   builtIn: boolean;
   forkedFromId: string | null;
   version: number;
@@ -36,9 +39,9 @@ export interface SkillItem {
 export interface LibraryPage<T> { items: T[]; total: number; page: number; limit: number }
 
 export interface PromptBody { title: string; category: PromptCategory; body: string }
-export interface SkillBody { name: string; description: string; steps: string[]; inputs: SkillInputKey[]; output: SkillOutput; forkedFromId?: string }
+export interface SkillBody { name: string; description: string; steps: string[]; inputs: SkillInputKey[]; output: SkillOutput; directive?: string; forkedFromId?: string }
 
-export interface LibraryQuery { scope?: LibraryScope; category?: PromptCategory; q?: string; page?: number; limit?: number }
+export interface LibraryQuery { scope?: LibraryScope; category?: PromptCategory; output?: SkillOutput; q?: string; page?: number; limit?: number }
 
 export class LibraryApiError extends Error {
   constructor(message: string, readonly status: number, readonly code: string) { super(message); }
@@ -74,6 +77,7 @@ function qs(q: LibraryQuery): string {
   const p = new URLSearchParams();
   if (q.scope && q.scope !== "all") p.set("scope", q.scope);
   if (q.category) p.set("category", q.category);
+  if (q.output) p.set("output", q.output);
   if (q.q?.trim()) p.set("q", q.q.trim());
   p.set("page", String(q.page ?? 1));
   p.set("limit", String(q.limit ?? 50));

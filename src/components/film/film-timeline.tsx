@@ -20,6 +20,8 @@ export interface TimelineLine {
 export interface TimelineShot {
   /** start/seconds are after trims; full is the clip's whole length. */
   key: string; start: number; seconds: number; full: number; trimIn: number; trimOut: number; scene: number; continues: boolean;
+  /** The shot's number inside its scene ("ฉาก N · ช็อต M"). */
+  no: number;
   state: ShotState; label: string; thumb: ReactNode;
   lines: TimelineLine[];
   /** Sound effects the model adds; silent shots (with dubbed dialogue) get none. */
@@ -218,7 +220,7 @@ function ShotBlock({ k, shot, zoom, selected, count, dx, onDrag, onDrop, onClick
           if (e.altKey && e.key === "ArrowRight" && k < count - 1) { e.preventDefault(); onMove(1); }
         }}>
         <span className={x.tlThumb}>{shot.thumb}</span>
-        <span className={x.tlShotText}><b>{k + 1}</b> {round(shot.seconds)} วิ</span>
+        <span className={x.tlShotText}><b title={`ฉาก ${shot.scene + 1} · ช็อต ${shot.no}`}>{shot.scene + 1}.{shot.no}</b> {round(shot.seconds)} วิ</span>
         <i className={x.dot} data-state={shot.state} />
       </button>
     </>

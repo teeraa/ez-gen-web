@@ -1746,3 +1746,17 @@
   grid-column: 3;
   grid-row: 1;
 }
+
+/* One shot inside a multi-shot clip: number, camera, action. */
+.cutRow {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 2fr);
+  gap: 6px;
+  align-items: start;
+}
+.cutRow b {
+  padding-top: 9px;
+  color: var(--f-muted);
+  font-size: 12px;
+  text-align: center;
+}

@@ -1152,3 +1152,52 @@
   padding: 0;
   overflow: hidden;
 }
+
+/* Phase 6: confirmation card and edit scope. */
+.pending {
+  padding: 10px 12px;
+  border: 1px solid var(--f-border);
+  border-radius: 12px;
+  background: var(--f-card);
+  display: grid;
+  gap: 4px;
+}
+.pending svg {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+.pending .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pending .chip svg {
+  margin-right: 0;
+}
+.pendingWarn {
+  color: var(--f-warn);
+}
+.scope {
+  display: inline-flex;
+  margin-left: 4px;
+  border: 1px solid var(--f-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.target .scope button {
+  width: auto;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 0;
+  font-size: 11.5px;
+  background: transparent;
+  color: var(--f-muted);
+}
+.target .scope button[data-on="true"] {
+  background: var(--f-primary);
+  color: #fff;
+}
+.hint[data-tone="warn"] {
+  color: var(--f-warn);
+}

@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
-import { Clapperboard, FileText, Loader2, Megaphone, Plus, Play, RotateCw, Scissors, Search, ShoppingBag, Sparkles, Trash2, Wand2, X, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { Clapperboard, Loader2, Plus, Play, RotateCw, Search, Sparkles, Trash2, Wand2, X } from "lucide-react";
+import { skillIcon } from "./skill-icons";
 import w from "./workbench.module.css";
 import { NOT_CONNECTED, WorkbenchHead, useToast } from "./workbench-ui";
 import { useLibraryList } from "./use-library-list";
@@ -19,14 +21,16 @@ const OUTPUTS: { id: SkillOutput; label: string }[] = [
   { id: "video_16_9", label: "วิดีโอ 16:9" },
   { id: "storyboard", label: "สตอรี่บอร์ด" },
   { id: "image_set", label: "ชุดภาพ" },
+  { id: "film", label: "ภาพยนตร์ (ช่วยกำกับ)" },
 ];
 const OUTPUT_LABEL = Object.fromEntries(OUTPUTS.map((o) => [o.id, o.label])) as Record<SkillOutput, string>;
-const ICONS: Record<string, LucideIcon> = { megaphone: Megaphone, clapperboard: Clapperboard, "shopping-bag": ShoppingBag, "file-text": FileText, scissors: Scissors, wand: Wand2 };
+const DIRECTIVE_MIN = 10;
+const DIRECTIVE_MAX = 1500;
 
 type Filter = "all" | "builtin" | "mine";
 // forkedFromId set + no id = "ทำสำเนาแล้วแก้" from a built-in.
-type Draft = { id?: string; forkedFromId?: string; name: string; description: string; steps: string[]; inputs: SkillInputKey[]; output: SkillOutput };
-const emptyDraft = (): Draft => ({ name: "", description: "", steps: ["", ""], inputs: [], output: "video_9_16" });
+type Draft = { id?: string; forkedFromId?: string; name: string; description: string; steps: string[]; inputs: SkillInputKey[]; output: SkillOutput; directive: string };
+const emptyDraft = (): Draft => ({ name: "", description: "", steps: ["", ""], inputs: [], output: "video_9_16", directive: "" });
 const failText = (e: unknown) => e instanceof LibraryApiError ? e.message : "ทำรายการไม่สำเร็จ กรุณาลองใหม่";
 
 export function SkillsStudio() {
@@ -44,7 +48,7 @@ export function SkillsStudio() {
     setConfirmDelete(false);
     setDraft({
       ...(s.builtIn ? { forkedFromId: s.id } : { id: s.id }),
-      name: s.name, description: s.description, steps: [...s.steps], inputs: [...s.inputs], output: s.output,
+      name: s.name, description: s.description, steps: [...s.steps], inputs: [...s.inputs], output: s.output, directive: s.directive ?? "",
     });
   };
 
@@ -54,6 +58,7 @@ export function SkillsStudio() {
     const body: SkillBody = {
       name: draft.name.trim(), description: draft.description.trim(),
       steps: draft.steps.map((x) => x.trim()).filter(Boolean), inputs: draft.inputs, output: draft.output,
+      ...(draft.output === "film" ? { directive: draft.directive.trim() } : {}),
       ...(draft.forkedFromId ? { forkedFromId: draft.forkedFromId } : {}),
     };
     try {
@@ -94,7 +99,8 @@ export function SkillsStudio() {
     }
   };
 
-  const valid = !!draft && draft.name.trim().length >= 2 && draft.steps.some((x) => x.trim());
+  const valid = !!draft && draft.name.trim().length >= 2 && draft.steps.some((x) => x.trim())
+    && (draft.output !== "film" || draft.directive.trim().length >= DIRECTIVE_MIN);
   const editingSelectedId = draft?.id ?? draft?.forkedFromId;
 
   return (
@@ -117,7 +123,7 @@ export function SkillsStudio() {
             <button type="button" className={`${w.card} ${w.newCard}`} onClick={() => setDraft(emptyDraft())}><Plus aria-hidden />สร้างสกิลใหม่</button>
           )}
           {!list.loading && list.items.map((s) => {
-            const Icon = ICONS[s.icon] ?? Wand2;
+            const Icon = skillIcon(s.icon);
             return (
               <article key={s.id} className={`${w.card} ${editingSelectedId === s.id ? w.cardOn : ""}`}>
                 <div className={w.cardTop}>
@@ -131,7 +137,9 @@ export function SkillsStudio() {
                   {!s.builtIn && <span className={w.tag}>ของฉัน</span>}
                 </div>
                 <div className={w.cardActions}>
-                  <button type="button" className={w.secondary} onClick={() => toast.show(NOT_CONNECTED)}><Play aria-hidden />ใช้สกิลนี้</button>
+                  {s.output === "film"
+                    ? <Link href="/studio/film" className={w.secondary} title="เปิดตอนในเมนูภาพยนตร์ แล้วกด “สกิล” เหนือช่องแชทผู้ช่วย"><Clapperboard aria-hidden />ใช้ในภาพยนตร์</Link>
+                    : <button type="button" className={w.secondary} onClick={() => toast.show(NOT_CONNECTED)}><Play aria-hidden />ใช้สกิลนี้</button>}
                   <button type="button" className={w.ghost} onClick={() => edit(s)}>{s.builtIn ? "ทำสำเนาแล้วแก้" : "แก้ไข"}</button>
                 </div>
               </article>
@@ -191,6 +199,13 @@ export function SkillsStudio() {
                 {OUTPUTS.map((x) => <button key={x.id} type="button" aria-pressed={draft.output === x.id} onClick={() => setDraft({ ...draft, output: x.id })}>{x.label}</button>)}
               </div>
             </fieldset>
+            {draft.output === "film" && (
+              <label className={w.field}><span className={w.fieldRow}>คำสั่งผู้กำกับ <small>(ภาษาอังกฤษจะได้ผลดีที่สุด)</small></span>
+                <textarea style={{ minHeight: 140 }} value={draft.directive} maxLength={DIRECTIVE_MAX} onChange={(e) => setDraft({ ...draft, directive: e.target.value })}
+                  placeholder="เช่น Low-key lighting from one hard source, faces half in shadow. Mostly static frames; slow push in only on reveals. Frame through door gaps and reflections." />
+                <small className={w.note}>ผู้ช่วยในเมนูภาพยนตร์จะใช้ข้อความนี้กำหนดมุมกล้อง เลนส์ แสง และการจัดเฟรมของทุกช็อต (กฎพื้นฐาน เช่น 1 การเคลื่อนกล้องต่อช็อต ยังคงใช้) · {draft.directive.trim().length}/{DIRECTIVE_MAX}</small>
+              </label>
+            )}
             <button className={`${w.primary} ${w.block}`} disabled={!valid || busy}>{busy ? <Loader2 aria-hidden /> : <Sparkles aria-hidden />}บันทึกสกิล</button>
             {draft.id && (
               <button type="button" className={`${w.ghost} ${w.block} ${w.danger}`} disabled={busy} onClick={() => { if (draft.id) void remove(draft.id); }} onBlur={() => setConfirmDelete(false)}>

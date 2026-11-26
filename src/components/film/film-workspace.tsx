@@ -17,13 +17,14 @@ import { ElementEditor, type ElementEditorTarget } from "./element-editor";
 import { FilmExportPanel } from "./film-export-panel";
 import { FilmSteps, NextStep, stepBlockers, type FilmStep } from "./film-steps";
 import { StoryPanel } from "./story-panel";
+import { FilmSkillPicker } from "./film-skill-picker";
 import { MusicPreview } from "./music-preview";
 import { DialoguePreview, type PlacedLine } from "./dialogue-preview";
 import { characterVoiceLabel } from "@/lib/voice-api";
 import { definiteRejection, finishSubmission, prepareSubmission } from "@/lib/director-submission";
 import {
-  FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, LINE_EMOTIONS, missingElements, shotLength, toDraft, videoCost, voiceCost,
-  type ElementKind, type FilmElement, type FilmEpisode, type ShotDraft, type VideoKind,
+  FilmError, KIND_LABEL, STYLE_LABEL, clock, filmApi, filmErrorMessage, LINE_EMOTIONS, missingElements, positionLabel, POSITION_PATTERN, shotLength, toDraft, videoCost, voiceCost,
+  type ElementKind, type FilmElement, type FilmEpisode, type FilmPending, type PlanScope, type ShotDraft, type SpeechMode, type VideoKind,
 } from "@/lib/film-api";
 import f from "./film.module.css";
 import x from "./film-work.module.css";
@@ -34,7 +35,7 @@ const KIND_ICON = { character: Users, location: MapPin, prop: Package } as const
 const SECONDS_MIN = 4;
 const SECONDS_MAX = 15;
 const active = (s: string | undefined) => s === "queued" || s === "processing";
-const blankShot = (first: boolean): ShotDraft => ({ seconds: 5, transition: first ? "cut" : "cut", characterIds: [], locationId: "", propIds: [], action: "", camera: "", dialogue: [], audio: "" });
+const blankShot = (first: boolean): ShotDraft => ({ seconds: 5, transition: first ? "cut" : "cut", characterIds: [], locationId: "", propIds: [], action: "", camera: "", blocking: "", dialogue: [], audio: "" });
 
 export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episodeId: string }) {
   const [ep, setEp] = useState<FilmEpisode | null>(null);
@@ -50,7 +51,10 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   const [log, setLog] = useState<string[]>([]);
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [target, setTarget] = useState<string | null>(null);
+  // The shot picked for a chat edit; it is dropped from use once that shot no longer exists.
+  const [targetId, setTarget] = useState<string | null>(null);
+  // Whether a chat edit of the selected shot covers the shot or its whole scene.
+  const [scope, setScope] = useState<PlanScope>("shot");
   const [sel, setSel] = useState(0);
   // Studio playback: the playhead in seconds from the film start, and jumps inside the current clip.
   const [playing, setPlaying] = useState(false);
@@ -64,6 +68,8 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   // window.confirm is silently suppressed in some embedded browsers (e.g. the Claude browser pane).
   const [confirm, confirmDialog] = useConfirm();
   const [quality, setQuality] = useState<"draft" | "full">("draft");
+  // Native speech keeps lips and words from one model; dub keeps the exact bound voice but lips drift.
+  const [speech, setSpeech] = useState<SpeechMode>("native");
   const [length, setLength] = useState(0);
   const [faceless, setFaceless] = useState<string[]>([]);
   const tabChosen = useRef(false);
@@ -199,10 +205,10 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
     } finally { setSaving(false); }
   });
   const makeVideo = (shotId: string, seconds: number, kind: VideoKind, modelId = videoModel) => run(`video:${shotId}`, async () => {
-    const next = await paid(`film-video:${shotId}:${kind}`, { modelId, kind }, (key) => filmApi.requestVideo(ep.projectId, shotId, modelId, kind, key));
+    const next = await paid(`film-video:${shotId}:${kind}`, { modelId, kind, speech }, (key) => filmApi.requestVideo(ep.projectId, shotId, modelId, kind, key, speech));
     setEp(next);
     const label = kind === "draft" ? "draft" : kind === "finalize" ? "ตัวเต็มจาก draft" : "วิดีโอ";
-    note(`เริ่มสร้าง${label}ช็อต ${next.shots.findIndex((s) => s.id === shotId) + 1} · ${videoCost(rate(kind), seconds)} แต้ม`);
+    note(`เริ่มสร้าง${label} ${positionLabel(next.shots, next.shots.findIndex((s) => s.id === shotId))} · ${videoCost(rate(kind), seconds)} แต้ม`);
   });
   const imageAction = (el: FilmElement, mode: "generate" | "prepare") => run(`image:${el.id}`, async () => {
     const next = await paid(`film-image:${el.id}`, { mode }, (key) => filmApi.requestImage(el.id, mode, key));
@@ -222,7 +228,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
     note(`กำลังอัปเดตเสียงใน ${cur.redubShots} คลิป · ${cur.redubPoints} แต้ม`);
   });
   // Clips made before dubbing was kept apart: their voices only change with a new video.
-  const legacyClips = ep.shots.filter((s) => s.video?.status === "succeeded" && !s.video.stale && s.video.voice === "legacy").length;
+  const legacyClips = ep.shots.filter((s) => s.video?.status === "succeeded" && !s.video.stale && s.video.voice === "legacy" && s.video.speech !== "native").length;
   const voiceBanner = (ep.redubShots > 0 || legacyClips > 0) && (
     <div className={x.voiceBanner}>
       {ep.redubShots > 0 && (
@@ -273,19 +279,54 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
   });
   const imageCost = (el: FilmElement) => ep.imagePoints * (ep.filmed && el.kind === "character" ? 2 : 1);
   const targetLength = length || ep.targetSeconds || 60;
-  const targetIndex = target ? ep.shots.findIndex((s) => s.id === target) : -1;
-  const planCost = target ? Math.max(1, Math.ceil(ep.planPoints / 4)) : ep.planPoints;
+  const targetIndex = targetId ? ep.shots.findIndex((s) => s.id === targetId) : -1;
+  const target = targetIndex >= 0 ? targetId : null;
+  // Mirrors the API: a quarter only for one selected shot when the message names no other position.
+  const planCost = target && scope === "shot" && !POSITION_PATTERN.test(prompt) ? Math.max(1, Math.ceil(ep.planPoints / 4)) : ep.planPoints;
+  // Positions read "ฉาก N · ช็อต M" everywhere (shots are numbered again in every scene).
+  // Labelled on the studio's current order (unsaved moves included; sending waits for a save).
+  const targetLabel = target ? positionLabel(shots, Math.max(0, shots.findIndex((s) => s.id === target)), scope) : "";
+  const posOf = (shotId: string) => { const k = ep.shots.findIndex((s) => s.id === shotId); return k >= 0 ? positionLabel(ep.shots, k) : ""; };
+  // With shots, an edit must say where: the server asks back (free) when it does not.
+  const needsPosition = ep.shots.length > 0 && !target && prompt.trim() !== "" && !POSITION_PATTERN.test(prompt);
+  // Film skills apply to every later plan or edit of this episode (free; the next message pays as usual).
+  const chooseSkills = (skillIds: string[]) => run("skills", async () => {
+    const next = await paid(`film-skills:${ep.projectId}`, { skillIds }, (key) => filmApi.setSkills(ep.projectId, { skillIds, idempotencyKey: key }));
+    setEp(next);
+    note(next.skills.length ? `ใช้สกิล: ${next.skills.map((k) => k.name).join(", ")}` : "เอาสกิลออกทั้งหมดแล้ว");
+  });
   const sendPlan = () => run("plan", async () => {
     const text = prompt.trim();
     if (!text || planning) return;
     if (dirty) throw new FilmError("บันทึกหรือยกเลิกการแก้ช็อตก่อนส่งข้อความ", 0, "DIRTY");
-    // With shots, a whole-episode message edits the episode: the assistant keeps untouched shots
-    // (and their videos), so no confirmation is needed.
-    const body = { prompt: text, ...(target ? { shotId: target } : ep.shots.length === 0 ? { targetSeconds: targetLength } : {}) };
-    const next = await paid(`film-plan:${ep.projectId}`, body, (key) => filmApi.plan(ep.projectId, { ...body, idempotencyKey: key }));
+    // With shots, the message edits the positions it names (or the timeline selection); deleting a
+    // paid clip or changing a voice comes back as a card to confirm.
+    const body = { prompt: text, ...(target ? { shotId: target, scope } : ep.shots.length === 0 ? { targetSeconds: targetLength } : {}) };
+    let next: FilmEpisode;
+    try {
+      next = await paid(`film-plan:${ep.projectId}`, body, (key) => filmApi.plan(ep.projectId, { ...body, idempotencyKey: key }));
+    } catch (cause) {
+      // The selected shot was removed elsewhere: drop it and reload instead of failing every send.
+      if (cause instanceof FilmError && cause.status === 404) { setTarget(null); setReload((n) => n + 1); }
+      throw cause;
+    }
     setEp(next);
     setPrompt("");
     setTarget(null);
+    setScope("shot");
+  });
+  const confirmPending = (p: FilmPending, accept: boolean) => run("confirm", async () => {
+    let next: FilmEpisode;
+    try {
+      // Confirm and cancel are different requests: each keeps its own key until answered.
+      next = await paid(`film-plan-confirm:${p.id}:${accept ? "accept" : "cancel"}`, { accept }, (key) => filmApi.confirmPlan(ep.projectId, { pendingId: p.id, accept, idempotencyKey: key }));
+    } catch (cause) {
+      // The card may be out of date (or already done): show the episode as it is now.
+      if (cause instanceof FilmError && (cause.code === "PLAN_STALE" || cause.code === "IDEMPOTENCY_CONFLICT" || !definiteRejection(cause))) setReload((n) => n + 1);
+      throw cause;
+    }
+    setEp(next);
+    if (accept && p.redubPoints + p.videoPoints > 0) note(`ยืนยันแล้ว · ใช้ ${p.redubPoints + p.videoPoints} แต้ม`);
   });
   // Bulk actions send the same requests as the single buttons, one after another.
   const missingImages = ep.elements.filter((e) => !e.prepared && !active(e.imageStatus));
@@ -306,7 +347,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
     if (!(await confirm(`สร้าง${what} ${readyShots.length} ช็อต?`, `ใช้ ${bulkVideoCost} แต้ม ช็อตแบบต่อเนื่องจะรอช็อตก่อนหน้าให้เสร็จก่อน`, "สร้าง"))) return;
     let last: FilmEpisode | null = null;
     for (const s of readyShots) {
-      last = await paidRetry(`film-video:${s.id}:${newKind}`, { modelId: videoModel, kind: newKind }, (key) => filmApi.requestVideo(ep.projectId, s.id, videoModel, newKind, key));
+      last = await paidRetry(`film-video:${s.id}:${newKind}`, { modelId: videoModel, kind: newKind, speech }, (key) => filmApi.requestVideo(ep.projectId, s.id, videoModel, newKind, key, speech));
       setEp(last);
     }
     if (last) setEp(last);
@@ -350,7 +391,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
           )}
           {ep.messages.map((m, i) => m.role === "user" ? (
             <div key={i} className={f.userMsg}>
-              {m.shotId && <span className={f.ctxTag}>ช็อต {ep.shots.findIndex((s) => s.id === m.shotId) + 1 || "?"}</span>}
+              {(m.target || m.shotId) && <span className={f.ctxTag}>{m.target || posOf(m.shotId) || "ช็อตที่ถูกลบ"}</span>}
               <p>{m.text}</p>
             </div>
           ) : (
@@ -358,7 +399,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
               <span className={f.avatar} aria-hidden="true"><Sparkles size={14} /></span>
               <div className={f.aiBody}>
                 <p>{m.text}</p>
-                {i === ep.messages.length - 1 && !planning && (
+                {i === ep.messages.length - 1 && !planning && !ep.pending && (
                   <div className={f.chips}>
                     {ep.story && <button type="button" className={f.chip} onClick={() => setTab("story")}>ดูเรื่องราว</button>}
                     {stepBlockers(ep, "elements").length > 0 && <button type="button" className={f.chip} onClick={() => setTab("elements")}>เตรียมภาพและเสียงองค์ประกอบ</button>}
@@ -369,7 +410,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                       const one = m.shotId ? readyShots.find((s) => s.id === m.shotId) : undefined;
                       if (one) {
                         const no = ep.shots.findIndex((s) => s.id === one.id) + 1;
-                        return <button type="button" className={f.chip} data-strong="true" disabled={dirty || busy.includes(`video:${one.id}`)} onClick={() => { setSel(no - 1); setTab("studio"); void makeVideo(one.id, one.seconds, newKind); }}><Play size={12} /> สร้าง{word}ช็อต {no} · {shotCost(newKind, one)} แต้ม</button>;
+                        return <button type="button" className={f.chip} data-strong="true" disabled={dirty || busy.includes(`video:${one.id}`)} onClick={() => { setSel(no - 1); setTab("studio"); void makeVideo(one.id, one.seconds, newKind); }}><Play size={12} /> สร้าง{word} {positionLabel(ep.shots, no - 1)} · {shotCost(newKind, one)} แต้ม</button>;
                       }
                       return readyShots.length > 0 && !dirty ? <button type="button" className={f.chip} data-strong="true" disabled={busy.includes("bulk-videos")} onClick={() => { setTab("studio"); void videoAll(); }}><Play size={12} /> สร้าง{word}ช็อตที่พร้อม ({readyShots.length}) · {bulkVideoCost} แต้ม</button> : null;
                     })()}
@@ -378,22 +419,62 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
               </div>
             </div>
           ))}
+          {ep.pending && !planning && (() => {
+            const p = ep.pending;
+            const points = p.redubPoints + p.videoPoints;
+            return (
+              <div className={f.aiMsg} role="group" aria-label="ยืนยันการแก้ไข">
+                <span className={f.avatar} aria-hidden="true"><AlertCircle size={14} /></span>
+                <div className={`${f.aiBody} ${f.pending}`}>
+                  <p><strong>ยืนยันก่อนแก้</strong> · {p.summary}</p>
+                  {p.deletes.length > 0 && <p className={f.pendingWarn}><Trash2 size={13} aria-hidden /> คลิปที่จ่ายแต้มไปแล้วจะหายไป: {p.deletes.join(", ")}</p>}
+                  {p.voices.map((v) => (
+                    <p key={v.name}><Mic size={13} aria-hidden /> @{v.name} → {v.voice}{v.redubClips > 0 ? ` · พากย์ใหม่ ${v.redubClips} คลิป` : ""}{v.remakeClips > 0 ? ` · สร้างวิดีโอใหม่ ${v.remakeClips} คลิป (เสียงฝังอยู่ในวิดีโอ)` : ""}</p>
+                  ))}
+                  {points > 0 && <p>ใช้ {points} แต้ม{p.redubPoints > 0 && p.videoPoints > 0 ? ` (พากย์ใหม่ ${p.redubPoints} · วิดีโอใหม่ ${p.videoPoints})` : ""} · คงเหลือ {ep.balance} แต้ม</p>}
+                  {p.outdated.length > 0 && <p className={f.pendingWarn}><RefreshCw size={13} aria-hidden /> คลิปที่จ่ายแต้มแล้วจะกลายเป็นวิดีโอเก่า ต้องสร้างใหม่: {p.outdated.join(", ")}</p>}
+                  {p.stale > 0 && <p className={f.muted}>คลิปที่ต่อจากเฟรมสุดท้ายของคลิปที่สร้างใหม่ {p.stale} คลิปจะกลายเป็นวิดีโอเก่า ต้องสร้างใหม่ภายหลัง</p>}
+                  {dirty && <p className={f.muted}>บันทึกหรือยกเลิกการแก้ช็อตในสตูดิโอก่อน จึงจะยืนยันได้</p>}
+                  <div className={f.chips}>
+                    <button type="button" className={f.chip} data-strong="true" disabled={busy.includes("confirm") || dirty} onClick={() => confirmPending(p, true)}>
+                      {busy.includes("confirm") ? <LoaderCircle size={12} className={f.spin} /> : <Check size={12} />} ยืนยัน{points > 0 ? ` · ${points} แต้ม` : ""}
+                    </button>
+                    <button type="button" className={f.chip} disabled={busy.includes("confirm")} onClick={() => confirmPending(p, false)}><X size={12} /> ยกเลิก</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {log.map((l, i) => (
             <div key={`log-${i}`} className={f.aiMsg}><span className={f.avatar} aria-hidden="true"><Check size={14} /></span><div className={f.aiBody}><p className={f.muted}>{l}</p></div></div>
           ))}
           {planning && (
             <div className={f.aiMsg} role="status">
               <span className={f.avatar} aria-hidden="true"><Sparkles size={14} /></span>
-              <div className={f.typing}><LoaderCircle size={14} className={f.spin} /> {ep.plan?.shotId ? `กำลังแก้ช็อต ${ep.shots.findIndex((s) => s.id === ep.plan?.shotId) + 1}…` : "กำลังวางเรื่อง ตัวละคร และช็อต…"}</div>
+              <div className={f.typing}><LoaderCircle size={14} className={f.spin} /> {ep.plan?.target ? `กำลังแก้ ${ep.plan.target}…` : ep.shots.length ? "กำลังแก้ตามตำแหน่งที่ระบุ…" : "กำลังวางเรื่อง ตัวละคร และช็อต…"}</div>
             </div>
           )}
         </div>
         <form className={f.composer} onSubmit={(e) => { e.preventDefault(); sendPlan(); }}>
           {target && targetIndex >= 0 && (
             <div className={f.target}>
-              <Pencil size={13} /> กำลังแก้: <strong>ช็อต {targetIndex + 1}</strong>
-              <button type="button" aria-label="ยกเลิกการเลือกช็อต" onClick={() => setTarget(null)}><X size={14} /></button>
+              <Pencil size={13} aria-hidden /> กำลังแก้: <strong>{targetLabel}</strong>
+              <span className={f.scope} role="radiogroup" aria-label="ขอบเขตการแก้"
+                onKeyDown={(e) => {
+                  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+                  e.preventDefault();
+                  const next: PlanScope = scope === "shot" ? "scene" : "shot";
+                  setScope(next);
+                  (e.currentTarget.querySelector(`[data-scope="${next}"]`) as HTMLButtonElement | null)?.focus();
+                }}>
+                <button type="button" role="radio" data-scope="shot" aria-checked={scope === "shot"} tabIndex={scope === "shot" ? 0 : -1} data-on={scope === "shot"} onClick={() => setScope("shot")}>ช็อตนี้</button>
+                <button type="button" role="radio" data-scope="scene" aria-checked={scope === "scene"} tabIndex={scope === "scene" ? 0 : -1} data-on={scope === "scene"} onClick={() => setScope("scene")}>ทั้งฉาก</button>
+              </span>
+              <button type="button" aria-label="ยกเลิกการเลือก" onClick={() => { setTarget(null); setScope("shot"); }}><X size={14} /></button>
             </div>
+          )}
+          {ep.skillsAvailable && (
+            <FilmSkillPicker chosen={ep.skills} saving={busy.includes("skills")} disabled={planning || busy.includes("skills")} onChange={chooseSkills} />
           )}
           <label htmlFor="film-chat" className={f.sr}>ข้อความถึงผู้ช่วย</label>
           <textarea
@@ -404,20 +485,20 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
             disabled={!ep.planAvailable || planning}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); sendPlan(); } }}
-            placeholder={!ep.planAvailable ? "ระบบวางเรื่องยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์" : target ? `บอกว่าอยากแก้ช็อต ${targetIndex + 1} อย่างไร…` : ep.shots.length ? "บอกสิ่งที่อยากแก้ เช่น เพิ่มช็อตต่อจากช็อต 2, ตัดฉาก 3 ออก, ให้ฉาก 1 ยาวขึ้น…" : "เล่าไอเดียของตอนนี้ เช่น ทหารหนุ่มต้องยืนหยัดรับศึกเพื่อให้ชาวบ้านหนีทัน…"}
+            placeholder={!ep.planAvailable ? "ระบบวางเรื่องยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์" : target ? `บอกว่าอยากแก้ ${targetLabel} อย่างไร…` : ep.shots.length ? "ระบุตำแหน่งเสมอ เช่น “ฉาก 2 · ช็อต 1 ให้กล้องซูมเข้า”, “ลบฉาก 3”, “เพิ่มช็อตท้ายฉาก 1”, “เปลี่ยนเสียง @ขุนอินทร์ ให้ทุ้มขึ้น ในฉาก 1” หรือเลือกช็อตใน timeline…" : "เล่าไอเดียของตอนนี้ เช่น ทหารหนุ่มต้องยืนหยัดรับศึกเพื่อให้ชาวบ้านหนีทัน…"}
           />
           <div className={f.composerRow}>
             {!target && ep.shots.length === 0 ? (
               <div className={f.settings} role="group" aria-label="ความยาวตอน">
                 {LENGTHS.map((n) => <button key={n} type="button" aria-pressed={targetLength === n} data-on={targetLength === n} onClick={() => setLength(n)}><Clock size={13} /> {n < 60 ? `${n} วิ` : `${n / 60} นาที`}</button>)}
               </div>
-            ) : <span className={f.hint}>{target ? "แก้เฉพาะช็อตนี้ ช็อตอื่นไม่เปลี่ยน" : "แก้ตอนนี้ ช็อตที่ไม่ได้แก้จะเก็บวิดีโอไว้"}</span>}
+            ) : <span className={f.hint} aria-live="polite" data-tone={needsPosition || ep.pending ? "warn" : undefined}>{ep.pending && prompt.trim() ? "ส่งข้อความใหม่จะยกเลิกรายการที่รอยืนยันอยู่" : target ? (scope === "scene" ? `แก้เฉพาะ ${targetLabel} ฉากอื่นไม่เปลี่ยน` : `แก้เฉพาะ ${targetLabel} ช็อตอื่นไม่เปลี่ยน`) : needsPosition ? "ยังไม่ได้ระบุ “ฉาก N · ช็อต M” ระบบจะถามกลับโดยไม่คิดแต้ม" : "แก้เฉพาะตำแหน่งที่ระบุ ช็อตที่ไม่ได้แก้จะเก็บวิดีโอไว้"}</span>}
             <button type="submit" className={f.send} aria-label={`ส่ง · ${planCost} แต้ม`} title={`${planCost} แต้ม`} disabled={!prompt.trim() || planning || !ep.planAvailable || busy.includes("plan")}>
               {busy.includes("plan") ? <LoaderCircle size={18} className={f.spin} /> : <ArrowUp size={18} />}
             </button>
           </div>
           {notice && <p role="alert" className={f.composerError}><AlertCircle size={13} /> {notice}</p>}
-          <small className={f.hint}>Enter เพื่อส่ง · {target ? "แก้ช็อต" : ep.shots.length ? "แก้ทั้งตอน" : "วางเรื่องทั้งตอน"} {planCost} แต้ม</small>
+          <small className={f.hint}>Enter เพื่อส่ง · {target ? (scope === "scene" ? "แก้ทั้งฉาก" : "แก้ช็อต") : ep.shots.length ? "แก้ตามตำแหน่ง" : "วางเรื่องทั้งตอน"} {planCost} แต้ม{ep.shots.length > 0 ? " · ถ้าต้องถามกลับจะไม่คิดแต้ม" : ""}</small>
         </form>
       </section>
 
@@ -645,7 +726,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                     <div className={x.player} data-ratio={ep.aspectRatio} onClick={() => { if (hasClip) togglePlay(); }}>
                       {ep.music?.url && <MusicPreview url={ep.music.url} volume={musicVolume ?? ep.music.volume} start={ep.music.start} playing={playing} time={time} seekToken={seek.token} />}
                       <DialoguePreview lines={placed} playing={playing} time={time} seekToken={seek.token} />
-                      <FilmPlayer clips={clips} index={i} playing={playing} seek={seek} onIndex={setSel} onTime={setTime} onEnd={() => setPlaying(false)} label={`วิดีโอช็อต ${i + 1}`} />
+                      <FilmPlayer clips={clips} index={i} playing={playing} seek={seek} onIndex={setSel} onTime={setTime} onEnd={() => setPlaying(false)} label={`วิดีโอ ฉาก ${sceneOf + 1} · ช็อต ${shotInScene}`} />
                       {!v?.url && (
                         <div className={x.playerEmpty}>
                           <span className={x.playerBg} aria-hidden>{thumbOf(s)}</span>
@@ -658,11 +739,11 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   </div>
                 </div>
 
-                <aside className={x.inspector} aria-label={`รายละเอียดฉาก ${sceneOf + 1} ช็อต ${shotInScene}`}>
+                <aside className={x.inspector} aria-label={`รายละเอียด ฉาก ${sceneOf + 1} · ช็อต ${shotInScene}`}>
                   <header className={x.inspHead}>
-                    <div><strong>ฉาก {sceneOf + 1} · ช็อต {shotInScene}</strong><small>ช็อตที่ {i + 1} · {clock(Math.floor(start))}–{clock(Math.floor(start + shotLength(s)))}{s.locationId ? ` · #${elName(s.locationId) ?? ""}` : ""}</small></div>
+                    <div><strong>ฉาก {sceneOf + 1} · ช็อต {shotInScene}</strong><small>{clock(Math.floor(start))}–{clock(Math.floor(start + shotLength(s)))}{s.locationId ? ` · #${elName(s.locationId) ?? ""}` : ""}</small></div>
                     <span className={x.inspTools}>
-                      {s.id && ep.planAvailable && <button type="button" className={x.icon} aria-pressed={target === s.id} disabled={dirty || lockedByVideo} title={dirty ? "บันทึกช็อตก่อน" : "พิมพ์ในแชตเพื่อแก้เฉพาะช็อตนี้"} aria-label="แก้ช็อตนี้ด้วยแชต" onClick={() => { setTarget(target === s.id ? null : s.id ?? null); document.getElementById("film-chat")?.focus(); }}><MessagesSquare size={15} /></button>}
+                      {s.id && ep.planAvailable && <button type="button" className={x.icon} aria-pressed={target === s.id} disabled={dirty || lockedByVideo} title={dirty ? "บันทึกช็อตก่อน" : "พิมพ์ในแชตเพื่อแก้เฉพาะช็อตนี้"} aria-label="แก้ช็อตนี้ด้วยแชต" onClick={() => { setTarget(target === s.id ? null : s.id ?? null); setScope("shot"); document.getElementById("film-chat")?.focus(); }}><MessagesSquare size={15} /></button>}
                       <button type="button" className={x.icon} aria-label="ย้ายไปก่อนหน้า" title="ย้ายไปก่อนหน้า" disabled={i === 0} onClick={() => move(i, -1)}><ChevronLeft size={16} /></button>
                       <button type="button" className={x.icon} aria-label="ย้ายไปถัดไป" title="ย้ายไปถัดไป" disabled={i === shots.length - 1} onClick={() => move(i, 1)}><ChevronRight size={16} /></button>
                       <button type="button" className={x.icon} aria-label="ลบช็อต" title="ลบช็อต" disabled={lockedByVideo} onClick={() => removeShot(i)}><Trash2 size={15} /></button>
@@ -684,13 +765,14 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   {v?.status === "succeeded" && !v.stale && (v.voice === "updating" ? <p className={x.cannot}><LoaderCircle size={13} className={f.spin} /> กำลังอัปเดตเสียงพากย์…</p>
                     : v.voice === "outdated" ? <p className={x.warn}><Mic size={13} /> คลิปนี้ยังใช้เสียงเดิมของตัวละคร</p>
                     : v.voice === "failed" ? <p className={x.error}><Mic size={13} /> {v.voiceMessage ?? "อัปเดตเสียงไม่สำเร็จ"}</p>
+                    : v.voice === "legacy" && v.speech === "native" ? <p className={f.muted}><Mic size={13} /> เสียงในตัว: โมเดลพูดบทเองให้ปากตรง ถ้าเปลี่ยนเสียงหรือบทต้องสร้างวิดีโอช็อตนี้ใหม่</p>
                     : v.voice === "legacy" ? <p className={x.warn}><AlertCircle size={13} /> คลิปนี้สร้างก่อนระบบแยกเสียงพากย์ ถ้าเปลี่ยนเสียงตัวละคร ต้องสร้างวิดีโอช็อตนี้ใหม่</p>
                     : null)}
                   {v?.status === "failed" && v.failureMessage && <p className={x.error}><AlertCircle size={13} /> {v.failureMessage}{v.pointsRefunded > 0 ? ` · คืน ${v.pointsRefunded} แต้มแล้ว` : ""}</p>}
                   {missing.length > 0 && !dirty ? <p className={x.warn}><ImageIcon size={13} /> {missing.map((m) => m.name).join(", ")} ยังไม่มีภาพที่พร้อมใช้ <button type="button" className={x.link} onClick={() => setTab("elements")}>ไปแก้</button></p>
                     : noVoice.length > 0 && !dirty ? <p className={x.warn}><Mic size={13} /> {noVoice.map((m) => m.name).join(", ")} ยังไม่มีเสียง <button type="button" className={x.link} onClick={() => setTab("elements")}>ไปเลือกเสียง</button></p>
                     : cannot && !lockedByVideo && <p className={x.cannot}>{cannot}</p>}
-                  <div className={x.fields} role="tabpanel" aria-label={`รายละเอียดช็อต ${i + 1}`}>
+                  <div className={x.fields} role="tabpanel" aria-label={`ข้อมูล ฉาก ${sceneOf + 1} · ช็อต ${shotInScene}`}>
                     <section className={x.block}>
                       <h4>การเปิดช็อต</h4>
                       <div className={x.choices} role="radiogroup" aria-label="การต่อภาพ">
@@ -698,7 +780,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                           <Scissors size={16} aria-hidden /><span><strong>เริ่มฉากใหม่</strong><small>ตัดภาพ เปลี่ยนสถานที่หรือมุมกล้องได้</small></span>
                         </button>
                         <button type="button" role="radio" aria-checked={s.transition === "continue"} className={x.choice} disabled={i === 0 || lockedByVideo} onClick={() => edit(i, { transition: "continue" })}>
-                          <Link2 size={16} aria-hidden /><span><strong>ต่อจากช็อต {i || "ก่อน"}</strong><small>{i === 0 ? "ช็อตแรกต้องเริ่มฉากใหม่" : "ใช้เฟรมสุดท้ายของช็อตก่อนเป็นภาพแรก"}</small></span>
+                          <Link2 size={16} aria-hidden /><span><strong>ต่อจาก{i > 0 ? positionLabel(shots, i - 1) : "ช็อตก่อน"}</strong><small>{i === 0 ? "ช็อตแรกต้องเริ่มฉากใหม่" : "ใช้เฟรมสุดท้ายของช็อตก่อนเป็นภาพแรก"}</small></span>
                         </button>
                       </div>
                       <label className={x.inline}>ความยาว
@@ -756,6 +838,20 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                       <label className={x.field}><span>กล้อง</span>
                         <textarea maxLength={300} disabled={lockedByVideo} value={s.camera} placeholder="เช่น tracking ตามขึ้นบันได แล้วหยุดเป็น over-the-shoulder" onChange={(e) => edit(i, { camera: e.target.value })} />
                       </label>
+                      <label className={x.field}><span>ตำแหน่งและท่าทาง (blocking) · ใช้ต่อทุกช็อตในฉาก กันซ้ายขวาสลับ นั่ง/ยืนไม่ต่อเนื่อง</span>
+                        <textarea maxLength={600} disabled={lockedByVideo} value={s.blocking ?? ""} placeholder="เช่น @มิว: screen-left, seated at her desk, facing right; @บอส: screen-right, standing, facing left" onChange={(e) => edit(i, { blocking: e.target.value })} />
+                      </label>
+                      {(s.cuts?.length ?? 0) > 0 && (
+                        <div className={x.field}><span>ช็อตย่อยในคลิปนี้ ({s.cuts!.length}) · โมเดลตัดภาพระหว่างช็อตย่อยเองในคลิปเดียว</span>
+                          {s.cuts!.map((c, k) => (
+                            <div key={k} className={x.cutRow}>
+                              <b>{k + 1}</b>
+                              <textarea maxLength={200} rows={1} disabled={lockedByVideo} value={c.camera} aria-label={`กล้องช็อตย่อย ${k + 1}`} onChange={(e) => edit(i, { cuts: s.cuts!.map((o, j) => j === k ? { ...o, camera: e.target.value } : o) })} />
+                              <textarea maxLength={500} rows={2} disabled={lockedByVideo} value={c.action} aria-label={`การกระทำช็อตย่อย ${k + 1}`} onChange={(e) => edit(i, { cuts: s.cuts!.map((o, j) => j === k ? { ...o, action: e.target.value } : o) })} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </section>
 
                     <section className={x.block}>
@@ -806,6 +902,10 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                       <button type="button" role="radio" aria-checked={newKind === "draft"} disabled={!draftOn} title={draftOn ? `ดูตัวอย่าง 480p ก่อน ${ep.draftPointsPer5s} แต้ม / 5 วิ ชอบแล้วค่อยทำตัวเต็ม` : "โมเดลนี้ไม่มีโหมด draft"} onClick={() => setQuality("draft")}>Draft 480p</button>
                       <button type="button" role="radio" aria-checked={newKind === "full"} title={`${ep.videoPointsPer5s} แต้ม / 5 วิ`} onClick={() => setQuality("full")}>ตัวเต็ม {ep.resolution}</button>
                     </div>
+                    <div className={x.quality} role="radiogroup" aria-label="เสียงพูด">
+                      <button type="button" role="radio" aria-checked={speech === "native"} title="โมเดลวิดีโอพูดบทเองโดยใช้เสียงตัวละครเป็นตัวอย่าง ปากตรงกับเสียง (เปลี่ยนเสียงทีหลังต้องสร้างใหม่)" onClick={() => setSpeech("native")}>เสียงในตัว · ปากตรง</button>
+                      <button type="button" role="radio" aria-checked={speech === "dub"} title="ใช้เสียงที่ผูกไว้เป๊ะ วางทับคลิป ปากอาจไม่ตรง เปลี่ยนเสียงทีหลังได้" onClick={() => setSpeech("dub")}>พากย์ทับ</button>
+                    </div>
                     <span className={f.muted}>{rate(newKind)} แต้ม / 5 วิ · คงเหลือ {ep.balance}</span>
                     {finalShots.length > 0 && !dirty && (
                       <button type="button" className={x.bulkBtn} disabled={busy.includes("bulk-finalize")} onClick={finalizeAll}>
@@ -840,8 +940,8 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                     shots={shots.map((sh, k) => {
                       const sc = scenes.findIndex((g) => g.includes(k));
                       return {
-                        key: sh.id ?? `new-${k}`, start: starts[k], seconds: shotLength(sh), full: sh.seconds, trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, scene: sc, continues: scenes[sc][0] !== k,
-                        state: stateOf(sh), label: `ฉาก ${sc + 1} ช็อต ${scenes[sc].indexOf(k) + 1} · ${sh.seconds} วินาที · ${STATE_LABEL[stateOf(sh)]}`, thumb: thumbOf(sh),
+                        key: sh.id ?? `new-${k}`, start: starts[k], seconds: shotLength(sh), full: sh.seconds, trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, scene: sc, no: scenes[sc].indexOf(k) + 1, continues: scenes[sc][0] !== k,
+                        state: stateOf(sh), label: `ฉาก ${sc + 1} · ช็อต ${scenes[sc].indexOf(k) + 1} · ${sh.seconds} วินาที · ${STATE_LABEL[stateOf(sh)]}`, thumb: thumbOf(sh),
                         lines: linesOf(sh).map(({ speaker, text, at, seconds, real }) => ({ speaker, text, at, seconds, real })),
                         audio: sh.audio, silent: sh.dialogue.length > 0,
                       };
