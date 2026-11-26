@@ -6,19 +6,20 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Download, Eye, Film, ImageIcon, Link2, LoaderCircle, MapPin,
-  MessagesSquare, Mic, Music, Package, Pause, Pencil, Play, Plus, RefreshCw, Save, Scissors, Sparkles, Trash2, Upload, Users, Wand2, X, ZoomIn,
+  MessagesSquare, Mic, Music, Package, Pause, Pencil, Play, Plus, RefreshCw, Save, Scissors, Sparkles, Trash2, Users, Wand2, X, ZoomIn,
 } from "lucide-react";
 import { ShotArt } from "@/components/director/shot-art";
 import { useConfirm } from "@/components/director/use-confirm";
 import { CreateModal } from "@/components/director/modal";
 import { FilmPlayer } from "./film-player";
-import { FilmTimeline, type ShotState } from "./film-timeline";
+import { FilmTimeline, type MusicPatch, type ShotState } from "./film-timeline";
 import { ElementEditor, type ElementEditorTarget } from "./element-editor";
 import { FilmExportPanel } from "./film-export-panel";
 import { FilmSteps, NextStep, stepBlockers, type FilmStep } from "./film-steps";
 import { StoryPanel } from "./story-panel";
 import { FilmSkillPicker } from "./film-skill-picker";
-import { MusicPreview } from "./music-preview";
+import { MusicPreview, musicSpan } from "./music-preview";
+import { MusicBar } from "./music-bar";
 import { DialoguePreview, type PlacedLine } from "./dialogue-preview";
 import { characterVoiceLabel } from "@/lib/voice-api";
 import { definiteRejection, finishSubmission, prepareSubmission } from "@/lib/director-submission";
@@ -257,11 +258,20 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
       setMusicVolume(null);
     });
   };
-  const moveMusic = (start: number) => {
-    if (!ep.music || dirty || start === ep.music.start) return;
+  // Moves or cuts the music (start on the film, skipped head, length). Independent of the shots,
+  // so it works with unsaved shot edits too.
+  const patchMusic = (patch: MusicPatch) => {
+    if (!ep.music || Object.keys(patch).length === 0) return;
+    // Show the change at once; the server's answer replaces it.
+    setEp((cur) => (cur?.music ? { ...cur, music: { ...cur.music, ...patch } } : cur));
     void run("music", async () => {
-      const next = await paid(`film-music-start:${ep.projectId}`, { start }, (key) => filmApi.updateMusic(ep.projectId, { idempotencyKey: key, start }));
-      setEp(next);
+      try {
+        const next = await paid(`film-music-edit:${ep.projectId}`, patch, (key) => filmApi.updateMusic(ep.projectId, { idempotencyKey: key, ...patch }));
+        setEp((cur) => (cur ? { ...cur, music: next.music, revision: next.revision } : next));
+      } catch (cause) {
+        setReload((n) => n + 1);
+        throw cause;
+      }
     });
   };
   const removeMusic = () => run("music", async () => {
@@ -724,7 +734,7 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                   {voiceBanner}
                   <div className={x.screen}>
                     <div className={x.player} data-ratio={ep.aspectRatio} onClick={() => { if (hasClip) togglePlay(); }}>
-                      {ep.music?.url && <MusicPreview url={ep.music.url} volume={musicVolume ?? ep.music.volume} start={ep.music.start} playing={playing} time={time} seekToken={seek.token} />}
+                      {ep.music?.url && <MusicPreview url={ep.music.url} volume={musicVolume ?? ep.music.volume} start={ep.music.start} trimIn={ep.music.trimIn} span={musicSpan(ep.music)} playing={playing} time={time} seekToken={seek.token} />}
                       <DialoguePreview lines={placed} playing={playing} time={time} seekToken={seek.token} />
                       <FilmPlayer clips={clips} index={i} playing={playing} seek={seek} onIndex={setSel} onTime={setTime} onEnd={() => setPlaying(false)} label={`วิดีโอ ฉาก ${sceneOf + 1} · ช็อต ${shotInScene}`} />
                       {!v?.url && (
@@ -919,23 +929,20 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                     )}
                     <span className={x.spacer} />
                     <input ref={musicInput} type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a" hidden onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) uploadMusic(file); }} />
-                    {ep.music ? (
-                      <span className={x.musicCtl}>
-                        <Music size={14} aria-hidden /><span title={ep.music.name}>{ep.music.name}</span>
-                        <input type="range" min={0} max={100} value={Math.round((musicVolume ?? ep.music.volume) * 100)} disabled={dirty || busy.includes("music")} aria-label="ระดับเสียงเพลง"
-                          onChange={(e) => setMusicVolume(Number(e.target.value) / 100)}
-                          onPointerUp={() => saveMusicVolume()} onKeyUp={() => saveMusicVolume()} onBlur={() => saveMusicVolume()} />
-                        <button type="button" className={x.icon} aria-label="เปลี่ยนเพลง" title="เปลี่ยนเพลง" disabled={dirty || busy.includes("music")} onClick={() => musicInput.current?.click()}><Upload size={13} /></button>
-                        <button type="button" className={x.icon} aria-label="ลบเพลง" title="ลบเพลง" disabled={dirty || busy.includes("music")} onClick={removeMusic}><Trash2 size={13} /></button>
-                      </span>
-                    ) : (
-                      <button type="button" className={x.bulkBtn} disabled={dirty || busy.includes("music")} title={dirty ? "บันทึกช็อตก่อน" : "เพลงประกอบทั้งเรื่อง (MP3, WAV, M4A ไม่เกิน 30 MB)"} onClick={() => musicInput.current?.click()}>
+                    {!ep.music && (
+                      <button type="button" className={x.bulkBtn} disabled={busy.includes("music")} title="เพลงประกอบทั้งเรื่อง (MP3, WAV, M4A ไม่เกิน 30 MB)" onClick={() => musicInput.current?.click()}>
                         {busy.includes("music") ? <LoaderCircle size={14} className={f.spin} /> : <Music size={14} />} เพิ่มเพลง
                       </button>
                     )}
-                    <label className={x.zoom} title="ซูม timeline"><ZoomIn size={14} aria-hidden /><input type="range" min={8} max={64} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="ซูม timeline" /></label>
+                    <label className={x.zoom} title="ซูม timeline (Ctrl/⌘ + ล้อเมาส์)"><ZoomIn size={14} aria-hidden /><input type="range" min={8} max={64} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="ซูม timeline" /></label>
+                    <button type="button" className={x.bulkBtn} title="ย่อ/ขยายให้เห็นทั้งเรื่อง" onClick={() => { const w = document.querySelector<HTMLElement>("[data-film-timeline]")?.clientWidth ?? 800; setZoom(Math.min(64, Math.max(8, Math.floor((w - 100) / Math.max(total + 4, 10))))); }}>พอดีจอ</button>
 
                   </div>
+                  {ep.music && (
+                    <MusicBar music={ep.music} volume={musicVolume ?? ep.music.volume} total={total} busy={busy.includes("music")}
+                      onVolume={setMusicVolume} onVolumeDone={saveMusicVolume} onPatch={patchMusic}
+                      onReplace={() => musicInput.current?.click()} onRemove={removeMusic} />
+                  )}
                   <FilmTimeline
                     shots={shots.map((sh, k) => {
                       const sc = scenes.findIndex((g) => g.includes(k));
@@ -952,14 +959,16 @@ export function FilmWorkspace({ seriesId, episodeId }: { seriesId: string; episo
                     onSeek={seekTo}
                     onAddToScene={(last) => { setPlaying(false); addShotToScene(last); }}
                     onAddScene={() => { setPlaying(false); addShot(); }}
-                    music={ep.music ? { name: ep.music.name, seconds: ep.music.seconds, volume: musicVolume ?? ep.music.volume, start: ep.music.start } : null}
-                    musicMovable={!dirty && !busy.includes("music")}
+                    music={ep.music ? { name: ep.music.name, seconds: ep.music.seconds, volume: musicVolume ?? ep.music.volume, start: ep.music.start, trimIn: ep.music.trimIn, length: ep.music.length } : null}
+                    musicMovable={!busy.includes("music")}
                     onTrim={(k, trimIn, trimOut) => { setPlaying(false); edit(k, { trimIn, trimOut }); }}
                     onMoveShot={moveShot}
                     onMoveScene={moveScene}
                     onMoveLine={moveLine}
-                    onMoveMusic={moveMusic}
+                    onMusic={patchMusic}
+                    onZoom={setZoom}
                   />
+                  <p className={x.tlHint}>คลิกหรือลากไม้บรรทัดเพื่อเลื่อนตำแหน่ง · ลากช็อต/ฉากเพื่อสลับลำดับ · ลากขอบช็อตเพื่อตัดหัว-ท้าย · ลากเพลงเพื่อย้าย ลากขอบเพลงเพื่อตัด · Ctrl/⌘ + ล้อเมาส์เพื่อซูม · Space เล่น/หยุด</p>
                 </div>
 
                 {exportOpen && (

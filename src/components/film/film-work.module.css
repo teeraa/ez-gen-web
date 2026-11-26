@@ -1760,3 +1760,130 @@
   font-size: 12px;
   text-align: center;
 }
+
+/* Trim handles on every shot: the selected shot's always show, the others under the pointer.
+   A shot's start handle sits just inside its left edge and its end handle inside its right edge,
+   so neighbouring shots never share one spot. */
+.tlHandle {
+  width: 12px;
+  margin-left: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.tlHandle[data-side="out"] {
+  margin-left: -12px;
+}
+.tlHandle[data-selected],
+.tlHandle[data-active],
+.tlHandle:hover,
+.tlHandle:focus-visible {
+  opacity: 1;
+}
+.tlHandle:not([data-selected]) {
+  background: color-mix(in srgb, var(--f-primary) 70%, transparent);
+}
+.tlBubble {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--f-text);
+  color: var(--f-card);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tlLane[data-lane="video"] {
+  overflow: visible;
+}
+
+/* The music block: a draggable body with edges that cut the song's head and length. */
+.tlMusic > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tlMusic small {
+  color: var(--f-muted);
+  font-size: 10px;
+}
+.tlMusic[data-cut] {
+  border-left: 2px solid #a259ff;
+}
+.tlMusicEdge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.tlMusicEdge[data-side="in"] {
+  left: 0;
+}
+.tlMusicEdge[data-side="out"] {
+  right: 0;
+}
+.tlMusicEdge:hover,
+.tlMusicEdge:focus-visible {
+  background: color-mix(in srgb, #a259ff 55%, transparent);
+  outline: none;
+}
+
+/* Music settings under the toolbar. */
+.musicBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--f-border);
+  background: color-mix(in srgb, #a259ff 6%, var(--f-card));
+  font-size: 12.5px;
+}
+.musicBar > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.musicBar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--f-muted);
+}
+.musicBar input[type="number"] {
+  width: 64px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--f-border);
+  border-radius: 6px;
+  background: var(--f-card);
+  color: var(--f-text);
+  font: inherit;
+}
+.musicBar input[type="range"] {
+  width: 90px;
+}
+.musicBar output {
+  min-width: 34px;
+  color: var(--f-text);
+  font-variant-numeric: tabular-nums;
+}
+.musicBar .icon {
+  width: 28px;
+  height: 28px;
+}
+.tlHint {
+  padding: 4px 12px 6px;
+  color: var(--f-muted);
+  font-size: 11px;
+}

@@ -1,10 +1,12 @@
 "use client";
 // The studio timeline, laid out in seconds like the AI editor: scenes, shot clips, dialogue audio,
-// sound effects and music. Clicking seeks and the playhead follows playback. Everything drags:
-// shots and scenes reorder, dialogue clips move inside their shot, the music moves along the film,
-// and the selected shot's edges trim its clip (later shots ripple).
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+// sound effects and music. Clicking or dragging the ruler scrubs and the playhead follows playback.
+// Everything drags: shots and scenes reorder, dialogue clips move inside their shot, every shot's
+// edges trim its clip (later shots ripple), and the music moves along the film with edges that cut
+// its head and its length. Ctrl/⌘ + wheel zooms.
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Link2, Music, Plus } from "lucide-react";
+import { musicSpan } from "./music-preview";
 import x from "./film-work.module.css";
 
 export type ShotState = "done" | "draft" | "stale" | "work" | "error" | "idle";
@@ -36,6 +38,10 @@ const DRAG_PX = 5;
 
 type Drag = { kind: "shot" | "scene" | "line" | "music"; index: number; line?: number; dx: number };
 
+/** The music as the timeline edits it: where it starts on the film, its trimmed head and its length (0 = to the end). */
+export interface TimelineMusic { name: string; seconds: number; volume: number; start: number; trimIn: number; length: number }
+export type MusicPatch = Partial<Pick<TimelineMusic, "start" | "trimIn" | "length">>;
+
 /** Pointer handlers that report a horizontal drag in seconds, or a click when it never moved. */
 function useDragX(zoom: number, on: { start?: () => boolean; move: (sec: number) => void; end: (sec: number, moved: boolean) => void }) {
   const state = useRef<{ x: number; moved: boolean } | null>(null);
@@ -66,11 +72,11 @@ function useDragX(zoom: number, on: { start?: () => boolean; move: (sec: number)
   };
 }
 
-export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, canAdd, music, musicMovable, onSelect, onSeek, onAddToScene, onAddScene, onTrim, onMoveShot, onMoveScene, onMoveLine, onMoveMusic }: {
+export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, canAdd, music, musicMovable, onSelect, onSeek, onAddToScene, onAddScene, onTrim, onMoveShot, onMoveScene, onMoveLine, onMusic, onZoom }: {
   shots: TimelineShot[]; scenes: TimelineScene[]; total: number; sel: number; time: number;
   /** Pixels per second. */
   zoom: number; playing: boolean; canAdd: boolean;
-  music: { name: string; seconds: number; volume: number; start: number } | null;
+  music: TimelineMusic | null;
   musicMovable: boolean;
   onSelect: (i: number) => void; onSeek: (t: number) => void;
   onAddToScene: (lastShot: number) => void; onAddScene: () => void;
@@ -79,7 +85,9 @@ export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, c
   onMoveShot: (from: number, to: number) => void;
   onMoveScene: (from: number, to: number) => void;
   onMoveLine: (shot: number, line: number, at: number) => void;
-  onMoveMusic: (start: number) => void;
+  /** Saves a moved or cut music track (sent once, when the drag ends). */
+  onMusic: (patch: MusicPatch) => void;
+  onZoom?: (zoom: number) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -87,6 +95,28 @@ export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, c
   const step = zoom >= 48 ? 1 : zoom >= 20 ? 5 : 10;
   const ticks = Array.from({ length: Math.floor(width / zoom / step) + 1 }, (_, k) => k * step);
   const cur = shots[sel];
+  const scrubbing = useRef(false);
+
+  // Ctrl/⌘ + wheel (and trackpad pinch) zooms around the pointer instead of scrolling the page.
+  const zoomRef = useRef({ zoom, onZoom });
+  useEffect(() => { zoomRef.current = { zoom, onZoom }; });
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      const { zoom: z, onZoom: set } = zoomRef.current;
+      if (!set || !(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const next = Math.min(64, Math.max(8, Math.round(z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
+      if (next === z) return;
+      const px = e.clientX - el.getBoundingClientRect().left;
+      const at = (el.scrollLeft + px) / z;
+      set(next);
+      requestAnimationFrame(() => { el.scrollLeft = Math.max(0, at * next - px); });
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, []);
 
   // Keep the playhead in view while playing.
   useEffect(() => {
@@ -103,11 +133,12 @@ export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, c
     onSeek(Math.min(total, Math.max(0, (clientX - left) / zoom)));
   };
   // Trims keep at least one second of the clip.
-  const setTrim = (side: "in" | "out", value: number, base: { trimIn: number; trimOut: number }) => {
-    if (!cur) return;
-    const room = cur.full - 1;
-    if (side === "in") onTrim(sel, Math.min(Math.max(0, round(value)), room - base.trimOut), base.trimOut);
-    else onTrim(sel, base.trimIn, Math.min(Math.max(0, round(value)), room - base.trimIn));
+  const setTrim = (k: number, side: "in" | "out", value: number) => {
+    const sh = shots[k];
+    if (!sh) return;
+    const room = sh.full - 1;
+    if (side === "in") onTrim(k, Math.min(Math.max(0, round(value)), room - sh.trimOut), sh.trimOut);
+    else onTrim(k, sh.trimIn, Math.min(Math.max(0, round(value)), room - sh.trimIn));
   };
   // Where a block dragged by dx seconds lands among blocks with these [start, length]: the number of
   // other blocks whose centre is before the dragged block's centre.
@@ -126,13 +157,17 @@ export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, c
     : drag?.kind === "scene" && sceneTo !== drag.index ? dropAt(scenes, drag.index, sceneTo) : null;
 
   return (
-    <div className={x.tl} data-dragging={drag ? drag.kind : undefined}>
+    <div className={x.tl} data-film-timeline data-dragging={drag ? drag.kind : undefined}>
       <div className={x.tlHeads} aria-hidden>
         {LANES.map(([id, label]) => <span key={id} data-lane={id}>{label}</span>)}
       </div>
       <div className={x.tlScroll} ref={scroller}>
         <div className={x.tlCanvas} style={{ width }}>
-          <div className={x.tlLane} data-lane="ruler" onPointerDown={(e) => seekAt(e.clientX)} role="slider" aria-label="ตำแหน่งเล่น" aria-valuemin={0} aria-valuemax={Math.round(total)} aria-valuenow={Math.round(time)} aria-valuetext={`${fmt(time)} จาก ${fmt(total)}`} tabIndex={0}
+          <div className={x.tlLane} data-lane="ruler" role="slider"
+            onPointerDown={(e) => { if (e.button !== 0) return; e.currentTarget.setPointerCapture(e.pointerId); scrubbing.current = true; seekAt(e.clientX); }}
+            onPointerMove={(e) => { if (scrubbing.current) seekAt(e.clientX); }}
+            onPointerUp={() => { scrubbing.current = false; }}
+            onPointerCancel={() => { scrubbing.current = false; }} aria-label="ตำแหน่งเล่น" aria-valuemin={0} aria-valuemax={Math.round(total)} aria-valuenow={Math.round(time)} aria-valuetext={`${fmt(time)} จาก ${fmt(total)}`} tabIndex={0}
             onKeyDown={(e) => {
               if (e.key === "ArrowRight") { e.preventDefault(); onSeek(Math.min(total, time + 1)); }
               if (e.key === "ArrowLeft") { e.preventDefault(); onSeek(Math.max(0, time - 1)); }
@@ -161,11 +196,12 @@ export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, c
                 onClick={() => onSelect(k)}
                 onMove={(d) => onMoveShot(k, k + d)} />
             ))}
-            {cur && !drag && (["in", "out"] as const).map((side) => (
-              <TrimHandle key={side} side={side} zoom={zoom} left={(side === "in" ? cur.start : cur.start + cur.seconds) * zoom}
-                value={side === "in" ? cur.trimIn : cur.trimOut} max={cur.full - 1 - (side === "in" ? cur.trimOut : cur.trimIn)}
-                onChange={(v) => setTrim(side, v, cur)} />
-            ))}
+            {!drag && shots.flatMap((sh, k) => (["in", "out"] as const).map((side) => (
+              <TrimHandle key={`${sh.key}-${side}`} side={side} zoom={zoom} selected={k === sel} left={(side === "in" ? sh.start : sh.start + sh.seconds) * zoom}
+                value={side === "in" ? sh.trimIn : sh.trimOut} max={sh.full - 1 - (side === "in" ? sh.trimOut : sh.trimIn)}
+                label={`ฉาก ${sh.scene + 1} · ช็อต ${sh.no}`}
+                onChange={(v) => setTrim(k, side, v)} />
+            )))}
             <button type="button" className={x.tlAddScene} style={{ left: total * zoom + 6 }} disabled={!canAdd} onClick={onAddScene}><Plus size={13} /> ฉาก</button>
           </div>
 
@@ -190,9 +226,8 @@ export function FilmTimeline({ shots, scenes, total, sel, time, zoom, playing, c
           <div className={x.tlLane} data-lane="music">
             {music && (
               <MusicBlock music={music} total={total} zoom={zoom} movable={musicMovable}
-                dx={drag?.kind === "music" ? drag.dx : 0}
-                onDrag={(dx) => setDrag({ kind: "music", index: 0, dx })}
-                onDrop={(dx) => { setDrag(null); onMoveMusic(Math.min(Math.max(0, round(music.start + dx)), Math.max(0, total - 1))); }} />
+                onDragging={(on) => setDrag(on ? { kind: "music", index: 0, dx: 0 } : null)}
+                onChange={onMusic} />
             )}
           </div>
 
@@ -259,38 +294,109 @@ function LineBlock({ shot, line, zoom, dx, onDrag, onDrop, onClick }: BlockDrag 
   );
 }
 
-function MusicBlock({ music, total, zoom, movable, dx, onDrag, onDrop }: BlockDrag & { music: { name: string; seconds: number; volume: number; start: number }; total: number; zoom: number; movable: boolean }) {
-  const handlers = useDragX(zoom, { start: () => movable, move: onDrag, end: (d, moved) => { if (moved) onDrop(d); } });
-  const start = Math.max(0, music.start + dx);
+/**
+ * The music on the film. The body drags the song along the film; the left edge cuts the song's
+ * head (the rest stays where it was, like a clip in an editor); the right edge cuts its length.
+ * The block shows the change live and saves once when the pointer is released.
+ */
+function MusicBlock({ music, total, zoom, movable, onDragging, onChange }: { music: TimelineMusic; total: number; zoom: number; movable: boolean; onDragging: (on: boolean) => void; onChange: (patch: MusicPatch) => void }) {
+  const [live, setLive] = useState<TimelineMusic | null>(null);
+  const drag = useRef<{ x: number; part: "body" | "in" | "out"; moved: boolean } | null>(null);
+  const m = live ?? music;
+  const span = musicSpan(m);
+  // Only the part over the film is shown; the rest would never play.
+  const shown = Math.max(0.5, Math.min(span, Math.max(1, total - m.start)));
+  const edit = (part: "body" | "in" | "out", d: number): TimelineMusic => {
+    if (part === "body") return { ...music, start: round(Math.min(Math.max(0, music.start + d), Math.max(0, total - 1))) };
+    const full = musicSpan(music);
+    if (part === "in") {
+      // Cut the head: the song's later part stays at the same film time.
+      const room = Math.min(music.seconds - 0.5 - music.trimIn, (music.length || full) - 0.5);
+      const step = round(Math.min(Math.max(d, -music.trimIn, -music.start), room));
+      return { ...music, trimIn: round(music.trimIn + step), start: round(music.start + step), length: music.length ? round(music.length - step) : 0 };
+    }
+    const visible = Math.min(full, Math.max(1, total - music.start));
+    const next = round(Math.min(Math.max(0.5, visible + d), music.seconds - music.trimIn));
+    return { ...music, length: next >= music.seconds - music.trimIn - 0.05 ? 0 : next };
+  };
+  const down = (e: ReactPointerEvent, part: "body" | "in" | "out") => {
+    if (e.button !== 0 || !movable) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, part, moved: false };
+  };
+  const move = (e: ReactPointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    if (!d.moved && Math.abs(e.clientX - d.x) < DRAG_PX) return;
+    if (!d.moved) onDragging(true);
+    d.moved = true;
+    setLive(edit(d.part, (e.clientX - d.x) / zoom));
+  };
+  const up = (e: ReactPointerEvent) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d?.moved) return;
+    onDragging(false);
+    const next = edit(d.part, (e.clientX - d.x) / zoom);
+    setLive(null);
+    const patch: MusicPatch = {};
+    if (next.start !== music.start) patch.start = next.start;
+    if (next.trimIn !== music.trimIn) patch.trimIn = next.trimIn;
+    if (next.length !== music.length) patch.length = next.length;
+    if (Object.keys(patch).length) onChange(patch);
+  };
+  const cancel = () => { if (drag.current?.moved) onDragging(false); drag.current = null; setLive(null); };
+  const edgeKeys = (e: ReactKeyboardEvent, part: "in" | "out") => {
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!dir || !movable) return;
+    e.preventDefault();
+    const next = edit(part, dir * (e.shiftKey ? 1 : 0.1));
+    onChange(part === "in" ? { trimIn: next.trimIn, start: next.start, length: next.length } : { length: next.length });
+  };
+  const info = `${m.name} · เริ่มที่ ${fmt(m.start)}${m.trimIn ? ` · ข้ามต้นเพลง ${m.trimIn.toFixed(1)} วิ` : ""} · ยาว ${span.toFixed(1)} วิ · ${Math.round(m.volume * 100)}%`;
   return (
-    <span className={x.tlMusic} data-movable={movable || undefined} data-dragging={dx ? true : undefined} style={{ left: start * zoom, width: Math.max(0.5, Math.min(music.seconds, Math.max(1, total - start))) * zoom }}
-      title={`${music.name} · เริ่ม ${fmt(music.start)} · ระดับเสียง ${Math.round(music.volume * 100)}%${movable ? " — ลากเพื่อย้าย" : " — บันทึกช็อตก่อนย้ายเพลง"}`} {...handlers}>
-      <Music size={11} aria-hidden /> {music.name} · {Math.round(music.volume * 100)}%
+    <span className={x.tlMusic} data-movable={movable || undefined} data-dragging={live ? true : undefined} data-cut={m.trimIn > 0 || undefined}
+      style={{ left: m.start * zoom, width: shown * zoom }}
+      title={`${info}${movable ? " — ลากเพื่อย้าย · ลากขอบซ้าย/ขวาเพื่อตัดหัว/ความยาว" : ""}`}
+      onPointerDown={(e) => down(e, "body")} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
+      {movable && <i className={x.tlMusicEdge} data-side="in" role="slider" tabIndex={0} aria-label="ตัดต้นเพลง (วินาที)" aria-valuemin={0} aria-valuemax={Math.round(m.seconds)} aria-valuenow={m.trimIn}
+        onPointerDown={(e) => down(e, "in")} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel} onKeyDown={(e) => edgeKeys(e, "in")} />}
+      <Music size={11} aria-hidden /> <span>{m.name}</span> <small>{live ? `${fmt(m.start)} · ${span.toFixed(1)} วิ` : `${Math.round(m.volume * 100)}%`}</small>
+      {movable && <i className={x.tlMusicEdge} data-side="out" role="slider" tabIndex={0} aria-label="ความยาวเพลง (วินาที)" aria-valuemin={0.5} aria-valuemax={Math.round(m.seconds)} aria-valuenow={round(span)}
+        onPointerDown={(e) => down(e, "out")} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel} onKeyDown={(e) => edgeKeys(e, "out")} />}
     </span>
   );
 }
 
-/** A draggable (and arrow-key) handle at the start or end of the selected shot. */
-function TrimHandle({ side, left, value, max, zoom, onChange }: { side: "in" | "out"; left: number; value: number; max: number; zoom: number; onChange: (value: number) => void }) {
+/**
+ * A draggable (and arrow-key) handle at a shot's start or end. Every shot has them: the selected
+ * shot's are always shown, the others appear under the pointer. While dragging, a bubble shows the cut.
+ */
+function TrimHandle({ side, left, value, max, zoom, selected, label, onChange }: { side: "in" | "out"; left: number; value: number; max: number; zoom: number; selected: boolean; label: string; onChange: (value: number) => void }) {
   const drag = useRef<{ x: number; value: number } | null>(null);
+  const [active, setActive] = useState(false);
   // Moving right cuts more at the start and less at the end.
   const sign = side === "in" ? 1 : -1;
+  const name = side === "in" ? "ตัดหัว" : "ตัดท้าย";
   return (
-    <span className={x.tlHandle} data-side={side} style={{ left }} role="slider" tabIndex={0}
-      aria-label={side === "in" ? "ตัดหัวช็อต (วินาที)" : "ตัดท้ายช็อต (วินาที)"} aria-valuemin={0} aria-valuemax={Math.max(0, max)} aria-valuenow={value}
-      title={`${side === "in" ? "ตัดหัว" : "ตัดท้าย"} ${value} วิ — ลากเพื่อปรับ`}
-      onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, value }; }}
+    <span className={x.tlHandle} data-side={side} data-selected={selected || undefined} data-active={active || undefined} style={{ left }} role="slider" tabIndex={selected ? 0 : -1}
+      aria-label={`${name}${label} (วินาที)`} aria-valuemin={0} aria-valuemax={Math.max(0, max)} aria-valuenow={value}
+      title={`${label} · ${name} ${value} วิ — ลากเพื่อปรับ (ลูกศรซ้าย/ขวา ทีละ 0.1 วิ, Shift ทีละ 0.5 วิ)`}
+      onPointerDown={(e) => { if (e.button !== 0) return; e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, value }; setActive(true); }}
       onPointerMove={(e) => {
         const d = drag.current;
         if (d) onChange(d.value + (sign * (e.clientX - d.x)) / zoom);
       }}
-      onPointerUp={() => { drag.current = null; }}
-      onPointerCancel={() => { drag.current = null; }}
+      onPointerUp={() => { drag.current = null; setActive(false); }}
+      onPointerCancel={() => { drag.current = null; setActive(false); }}
       onKeyDown={(e) => {
         const dir = e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 0;
         if (!dir) return;
         e.preventDefault();
         onChange(value + sign * dir * (e.shiftKey ? 0.5 : 0.1));
-      }} />
+      }}>
+      {active && <b className={x.tlBubble}>{name} {value.toFixed(1)} วิ</b>}
+    </span>
   );
 }

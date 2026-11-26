@@ -4,6 +4,7 @@
 // The next clip is mounted hidden with preload="auto" and keyed by its file path, so advancing
 // reuses the already-buffered element, and a refreshed signed URL never reloads a playing clip.
 import { useEffect, useRef } from "react";
+import { attachAudio } from "./sync-audio";
 
 /** start/seconds place the clip on the film timeline; trimIn is where playback starts inside the file. */
 export interface FilmClip { url: string | null; start: number; seconds: number; trimIn: number; muted?: boolean }
@@ -74,7 +75,8 @@ export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd
       return;
     }
     if (v.currentTime < trimIn - 0.05 && pending.current === null) v.currentTime = trimIn;
-    void v.play().catch(() => latest.current.onEnd());
+    // Only a blocked play stops the film; an interrupted one (a seek, a new source) is not an end.
+    void v.play().catch((cause: unknown) => { if ((cause as { name?: string })?.name === "NotAllowedError") latest.current.onEnd(); });
   }, [playing, current, trimIn]);
 
   // A smooth playhead while playing (timeupdate fires only ~4 times a second).
@@ -108,7 +110,7 @@ export function FilmPlayer({ clips, index, playing, seek, onIndex, onTime, onEnd
             ref={(el) => {
               if (!el) { videos.current.delete(key); return; }
               videos.current.set(key, el);
-              if (!el.getAttribute("src")) el.src = url;
+              attachAudio(el, url);
               el.muted = muted;
             }}
             muted={muted}

@@ -2,6 +2,7 @@
 // Plays the generated dialogue clips in step with the studio player (which plays clips without
 // dialogue): each line sounds while the playhead is inside it, from the right offset.
 import { useEffect, useRef } from "react";
+import { attachAudio, syncAudio } from "./sync-audio";
 
 /** A line placed on the film: `at` and `seconds` in film seconds; `offset` skips the start of the audio. */
 export interface PlacedLine { key: string; url: string; at: number; seconds: number; offset: number }
@@ -17,21 +18,17 @@ export function DialoguePreview({ lines, playing, time, seekToken }: { lines: Pl
       const a = audios.current.get(l.key);
       if (!a) continue;
       const inside = playing && time >= l.at && time < l.at + l.seconds;
-      if (!inside) { if (!a.paused) a.pause(); continue; }
-      if (a.paused || seeked) {
-        a.currentTime = l.offset + (time - l.at);
-        void a.play().catch(() => {});
-      }
+      syncAudio(a, inside ? l.offset + (time - l.at) : null, seeked);
     }
   }, [lines, playing, time, seekToken]);
   return (
     <>
       {lines.map((l) => (
-        // Keyed by the file path with src set once, so refreshed signed URLs never reload a line.
+        // Keyed by the file path, so refreshed signed URLs never reload a line (see attachAudio).
         <audio key={l.key} preload="auto" hidden ref={(el) => {
           if (!el) { audios.current.delete(l.key); return; }
           audios.current.set(l.key, el);
-          if (!el.getAttribute("src")) el.src = l.url;
+          attachAudio(el, l.url);
         }} />
       ))}
     </>

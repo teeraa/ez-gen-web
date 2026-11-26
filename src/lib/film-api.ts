@@ -55,8 +55,8 @@ export interface FilmShot {
   lineAt: number[];
 }
 
-/** The episode's music track, mixed under the whole film from 0 s. */
-export interface FilmMusic { name: string; seconds: number; volume: number; start: number; url: string | null; expiresAt: string | null }
+/** start places the song on the film; trimIn skips its first seconds; length cuts how long it plays (0 = to the song's end). */
+export interface FilmMusic { name: string; seconds: number; volume: number; start: number; trimIn: number; length: number; url: string | null; expiresAt: string | null }
 
 export interface FilmVideoModel { id: string; label: string; minSeconds: number; maxSeconds: number; audio: boolean; default: boolean; draft: boolean }
 
@@ -163,7 +163,7 @@ export type VideoKind = "draft" | "full" | "finalize";
 export type SpeechMode = "native" | "dub";
 
 function normalize(e: FilmEpisode): FilmEpisode {
-  return { ...e, draftPointsPer5s: e.draftPointsPer5s ?? 0, messages: (e.messages ?? []).map((m) => ({ ...m, target: m.target ?? "" })), story: e.story ?? null, plan: e.plan ? { ...e.plan, target: e.plan.target ?? "" } : null, pending: e.pending ? { ...e.pending, deletes: e.pending.deletes ?? [], outdated: e.pending.outdated ?? [], voices: e.pending.voices ?? [] } : null, planAvailable: e.planAvailable ?? false, export: e.export ?? null, exportAvailable: e.exportAvailable ?? false, redubShots: e.redubShots ?? 0, redubPoints: e.redubPoints ?? 0, redubAvailable: e.redubAvailable ?? false, music: e.music ? { ...e.music, start: e.music.start ?? 0 } : null, shots: (e.shots ?? []).map((sh) => ({ ...sh, blocking: sh.blocking ?? "", cuts: sh.cuts ?? [], trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, lineAt: sh.lineAt ?? [], video: sh.video ? { ...sh.video, voice: sh.video.voice ?? "", voiceMessage: sh.video.voiceMessage ?? null, rawUrl: sh.video.rawUrl ?? null, lines: sh.video.lines ?? [] } : null })), skills: e.skills ?? [], skillsAvailable: e.skillsAvailable ?? false, planPoints: e.planPoints ?? 0, targetSeconds: e.targetSeconds ?? 0, elements: (e.elements ?? []).map((el) => ({ ...el, syntheticUrl: el.syntheticUrl ?? null })) };
+  return { ...e, draftPointsPer5s: e.draftPointsPer5s ?? 0, messages: (e.messages ?? []).map((m) => ({ ...m, target: m.target ?? "" })), story: e.story ?? null, plan: e.plan ? { ...e.plan, target: e.plan.target ?? "" } : null, pending: e.pending ? { ...e.pending, deletes: e.pending.deletes ?? [], outdated: e.pending.outdated ?? [], voices: e.pending.voices ?? [] } : null, planAvailable: e.planAvailable ?? false, export: e.export ?? null, exportAvailable: e.exportAvailable ?? false, redubShots: e.redubShots ?? 0, redubPoints: e.redubPoints ?? 0, redubAvailable: e.redubAvailable ?? false, music: e.music ? { ...e.music, start: e.music.start ?? 0, trimIn: e.music.trimIn ?? 0, length: e.music.length ?? 0 } : null, shots: (e.shots ?? []).map((sh) => ({ ...sh, blocking: sh.blocking ?? "", cuts: sh.cuts ?? [], trimIn: sh.trimIn ?? 0, trimOut: sh.trimOut ?? 0, lineAt: sh.lineAt ?? [], video: sh.video ? { ...sh.video, voice: sh.video.voice ?? "", voiceMessage: sh.video.voiceMessage ?? null, rawUrl: sh.video.rawUrl ?? null, lines: sh.video.lines ?? [] } : null })), skills: e.skills ?? [], skillsAvailable: e.skillsAvailable ?? false, planPoints: e.planPoints ?? 0, targetSeconds: e.targetSeconds ?? 0, elements: (e.elements ?? []).map((el) => ({ ...el, syntheticUrl: el.syntheticUrl ?? null })) };
 }
 const id = encodeURIComponent;
 
@@ -197,7 +197,7 @@ export const filmApi = {
     if (!response.ok) throw new FilmError(body.message ?? "อัปโหลดเพลงไม่สำเร็จ", response.status, body.errorCode ?? "UNKNOWN", body.details);
     return normalize(body.data as FilmEpisode);
   },
-  updateMusic: (projectId: string, body: { idempotencyKey: string; volume?: number; start?: number; remove?: boolean }) =>
+  updateMusic: (projectId: string, body: { idempotencyKey: string; volume?: number; start?: number; trimIn?: number; length?: number; remove?: boolean }) =>
     request<FilmEpisode>(`film/episodes/${id(projectId)}/music`, json("PATCH", body)).then(normalize),
   /** Replaces the episode's chosen film skills (at most FILM_SKILLS_MAX; [] clears them). */
   setSkills: (projectId: string, body: { skillIds: string[]; idempotencyKey: string }) =>
