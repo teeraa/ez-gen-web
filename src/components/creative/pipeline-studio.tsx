@@ -13,6 +13,8 @@ import { getPipelineProgress } from '@/lib/pipeline-progress';
 import { type Asset } from '@/lib/creative-api';
 import { orderedRatios, QUICK_DURATIONS, rankModels, recommendDuration } from '@/lib/studio-recommend';
 import { PipelineCharacterPicker } from './pipeline-character-picker';
+import { CharacterVoicePicker } from '@/components/voice/character-voice-picker';
+import { NO_VOICE, characterVoiceLabel, voiceInputOf, type CharacterVoiceInput } from '@/lib/voice-api';
 import { restorePipelineRequest, restorePipelineFinal, type PendingPipelineFinal } from '@/lib/pipeline-submission';
 import styles from './studio.module.css';
 
@@ -40,6 +42,8 @@ export function PipelineStudio() {
   const [character, setCharacter] = useState('');
   const [scene, setScene] = useState('');
   const [dialogue, setDialogue] = useState('');
+  // A Voice-menu voice dubs the dialogue the way films do; none keeps the video model's own voice.
+  const [voice, setVoice] = useState<CharacterVoiceInput>(NO_VOICE);
   const [reference, setReference] = useState('');
   const [preview, setPreview] = useState('');
   const [filename, setFilename] = useState('');
@@ -127,6 +131,7 @@ export function PipelineStudio() {
         setPending(restored);
         setSource(restored.characterAssetId ? 'library' : 'upload');
         setDialogue(restored.dialogue ?? '');
+        setVoice(restored.voice ?? NO_VOICE);
         setModelId(restored.modelId as ModelId);
         modelTouched.current = true;
         setRatio(restored.aspectRatio);
@@ -187,6 +192,9 @@ export function PipelineStudio() {
   const suggestedDuration = modelCap?.supportsDialogue && dialogue.trim() ? recommendDuration(quickDurations, dialogue) ?? recommendDuration(availableDurations, dialogue) : undefined;
   const speakSeconds = estimateDialogueSeconds(dialogue);
   const dialogueTooLongForClip = !!modelCap?.supportsDialogue && mayExceedThaiDialogueDuration(dialogue, duration);
+  const canVoice = !!modelCap?.supportsVoice;
+  const wantsVoice = !!(voice.voiceId || voice.templateId);
+  const useVoice = canVoice && wantsVoice && !!dialogue.trim();
 
   // Until the user picks a model, follow the recommendation for the current inputs.
   useEffect(() => {
@@ -212,6 +220,7 @@ export function PipelineStudio() {
       characterPrompt: source === 'library' ? '' : character,
       scenePrompt: scene,
       ...(dialogue ? { dialogue } : {}),
+      ...(useVoice ? { voice } : {}),
       visualStyle: 'cinematic_realistic',
       aspectRatio: ratio,
       durationSeconds: duration,
@@ -219,7 +228,7 @@ export function PipelineStudio() {
       quality: 'standard',
       ...(draft ? { draft: true } : {}),
     }),
-    [source, libraryCharacter, reference, character, scene, dialogue, ratio, duration, modelId, draft],
+    [source, libraryCharacter, reference, character, scene, dialogue, useVoice, voice, ratio, duration, modelId, draft],
   );
   const bodyKey = JSON.stringify(requestBody);
   useEffect(() => {
@@ -377,6 +386,7 @@ export function PipelineStudio() {
     setCharacter('');
     setScene('');
     setDialogue('');
+    setVoice(NO_VOICE);
     setLibraryCharacter(null);
     clearReference();
     setError('');
@@ -481,7 +491,15 @@ export function PipelineStudio() {
             </div>
             {source === 'library' ? (
               <div className={styles.picker}>
-                <PipelineCharacterPicker selected={libraryCharacter} onSelect={setLibraryCharacter} disabled={locked} />
+                <PipelineCharacterPicker
+                  selected={libraryCharacter}
+                  onSelect={(asset) => {
+                    setLibraryCharacter(asset);
+                    // A character with a bound voice speaks with it by default (changeable below).
+                    if (asset?.voice) setVoice(voiceInputOf(asset.voice));
+                  }}
+                  disabled={locked}
+                />
               </div>
             ) : (
               <>
@@ -588,6 +606,21 @@ export function PipelineStudio() {
                 <button type="button" className={styles.linkBtn} disabled={locked} onClick={() => setDuration(suggestedDuration)}>
                   ใช้ {suggestedDuration} วิ
                 </button>
+              </p>
+            )}
+            {dialogue.trim() && canVoice && (
+              <>
+                <CharacterVoicePicker value={voice} onChange={setVoice} disabled={locked} legend="เสียงพากย์บทพูด" noneLabel="เสียงของโมเดล" designName={libraryCharacter?.name} />
+                {useVoice && (
+                  <p className={styles.voiceNote}>
+                    พากย์แบบภาพยนตร์: สร้างเสียงก่อน ให้ปากตัวละครขยับตามเสียง แล้วผสมเสียงที่คมชัดลงในวิดีโอ (ใช้แต้มเสียงเพิ่ม)
+                  </p>
+                )}
+              </>
+            )}
+            {dialogue.trim() && wantsVoice && modelCap && !canVoice && (
+              <p className={styles.hint} role="status">
+                <AlertTriangle aria-hidden /> โมเดลนี้พากย์ด้วยเสียงที่เลือกไม่ได้ วิดีโอจะใช้เสียงของโมเดลแทน
               </p>
             )}
           </section>
@@ -786,7 +819,7 @@ export function PipelineStudio() {
             {progress.stages.map((step, index) => (
               <li key={step.stage} className={styles[`step_${step.state}`] ?? ''}>
                 <span className={styles.stepDot}>{step.state === 'complete' ? <Check aria-hidden /> : index + 1}</span>
-                {stepLabels[index]}
+                {job?.stage === 'voice' && step.stage === 'video' ? 'สร้างเสียงพากย์' : job?.stage === 'dub' && step.stage === 'save_video' ? 'ผสมเสียงพากย์' : stepLabels[index]}
               </li>
             ))}
           </ol>
@@ -878,6 +911,12 @@ export function PipelineStudio() {
                   <>
                     <dt>บทพูด</dt>
                     <dd>{job.dialogue}</dd>
+                  </>
+                )}
+                {job.voice && (
+                  <>
+                    <dt>เสียงพากย์</dt>
+                    <dd>{characterVoiceLabel(job.voice)}</dd>
                   </>
                 )}
                 <dt>สร้างเมื่อ</dt>

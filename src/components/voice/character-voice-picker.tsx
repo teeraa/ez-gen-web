@@ -13,12 +13,16 @@ type Mode = "none" | "voice" | "design" | "template";
 
 const modeOf = (value: CharacterVoiceInput): Mode => value.templateId ? "template" : value.voiceId ? "voice" : "none";
 
-export function CharacterVoicePicker({ value, onChange, disabled, required, designName }: {
+export function CharacterVoicePicker({ value, onChange, disabled, required, designName, legend = "เสียงของตัวละคร", noneLabel = "ไม่ใช้เสียง" }: {
   value: CharacterVoiceInput; onChange: (next: CharacterVoiceInput) => void; disabled?: boolean;
   /** The character must have a voice: no "none" option, and an empty value is flagged. */
   required?: boolean;
   /** Suggested name for a newly designed voice (usually the character's name). */
   designName?: string;
+  /** Heading of the box. */
+  legend?: string;
+  /** Label of the "none" option (e.g. "เสียงของโมเดล" where none means the video model speaks). */
+  noneLabel?: string;
 }) {
   const [caps, setCaps] = useState<VoiceCapabilities | null>(null);
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
@@ -74,11 +78,11 @@ export function CharacterVoicePicker({ value, onChange, disabled, required, desi
     } finally { setDesigning(false); }
   };
   const empty = !value.voiceId && !value.templateId;
-  const modes = ([["none", "ไม่ใช้เสียง"], ["voice", "เลือกเสียง"], ["design", "ออกแบบเสียงใหม่"], ["template", "จากเมนูเสียง"]] as const).filter(([k]) => !(required && k === "none"));
+  const modes = ([["none", noneLabel], ["voice", "เลือกเสียง"], ["design", "ออกแบบเสียงใหม่"], ["template", "จากเมนูเสียง"]] as const).filter(([k]) => !(required && k === "none"));
 
   return (
     <fieldset className={v.box} disabled={disabled}>
-      <legend className={v.legend}><Mic size={14} aria-hidden /> เสียงของตัวละคร</legend>
+      <legend className={v.legend}><Mic size={14} aria-hidden /> {legend}</legend>
       <div className={v.modes} role="radiogroup" aria-label="แหล่งเสียง">
         {modes.map(([k, label]) => (
           <button key={k} type="button" role="radio" aria-checked={mode === k} className={v.mode} onClick={() => pick(k)}

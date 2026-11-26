@@ -12,6 +12,10 @@ export function restorePipelineRequest(value: unknown): PipelineRequest | null {
   if (!body.scenePrompt || !body.idempotencyKey || typeof body.durationSeconds !== 'number' || !Number.isFinite(body.durationSeconds)) return null;
   for (const key of ['referenceImageId','characterAssetId','dialogue']) if (body[key] !== undefined && typeof body[key] !== 'string') return null;
   if (body.draft !== undefined && typeof body.draft !== 'boolean') return null;
+  if (body.voice !== undefined) {
+    const voice = body.voice as Record<string, unknown> | null;
+    if (!voice || typeof voice !== 'object' || typeof voice.voiceId !== 'string') return null;
+  }
   if (body.referenceImageId === '' || body.characterAssetId === '' || (body.referenceImageId && body.characterAssetId)) return null;
   if (!body.characterAssetId && !(body.characterPrompt as string).trim()) return null;
   return value as PipelineRequest;

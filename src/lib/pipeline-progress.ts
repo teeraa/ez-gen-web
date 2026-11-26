@@ -7,8 +7,13 @@ interface ProgressInput {
   videoAssetId?: string | null;
 }
 
+// Voiced pipelines add two server stages inside the visible steps: the dubbed line is made as
+// part of "video", and mixing it in is part of "save_video".
+const stageAlias: Record<string, string> = { voice: 'video', dub: 'save_video' };
+
 export function getPipelineProgress(job: ProgressInput) {
-  const current = pipelineStages.findIndex(stage => stage === job.stage);
+  const stageName = stageAlias[job.stage] ?? job.stage;
+  const current = pipelineStages.findIndex(stage => stage === stageName);
   const knownStatus = ['queued', 'processing', 'succeeded', 'failed', 'needs_attention'].includes(job.status);
   // Asset IDs confirm persisted results; a stage named done alone does not confirm success.
   const assetCompleted = job.videoAssetId ? 3 : job.characterAssetId ? 2 : 0;

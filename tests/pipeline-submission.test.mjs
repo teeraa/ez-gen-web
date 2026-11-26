@@ -28,3 +28,8 @@ test('final recovery accepts complete UUID identity and never forwards stored ex
  assert.deepEqual(JSON.parse(JSON.stringify(restorePipelineFinal({...original,prompt:'must not repeat',draft:true}))),original);
  for(const bad of [null,{}, {...original,sourceId:'bad'}, {...original,idempotencyKey:4},{sourceId:original.sourceId}])assert.equal(restorePipelineFinal(bad),null);
 });
+test('a pending request with a dubbing voice replays it; a malformed voice is not replayed',()=>{
+ const voiced={...base,dialogue:'สวัสดีค่ะ',voice:{voiceId:'nara',emotion:'ปกติ',speed:1,pitch:0}};
+ assert.deepEqual(restore(JSON.parse(JSON.stringify(voiced))),voiced);
+ for(const voice of [null,'nara',{},{voiceId:3}])assert.equal(restore({...base,voice}),null);
+});

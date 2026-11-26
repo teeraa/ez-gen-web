@@ -1,9 +1,10 @@
 import { parseEnvelope } from "./api-envelope.ts";
 import type { PaginatedData } from '@/types/api';
-export interface PipelineRequest { referenceImageId?:string; characterAssetId?:string; characterPrompt:string; scenePrompt:string; dialogue?:string; visualStyle:string; aspectRatio:string; durationSeconds:number; modelId:string; quality:string; draft?:boolean; idempotencyKey:string }
-export interface Pipeline { isDraft?:boolean; modelId?:string; modelLabel?:string; aspectRatio?:string; durationSeconds?:number; quality?:string; canCreateFinal?:boolean; sourceDraftId?:string|null; draftExpiresAt?:string|null; finalUnavailableReason?:string|null; sourceMode?:'upload'|'text'|'library'; id:string; characterPrompt:string; scenePrompt:string; dialogue:string; status:'queued'|'processing'|'succeeded'|'failed'|'needs_attention'; stage:'image'|'save_character'|'video'|'save_video'|'done'; canRetry:boolean; failureCode:string|null; failureMessage:string|null; characterAssetId:string|null; videoAssetId:string|null; characterMediaUrl:string|null; videoMediaUrl:string|null; characterMediaUrlExpiresAt:string|null; videoMediaUrlExpiresAt:string|null; createdAt:string; updatedAt:string }
+import type { CharacterVoice, CharacterVoiceInput } from './voice-api.ts';
+export interface PipelineRequest { referenceImageId?:string; characterAssetId?:string; characterPrompt:string; scenePrompt:string; dialogue?:string; visualStyle:string; aspectRatio:string; durationSeconds:number; modelId:string; quality:string; draft?:boolean; idempotencyKey:string; /** Dub the dialogue with a Voice-menu voice (film-style: lip-sync to the line, clean voice mixed in). */ voice?:CharacterVoiceInput }
+export interface Pipeline { isDraft?:boolean; modelId?:string; modelLabel?:string; aspectRatio?:string; durationSeconds?:number; quality?:string; canCreateFinal?:boolean; sourceDraftId?:string|null; draftExpiresAt?:string|null; finalUnavailableReason?:string|null; sourceMode?:'upload'|'text'|'library'; id:string; characterPrompt:string; scenePrompt:string; dialogue:string; voice?:CharacterVoice|null; status:'queued'|'processing'|'succeeded'|'failed'|'needs_attention'; stage:'image'|'save_character'|'voice'|'video'|'dub'|'save_video'|'done'; canRetry:boolean; failureCode:string|null; failureMessage:string|null; characterAssetId:string|null; videoAssetId:string|null; characterMediaUrl:string|null; videoMediaUrl:string|null; characterMediaUrlExpiresAt:string|null; videoMediaUrlExpiresAt:string|null; createdAt:string; updatedAt:string }
 export interface PipelineModelCapabilities extends Omit<PipelineCapabilities,'models'> { id:string; label:string; supportsDraft:boolean }
-export interface PipelineCapabilities { models?:PipelineModelCapabilities[]; enabled:boolean; textEnabled?:boolean; libraryEnabled?:boolean; libraryAspectRatios?:string[]; libraryDurations?:number[]; supportsDialogue:boolean; unavailableReason:string|null; aspectRatios:string[]; durations:number[] }
+export interface PipelineCapabilities { models?:PipelineModelCapabilities[]; enabled:boolean; textEnabled?:boolean; libraryEnabled?:boolean; libraryAspectRatios?:string[]; libraryDurations?:number[]; supportsDialogue:boolean; supportsVoice?:boolean; unavailableReason:string|null; aspectRatios:string[]; durations:number[] }
 export interface PipelineValidationDetail { field:string; reason:string; message:string }
 const validationRules: Record<string, readonly string[]> = {
  referenceImageId:['invalid_uuid','required','invalid_type','conflicting_sources','invalid_image'],
@@ -18,9 +19,10 @@ const validationRules: Record<string, readonly string[]> = {
  modelId:['invalid_option','invalid_type'],
  quality:['invalid_option','invalid_type'],
  draft:['invalid_type'],
+ voice:['required','invalid_option','invalid_type'],
  body:['malformed_json'],
 };
-const fieldLabels: Record<string,string> = {referenceImageId:'ภาพอ้างอิง',characterAssetId:'ตัวละครจากคลัง',idempotencyKey:'รหัสคำขอ',characterPrompt:'ลักษณะตัวละคร',scenePrompt:'ฉากและการเคลื่อนไหว',dialogue:'บทพูด',visualStyle:'สไตล์ภาพ',aspectRatio:'สัดส่วนวิดีโอ',durationSeconds:'ความยาววิดีโอ',modelId:'โมเดลวิดีโอ',quality:'คุณภาพวิดีโอ',draft:'โหมดร่าง',body:'คำขอ'};
+const fieldLabels: Record<string,string> = {referenceImageId:'ภาพอ้างอิง',characterAssetId:'ตัวละครจากคลัง',idempotencyKey:'รหัสคำขอ',characterPrompt:'ลักษณะตัวละคร',scenePrompt:'ฉากและการเคลื่อนไหว',dialogue:'บทพูด',visualStyle:'สไตล์ภาพ',aspectRatio:'สัดส่วนวิดีโอ',durationSeconds:'ความยาววิดีโอ',modelId:'โมเดลวิดีโอ',quality:'คุณภาพวิดีโอ',draft:'โหมดร่าง',voice:'เสียงพากย์',body:'คำขอ'};
 function safeValidationDetails(status:number,code:string,payload:unknown):PipelineValidationDetail[] {
  if(status!==400||code!=='VALIDATION_ERROR'||!Array.isArray(payload)||payload.length===0||payload.length>8)return [];
  const details:PipelineValidationDetail[]=[];
@@ -32,11 +34,11 @@ function safeValidationDetails(status:number,code:string,payload:unknown):Pipeli
   const messages:Record<string,string>={
    invalid_uuid:`${fieldLabels[field]}ไม่ถูกต้อง กรุณาเลือกใหม่หรือส่งคำขอใหม่`,
    conflicting_sources:'กรุณาเลือกตัวละครจากคลังหรือแนบภาพใหม่อย่างใดอย่างหนึ่ง',
-   required:`กรุณาระบุ${fieldLabels[field]}`,
+   required:field==='voice'?'ใส่บทพูดก่อนเลือกเสียงพากย์':`กรุณาระบุ${fieldLabels[field]}`,
    too_long:`${fieldLabels[field]}ยาวเกินขีดจำกัด กรุณาย่อแล้วลองอีกครั้ง`,
    dialogue_encoding_budget:'บทพูดยาวเกินขีดจำกัด กรุณาย่อบทพูดแล้วลองอีกครั้ง',
    prompt_budget:'รายละเอียดฉากและบทพูดรวมกันยาวเกินขีดจำกัด กรุณาย่อฉากหรือบทพูดแล้วลองอีกครั้ง',
-   invalid_option:field==='scenePrompt'?'รายละเอียดฉากไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง':`${fieldLabels[field]}ไม่รองรับ กรุณาเลือกค่าที่รองรับ`,
+   invalid_option:field==='voice'?'เสียงพากย์ที่เลือกใช้กับโมเดลนี้ไม่ได้หรือถูกลบแล้ว กรุณาเลือกใหม่':field==='scenePrompt'?'รายละเอียดฉากไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง':`${fieldLabels[field]}ไม่รองรับ กรุณาเลือกค่าที่รองรับ`,
    invalid_type:`ชนิดข้อมูลของ${fieldLabels[field]}ไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง`,
    out_of_range:'ความยาววิดีโอต้องอยู่ระหว่าง 4 ถึง 15 วินาที',
    malformed_json:'รูปแบบคำขอไม่ถูกต้อง กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง',

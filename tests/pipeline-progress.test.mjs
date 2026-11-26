@@ -42,3 +42,12 @@ test('persisted assets confirm completed creation steps without claiming final s
  assert.equal(progress({status:'failed',stage:'save_video',videoAssetId:'video'}).completed, 3);
  assert.equal(progress({status:'needs_attention',stage:'done',videoAssetId:'video'}).percent, 75);
 });
+test('voiced pipelines show the dubbing stages inside the video and save steps', () => {
+ const voice = progress({ status: 'processing', stage: 'voice', characterAssetId: 'c' });
+ assert.equal(voice.completed, 2);
+ assert.equal(voice.stages[2].state, 'active');
+ const dub = progress({ status: 'failed', stage: 'dub', characterAssetId: 'c' });
+ assert.equal(dub.completed, 3);
+ assert.equal(dub.stages[3].state, 'failed');
+ assert.ok(dub.percent < 100);
+});
